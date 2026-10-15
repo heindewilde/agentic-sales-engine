@@ -12,7 +12,8 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 1. **Accounts:** domains in `$ARGUMENTS`, else `ase accounts --icp <slug> --stage shortlisted`. Only accounts that passed
    GATE 2 (stage `shortlisted` with `approved_by`).
 2. **Budget:** there should be an active run from the shortlist approval (`ase ledger report`). Interactive and none
-   active → propose one (`budgets.deep_research_per_account_usd` × accounts) and start it once the user agrees.
+   active → start one: with `claude_billing: api` propose `budgets.deep_research_per_account_usd` × accounts and wait for
+   agreement; on a subscription use `budgets.research_providers_per_account_usd` × accounts without asking.
 3. **How:** more than ~4 accounts and interactive → `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/batch.ts --skill research --icp <slug>`
    (2 accounts per session). Otherwise do the fast path below yourself — **no sub-agents** (each one re-reads everything).
 

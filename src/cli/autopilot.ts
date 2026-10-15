@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Autopilot — run the funnel end to end for one ICP, pausing at the human gates.
- *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts start --icp <slug> --budget <usd> [--target 300] [--until drafts] [--by <member>]
+ *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts start --icp <slug> [--budget <usd>, required with an API key] [--target 300] [--until drafts] [--by <member>]
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts status|resume|abort [<run-id>]
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts approve [<run-id>] --by <member> [--resume]
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts extend [<run-id>] [--until <step>] [--budget <usd>] --by <member> [--resume]
@@ -10,9 +10,11 @@
  */
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { abortRun, advance, approveGate, extendRun, findRun, listRuns, startAutopilot, STEPS, type AutopilotState, type StepId } from "../core/autopilot.ts";
+import { abortRun, advance, approveGate, extendRun, findRun, listRuns, resumeFromPause, startAutopilot, STEPS, type AutopilotState, type StepId } from "../core/autopilot.ts";
 import { loadCredentials } from "../core/credentials.ts";
-import { spentForRun } from "../core/ledger.ts";
+import { claudeBilling } from "../core/billing.ts";
+import { readLedger, spentForRun, subscriptionUsage } from "../core/ledger.ts";
+import { loadConfig } from "../core/workspace.ts";
 import { initTracing, shutdownTracing } from "../core/tracing.ts";
 import { requireWorkspace } from "../core/workspace.ts";
 
@@ -38,9 +40,16 @@ loadCredentials(ws);
 initTracing("autopilot");
 const deps = { pluginRoot: process.env.CLAUDE_PLUGIN_ROOT ?? join(import.meta.dir, "..", ".."), log: (l: string) => process.stderr.write(`${l}\n`) };
 
+const billing = claudeBilling((await loadConfig(ws).catch(() => null))?.claude_billing);
+function spendLine(s: AutopilotState): string {
+  const spent = `$${spentForRun(ws, s.run_id).toFixed(2)} of $${s.budget_usd}`;
+  if (billing === "api") return `spent ${spent}`;
+  const usage = subscriptionUsage(readLedger(ws).filter((e) => e.run_id === s.run_id));
+  return `providers ${spent} · Claude on your subscription (≈ $${usage.toFixed(2)} API-equivalent)`;
+}
 function show(s: AutopilotState): string {
   const icon: Record<string, string> = { done: "✓", running: "…", waiting: "⏸", failed: "✗", pending: "·", skipped: "–" };
-  const lines = [`autopilot ${s.run_id} · ${s.icp} · ${s.status} · spent $${spentForRun(ws, s.run_id).toFixed(2)} of $${s.budget_usd}`];
+  const lines = [`autopilot ${s.run_id} · ${s.icp} · ${s.status} · ${spendLine(s)}`];
   for (const st of s.steps) lines.push(`  ${icon[st.status]} ${st.id.padEnd(13)} ${st.summary ?? ""}${st.error && st.status !== "done" ? `  [${st.error.slice(0, 100)}]` : ""}${st.cost_usd ? `  ($${st.cost_usd.toFixed(2)})` : ""}`);
   if (s.gate) lines.push("", s.gate.message);
   return lines.join("\n");
@@ -56,12 +65,12 @@ try {
     case "start": {
       const until = (f.until ?? "drafts") as StepId;
       if (!STEPS.includes(until)) fail(`--until must be one of ${STEPS.join(", ")}`);
-      const s = await startAutopilot(ws, { icp: f.icp ?? fail("--icp is required"), budgetUsd: Number(f.budget ?? fail("--budget is required")), target: f.target ? Number(f.target) : undefined, until, by: f.by });
+      const s = await startAutopilot(ws, { icp: f.icp ?? fail("--icp is required"), budgetUsd: f.budget ? Number(f.budget) : undefined, target: f.target ? Number(f.target) : undefined, until, by: f.by });
       out(await advance(ws, s, deps));
       break;
     }
     case "resume": {
-      const s = findRun(ws, runId) ?? fail("no autopilot run found");
+      const s = resumeFromPause(ws, findRun(ws, runId) ?? fail("no autopilot run found"));
       if (s.status === "failed") {
         // a failed step gets a fresh set of attempts on resume
         for (const st of s.steps) if (st.status === "failed") (st.status = "pending"), (st.attempts = 0);

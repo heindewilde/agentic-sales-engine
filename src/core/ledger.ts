@@ -17,6 +17,8 @@ export interface LedgerEntry {
   call_id?: string;
   units?: number;
   note?: string;
+  /** false: Claude usage on a subscription — an API-equivalent figure, not money; not counted against budgets */
+  billed?: boolean;
 }
 
 export interface CurrentRun {
@@ -54,6 +56,7 @@ export function sumSpend(entries: LedgerEntry[]): number {
   const byCall = new Map<string, number>();
   let loose = 0;
   for (const e of entries) {
+    if (e.billed === false) continue;
     if (!e.call_id) {
       loose += e.usd;
       continue;
@@ -64,6 +67,11 @@ export function sumSpend(entries: LedgerEntry[]): number {
   let total = loose;
   for (const v of byCall.values()) total += v;
   return Math.round(total * 10000) / 10000;
+}
+
+/** Claude usage covered by a subscription, at API-equivalent prices (information only). */
+export function subscriptionUsage(entries: LedgerEntry[]): number {
+  return Math.round(entries.filter((e) => e.billed === false).reduce((n, e) => n + e.usd, 0) * 10000) / 10000;
 }
 
 export function spentForRun(ws: string, runId: string): number {

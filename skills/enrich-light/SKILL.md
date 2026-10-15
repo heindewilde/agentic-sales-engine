@@ -14,7 +14,7 @@ call, one structured write — never read or write account files one by one.
 - Domains in `$ARGUMENTS` → exactly those; otherwise `ase accounts --icp <slug> --stage discovered`.
 - **More than ~15 and not `--unattended`:** run it as a batch instead — show the plan
   (`bun ${CLAUDE_PLUGIN_ROOT}/src/cli/batch.ts --skill enrich-light --icp <slug> --dry-run`), estimate ≈ $0.01–0.03
-  per account, confirm the budget, then `batch.ts --skill enrich-light --icp <slug> --budget <usd>` and report its summary.
+  per account (API billing; on a subscription only Exa/Firecrawl cost, ≈ $0.002 — don't ask), confirm the budget if billed, then `batch.ts --skill enrich-light --icp <slug> --budget <usd>` and report its summary.
 
 ## Fast path (≤ 10 accounts per pass)
 1. `ase context <domains…> --icp <slug> --mode light` → ICP essentials, the light `factors` to judge, `auto_factors`

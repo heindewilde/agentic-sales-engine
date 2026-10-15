@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { trace, type Span } from "@opentelemetry/api";
-import { accountsAtStage, runBatch, sdkRunner, type ChunkRunner } from "./batch.ts";
+import { accountsAtStage, defaultRunner, runBatch, type ChunkRunner } from "./batch.ts";
+import { claudeBilling, modelSpendIsBilled } from "./billing.ts";
 import { readDoc } from "./frontmatter.ts";
 import { currentRun, newRunId, spentForRun, type CurrentRun } from "./ledger.ts";
 import type { Company } from "./schemas.ts";
@@ -41,7 +42,8 @@ export interface AutopilotState {
   target_candidates: number;
   until: StepId;
   status: "running" | "waiting" | "done" | "failed" | "aborted";
-  gate: { step: StepId; message: string; since: string; file?: string } | null;
+  /** kind: a human gate (default), a budget stop, or a plan usage-limit pause (resume needs no approval) */
+  gate: { step: StepId; message: string; since: string; file?: string; kind?: "gate" | "budget" | "limit" } | null;
   steps: StepState[];
   updated: string;
 }
@@ -53,6 +55,8 @@ export interface AutopilotDeps {
   runner?: ChunkRunner;
   pluginRoot: string;
   log?: (line: string) => void;
+  /** injectable wait for plan usage-limit resets (tests) */
+  sleep?: (ms: number) => Promise<void>;
   /** retry backoff in ms per attempt (tests pass [0,0]) */
   backoffMs?: number[];
 }
@@ -122,7 +126,7 @@ function ensureLedgerRun(ws: string, s: AutopilotState): CurrentRun {
   return r;
 }
 
-export async function startAutopilot(ws: string, opts: { icp: string; budgetUsd: number; target?: number; until?: StepId; by?: string }): Promise<AutopilotState> {
+export async function startAutopilot(ws: string, opts: { icp: string; budgetUsd?: number; target?: number; until?: StepId; by?: string }): Promise<AutopilotState> {
   const cfg = await loadConfig(ws);
   if (opts.by && cfg.members.length && !cfg.members.some((m) => m.id === opts.by)) throw new Error(`"${opts.by}" is not a member in ase.config.yaml`);
   const icpFile = paths.icp(ws, opts.icp);
@@ -130,10 +134,14 @@ export async function startAutopilot(ws: string, opts: { icp: string; budgetUsd:
   const { data } = await readDoc<{ status?: string }>(icpFile);
   if (data.status !== "approved") throw new Error(`ICP ${opts.icp} is not approved (gate 1) — run icp-build first`);
   if (!existsSync(paths.scoring(ws, opts.icp))) throw new Error(`ICP ${opts.icp} has no scoring model — run scoring-design first`);
-  if (!(opts.budgetUsd > 0)) throw new Error("--budget must be positive");
+  // On a subscription Claude usage isn't billed, so the budget only caps Exa/Firecrawl and defaults from the config.
+  const billing = claudeBilling(cfg.claude_billing);
+  if (opts.budgetUsd === undefined && billing === "api") throw new Error("--budget is required: Claude is billed per token with your API key");
+  const budgetUsd = opts.budgetUsd ?? cfg.budgets.per_run_usd;
+  if (!(budgetUsd > 0)) throw new Error("--budget must be positive");
   const until = opts.until ?? "drafts";
   const s: AutopilotState = {
-    run_id: newRunId("autopilot"), icp: opts.icp, created: now(), created_by: opts.by, budget_usd: opts.budgetUsd,
+    run_id: newRunId("autopilot"), icp: opts.icp, created: now(), created_by: opts.by, budget_usd: budgetUsd,
     target_candidates: opts.target ?? 300, until, status: "running", gate: null,
     steps: STEPS.map((id) => ({ id, status: STEPS.indexOf(id) > STEPS.indexOf(until) ? "skipped" : "pending", attempts: 0 })),
     updated: now(),
@@ -188,10 +196,21 @@ export function extendRun(ws: string, s: AutopilotState, opts: { until?: StepId;
     writeFileSync(paths.currentRun(ws), JSON.stringify(r, null, 2));
   }
   if (s.status === "done" && s.steps.some((x) => x.status === "pending")) s.status = "running";
-  if (s.status === "waiting" && s.gate?.message.startsWith("Budget") && opts.budgetUsd) {
+  if (s.status === "waiting" && (s.gate?.kind === "budget" || s.gate?.message.startsWith("Budget")) && opts.budgetUsd) {
     s.gate = null;
     s.status = "running";
   }
+  save(ws, s);
+  return s;
+}
+
+/** Continue after a plan usage-limit pause. No approval needed: nothing was decided, the run just waited. */
+export function resumeFromPause(ws: string, s: AutopilotState): AutopilotState {
+  if (s.status !== "waiting" || s.gate?.kind !== "limit") return s;
+  const step = s.steps.find((x) => x.id === s.gate!.step);
+  if (step && step.status !== "done") step.status = "pending";
+  s.gate = null;
+  s.status = "running";
   save(ws, s);
   return s;
 }
@@ -233,7 +252,8 @@ async function execStep(ws: string, s: AutopilotState, id: StepId, deps: Autopil
   // A batch whose sessions crashed throws (→ retry, which only re-processes accounts that didn't advance).
   // Accounts a healthy session couldn't advance are reported in the summary instead of failing the run.
   const batch = async (skill: Parameters<typeof runBatch>[0]["skill"], domains?: string[]) => {
-    const r = await runBatch({ ws, skill, icp: s.icp, pluginRoot: deps.pluginRoot, runner: deps.runner, domains, log: deps.log });
+    const r = await runBatch({ ws, skill, icp: s.icp, pluginRoot: deps.pluginRoot, runner: deps.runner, domains, log: deps.log, sleep: deps.sleep });
+    if (r.stopped?.startsWith("usage limit")) throw new Error(r.stopped);
     const crashed = r.results.filter((x) => !x.ok);
     if (crashed.length) throw new Error(`${crashed.length} ${skill} session(s) failed for ${crashed.flatMap((x) => x.domains).join(", ")}`);
     return r;
@@ -246,10 +266,12 @@ async function execStep(ws: string, s: AutopilotState, id: StepId, deps: Autopil
       const run = ensureLedgerRun(ws, s);
       const remaining = run.budget_usd - spentForRun(ws, run.run_id);
       const prompt = `/agentic-sales-engine:discover --icp ${s.icp} --target ${s.target_candidates - have} --unattended\n\nUnattended autopilot run ${s.run_id}: use the active ledger run, don't start or end runs, don't ask questions. Stop at the target or when queries saturate.`;
-      const r = await (deps.session ?? sdkRunner)({ ws, prompt, model: (await loadConfig(ws)).models.discover, maxBudgetUsd: Math.max(0.1, Math.min(remaining * 0.25, 5)), pluginRoot: deps.pluginRoot, span: trace.getActiveSpan() });
-      if (!r.ok) throw new Error(`discover session did not succeed: ${r.summary.slice(0, 200)}`);
+      const billing = claudeBilling((await loadConfig(ws)).claude_billing);
+      const r = await (deps.session ?? defaultRunner(billing))({ ws, prompt, model: (await loadConfig(ws)).models.discover, maxBudgetUsd: Math.max(0.1, Math.min(remaining * 0.25, 5)), pluginRoot: deps.pluginRoot, span: trace.getActiveSpan() });
       const { appendLedger } = await import("./ledger.ts");
-      appendLedger(ws, { run_id: s.run_id, provider: "anthropic", op: "autopilot:discover", usd: r.cost_usd, kind: "actual" });
+      appendLedger(ws, { run_id: s.run_id, provider: "anthropic", op: "autopilot:discover", usd: r.cost_usd, kind: "actual", ...(modelSpendIsBilled(billing) ? {} : { billed: false }) });
+      if (r.limit?.limited) throw new Error(`usage limit: Claude plan usage limit reached${r.limit.resetsAt ? `, resets ${new Date(r.limit.resetsAt).toISOString()}` : ""}`);
+      if (!r.ok) throw new Error(`discover session did not succeed: ${r.summary.slice(0, 200)}`);
       return { summary: `${(await countAccounts(ws, s.icp)) - have} new candidates` };
     }
     case "enrich_light": {
@@ -331,7 +353,7 @@ export async function advance(ws: string, s0: AutopilotState, deps: AutopilotDep
         const spent = spentForRun(ws, s.run_id);
         if (spent >= s.budget_usd - 0.01) {
           s.status = "waiting";
-          s.gate = { step: step.id, since: now(), message: `Budget used ($${spent.toFixed(2)} of $${s.budget_usd}). Raise it with: ase ledger run extend --budget <usd> --approved-by <member>, then ase autopilot resume` };
+          s.gate = { step: step.id, kind: "budget", since: now(), message: `Budget used ($${spent.toFixed(2)} of $${s.budget_usd}). Raise it with: ase ledger run extend --budget <usd> --approved-by <member>, then ase autopilot resume` };
           break;
         }
         step.status = "running";
@@ -347,11 +369,14 @@ export async function advance(ws: string, s0: AutopilotState, deps: AutopilotDep
           } catch (e) {
             step.error = (e as Error).message.slice(0, 500);
             log(`[autopilot ${s.run_id}] ${step.id} attempt ${step.attempts} failed: ${step.error}`);
-            const budgetHit = /budget/i.test(step.error);
-            if (budgetHit || step.attempts > backoff.length) {
-              step.status = budgetHit ? "pending" : "failed";
-              s.status = budgetHit ? "waiting" : "failed";
-              if (budgetHit) s.gate = { step: step.id, since: now(), message: `Budget reached during ${step.id}. Extend with ase ledger run extend --budget <usd> --approved-by <member>, then ase autopilot resume` };
+            const limitHit = /^usage limit/i.test(step.error);
+            const budgetHit = !limitHit && /budget/i.test(step.error);
+            if (limitHit || budgetHit || step.attempts > backoff.length) {
+              step.status = limitHit || budgetHit ? "pending" : "failed";
+              s.status = limitHit || budgetHit ? "waiting" : "failed";
+              if (limitHit) step.attempts = 0;
+              if (limitHit) s.gate = { step: step.id, kind: "limit", since: now(), message: `Paused at ${step.id}: ${step.error.replace(/^usage limit: /, "")}. Nothing is lost — continue after the reset with: ase autopilot resume` };
+              if (budgetHit) s.gate = { step: step.id, kind: "budget", since: now(), message: `Budget reached during ${step.id}. Extend with ase ledger run extend --budget <usd> --approved-by <member>, then ase autopilot resume` };
             } else {
               save(ws, s);
               await new Promise((r) => setTimeout(r, backoff[step.attempts - 1]));

@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { persistCandidates } from "../../src/core/accounts.ts";
-import { advance, approveGate, extendRun, findRun, loadState, startAutopilot } from "../../src/core/autopilot.ts";
+import { advance, approveGate, extendRun, findRun, loadState, resumeFromPause, startAutopilot } from "../../src/core/autopilot.ts";
 import type { ChunkRunner } from "../../src/core/batch.ts";
 import { health } from "../../src/core/doctor.ts";
 import { readDoc, stringifyDoc } from "../../src/core/frontmatter.ts";
@@ -136,12 +136,41 @@ describe("autopilot", () => {
     expect(fixed.calls).not.toContain("discover");
   });
 
-  test("stops at the budget and waits for an extension", async () => {
+  test("API billing: stops at the budget and waits for an extension", async () => {
     const ws = fixture();
     const { deps } = world(ws, { costPerChunk: 0.4 });
-    const s = await advance(ws, await startAutopilot(ws, { icp: ICP, budgetUsd: 0.5, target: 4 }), deps);
-    expect(s.status).toBe("waiting");
-    expect(s.gate!.message).toMatch(/[Bb]udget/);
+    process.env.ASE_CLAUDE_BILLING = "api";
+    try {
+      await expect(startAutopilot(ws, { icp: ICP, target: 4 })).rejects.toThrow(/--budget is required/);
+      const s = await advance(ws, await startAutopilot(ws, { icp: ICP, budgetUsd: 0.5, target: 4 }), deps);
+      expect(s.status).toBe("waiting");
+      expect(s.gate).toMatchObject({ kind: "budget", message: expect.stringMatching(/[Bb]udget/) });
+    } finally {
+      delete process.env.ASE_CLAUDE_BILLING;
+    }
+  });
+
+  test("subscription: no budget needed; a plan usage limit pauses the run and resume continues without approval", async () => {
+    const ws = fixture();
+    const w = world(ws);
+    process.env.ASE_CLAUDE_BILLING = "subscription";
+    try {
+      let s = await startAutopilot(ws, { icp: ICP, target: 4 });
+      expect(s.budget_usd).toBe(2); // provider cap: budgets.per_run_usd of the fixture
+      s = await advance(ws, s, w.deps);
+      s = await approveGate(ws, s, "hein");
+      // research hits a weekly limit: far-off reset → the run pauses instead of failing
+      const limited: ChunkRunner = async () => ({ cost_usd: 0, ok: false, summary: "You've hit your weekly limit", limit: { limited: true, overage: false, resetsAt: Date.now() + 2 * 86_400_000, kind: "seven_day" } });
+      s = await advance(ws, s, { ...w.deps, runner: limited });
+      expect(s.status).toBe("waiting");
+      expect(s.gate).toMatchObject({ kind: "limit", step: "research" });
+      expect(s.steps.find((x) => x.id === "research")!.status).toBe("pending");
+      // after the reset: resume (no approval) and carry on to the score gate
+      s = await advance(ws, resumeFromPause(ws, s), w.deps);
+      expect(s.gate!.step).toBe("score");
+    } finally {
+      delete process.env.ASE_CLAUDE_BILLING;
+    }
   });
 
   test("--until shortlist stops after the proposal; one autopilot per workspace", async () => {

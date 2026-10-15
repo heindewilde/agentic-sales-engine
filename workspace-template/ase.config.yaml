@@ -14,11 +14,22 @@ members:
 # personal mailboxes are refused, every person carries a lawful basis. See LEGITIMATE-INTEREST.md.
 privacy_mode: true
 
-# Provider spend caps (USD). The engine estimates cost before deep research and stops at these limits.
+# Spend caps (USD). The engine estimates cost before deep research and stops at these limits.
+# They cover Claude too only when it's billed per token (see claude_billing).
 budgets:
   per_run_usd: 5
   per_day_usd: 20
   deep_research_per_account_usd: 0.3   # measured ≈ $0.23 per account (bench/)
+  research_providers_per_account_usd: 0.04   # Exa/Firecrawl share — all you pay on a subscription
+
+# Who pays for Claude: auto (API key / Bedrock / Vertex → api, else your Claude subscription), subscription or api.
+# On a subscription, budgets only cap Exa/Firecrawl and Claude usage counts toward the plan's limits instead.
+claude_billing: auto
+
+# Subscription plan limits: wait for a reset inside a batch up to this long, else pause the run (resume later).
+usage_limits:
+  max_wait_minutes: 360
+  allow_extra_usage: false   # never continue into paid extra usage unless true
 
 # Models per stage: cheap for wide discovery, stronger for research and judging.
 models:
