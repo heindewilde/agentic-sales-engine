@@ -18,6 +18,9 @@ export const BATCH_SKILLS = {
   "enrich-light": { fromStage: "discovered", toStage: "light_scored", defaultModel: "light" as const, defaultChunk: 10 },
   research: { fromStage: "shortlisted", toStage: "researched", defaultModel: "research" as const, defaultChunk: 1 },
   score: { fromStage: "researched", toStage: "scored", defaultModel: "research" as const, defaultChunk: 5 },
+  "ways-in": { fromStage: "scored", toStage: "outreach_ready", defaultModel: "research" as const, defaultChunk: 3 },
+  // drafts don't move the stage; progress is measured by draft files (see autopilot)
+  "draft-outreach": { fromStage: "outreach_ready", toStage: "outreach_ready", defaultModel: "research" as const, defaultChunk: 3 },
 } as const;
 export type BatchSkill = keyof typeof BATCH_SKILLS;
 
