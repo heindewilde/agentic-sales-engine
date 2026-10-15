@@ -7,11 +7,16 @@ import { loadConfig, paths } from "./workspace.ts";
 
 export type Tier = "T0" | "T1" | "T2";
 
+/** A usable env value: unset plugin options can arrive empty or as an unexpanded "${...}" placeholder. */
+const has = (...names: string[]) => names.some((n) => {
+  const v = process.env[n];
+  return Boolean(v && !v.startsWith("${"));
+});
+
 export function providerKeys(): { exa: boolean; firecrawl: boolean } {
-  const env = process.env;
   return {
-    exa: Boolean(env.EXA_API_KEY || env.CLAUDE_PLUGIN_OPTION_EXA_API_KEY),
-    firecrawl: Boolean(env.FIRECRAWL_API_KEY || env.CLAUDE_PLUGIN_OPTION_FIRECRAWL_API_KEY || env.FIRECRAWL_BASE_URL || env.CLAUDE_PLUGIN_OPTION_FIRECRAWL_BASE_URL),
+    exa: has("EXA_API_KEY", "CLAUDE_PLUGIN_OPTION_EXA_API_KEY"),
+    firecrawl: has("FIRECRAWL_API_KEY", "CLAUDE_PLUGIN_OPTION_FIRECRAWL_API_KEY", "FIRECRAWL_BASE_URL", "CLAUDE_PLUGIN_OPTION_FIRECRAWL_BASE_URL"),
   };
 }
 

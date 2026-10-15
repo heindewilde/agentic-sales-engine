@@ -3,7 +3,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { indexFile, openDb, reindexAll } from "../../src/core/db.ts";
 import { stringifyDoc } from "../../src/core/frontmatter.ts";
-import { estimateMcpCall, sumSpend, type LedgerEntry } from "../../src/core/ledger.ts";
+import { sumSpend, type LedgerEntry } from "../../src/core/ledger.ts";
 import { fact, makeWorkspace } from "../helpers.ts";
 
 const e = (o: Partial<LedgerEntry>): LedgerEntry => ({ ts: "2026-10-15T00:00:00Z", run_id: "r", provider: "exa", op: "search", usd: 0, kind: "est", ...o });
@@ -11,12 +11,6 @@ const e = (o: Partial<LedgerEntry>): LedgerEntry => ({ ts: "2026-10-15T00:00:00Z
 test("sumSpend counts each call once, actual overrides estimate", () => {
   expect(sumSpend([e({ usd: 0.1 }), e({ usd: 0.2 })])).toBe(0.3);
   expect(sumSpend([e({ call_id: "a", usd: 0.5 }), e({ call_id: "a", usd: 0.12, kind: "actual" })])).toBe(0.12);
-});
-
-test("estimateMcpCall is pessimistic for agents and scales with results", () => {
-  expect(estimateMcpCall("mcp__x_exa__agent_run", { effort: "high" }).usd).toBe(0.5);
-  expect(estimateMcpCall("mcp__x_exa__web_search_exa", { numResults: 100 }).usd).toBeCloseTo(0.097);
-  expect(estimateMcpCall("mcp__other__thing", {}).usd).toBe(0);
 });
 
 test("reindex round-trip: files -> db, incremental update and delete", async () => {

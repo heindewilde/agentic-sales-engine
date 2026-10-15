@@ -36,10 +36,16 @@ agents write to it over months, and so that one stage can rely on what another l
 - Nothing is ever sent to a prospect. Outreach is drafted only.
 - In unattended runs (batch/scheduled), never pass a gate: write proposals and stop.
 
-## 5. Cost
-- Check budget before paid work: `ase ledger report`. Start a run with `ase ledger run start --stage <s> --budget <usd>`.
-- Prefer the cheapest operation that answers the question (search snippet → page fetch → structured extract → deep agent).
-- When a provider call is refused for budget, stop and report — don't switch providers to get around it.
+## 5. Providers & cost
+- All paid data access goes through the plugin's `ase` MCP tools: `discover_companies`, `find_people`, `search_news`,
+  `fetch_pages`, `extract`, `research` (+ `estimate`, `status`). They enforce budgets, record cost, save raw snapshots
+  (cite their `raw_ref`) and drop do-not-contact results. Don't call Exa/Firecrawl any other way.
+- If a tool answers `no_provider` (tier T0), use the built-in WebSearch/WebFetch instead, and save what you rely on as a
+  raw snapshot yourself (`raw/<yyyy-mm>/<slug>.md` with url + fetched_at frontmatter and the excerpt).
+- Prefer the cheapest operation that answers the question: search result → `fetch_pages` → `extract` → `research`.
+- Deep work happens inside a budgeted run: `ase ledger run start --stage <s> --budget <usd>` (calls over $0.50 are
+  refused outside a run). Check spend with `ase ledger report`.
+- When a call is refused for budget, stop and report — never switch providers or tools to get around it.
 
 ## 6. Handoffs
 - Read before you write: `learnings/preferences.md`, `learnings/corrections.md`, the ICP, and (per account) `brief.md`.

@@ -19,6 +19,8 @@ import { normalizeDomain, normalizeLinkedIn } from "../core/normalize.ts";
 import { DncEntry, type Company } from "../core/schemas.ts";
 import { dncMatcher, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
+import { callProvider, estimateCall } from "../core/providers/gateway.ts";
+import { OPS, ProviderError, type Op, type ProviderName } from "../core/providers/types.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
 const { values: flags, positionals } = parseArgs({
@@ -39,6 +41,9 @@ const { values: flags, positionals } = parseArgs({
     name: { type: "string" },
     website: { type: "string" },
     member: { type: "string", multiple: true },
+    input: { type: "string" },
+    provider: { type: "string" },
+    estimate: { type: "boolean" },
   },
 });
 
@@ -64,6 +69,9 @@ const HELP = `ase <command>
   ledger run end
   ledger record <provider> <op> <usd> [--note]
   ledger report [--days N]
+  provider <op> --input '<json>' [--provider exa|firecrawl] [--estimate]
+                                          call a provider op through the gateway (keys from EXA_API_KEY /
+                                          FIRECRAWL_API_KEY env; ASE_PROVIDER_MODE=record|replay for cassettes)
   contracts                               list stage contracts`;
 
 const ws = () => requireWorkspace(flags.workspace as string | undefined);
@@ -137,6 +145,24 @@ switch (cmd) {
     const issues = await lint(ws());
     const byKind = issues.reduce<Record<string, number>>((a, i) => ((a[i.kind] = (a[i.kind] ?? 0) + 1), a), {});
     out({ count: issues.length, byKind, issues }, issues.length ? issues.map((i) => `[${i.kind}] ${i.path}: ${i.detail}`).join("\n") : "No issues.");
+    break;
+  }
+  case "provider": {
+    const op = positionals[0] as Op;
+    if (!OPS.includes(op)) fail(`usage: provider <${OPS.join("|")}> --input '<json>'`);
+    let input: unknown;
+    try {
+      input = JSON.parse((flags.input as string) ?? "{}");
+    } catch {
+      fail("--input must be valid JSON");
+    }
+    const opts = { ws: ws(), provider: flags.provider as ProviderName | undefined };
+    try {
+      out(flags.estimate ? await estimateCall(op, input, opts) : await callProvider(op, input, opts));
+    } catch (e) {
+      out({ error: (e as Error).message, code: e instanceof ProviderError ? e.code : "provider_failed" });
+      process.exitCode = 3;
+    }
     break;
   }
   case "contracts":
