@@ -28,15 +28,14 @@ Budget: the caller gives you a dollar cap (default $0.60); check `status` before
 5. **Deep agent (`research` tool)** only if important open questions remain after 1–4, with a focused question list
    and `effort: low` or `medium`; cite its citations, not its prose.
 
-## Write (the hook validates every write)
-- `company.md`: new/updated facts with sources (never overwrite higher confidence with lower).
-- `brief.md` sections: **Business & offering**, **Situation & triggers** (dated), **Technographics**, **People map**
-  (persona → named person → role in deal → reachability), **Risks & fit concerns**. Footnote every claim.
-  Update `sections_updated` for each section you wrote and add Changelog lines.
-- **Open questions:** tick answered ones (`- [x] … → answer[^n]`), keep unanswerable ones with `(unknown after research)`,
-  add new ones with an owner stage. Set `open_questions` to the number still open. Write the section header even if empty.
-- Finally run `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts stage advance <domain> --icp <icp> --to researched`; if it
-  reports missing artifacts, fix them and retry once.
+## Write — one structured apply, not file edits
+Start with `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts context <domain> --icp <icp> --mode full` (it replaces reading the
+ICP, rubric, rules and account files). Pass `focus` (the open questions + evidence hints) and `max_chars` 3000 to
+`fetch_pages`. When done, write ONE JSON file `.ase/tmp/research-<domain>.json` in the `ase apply` shape — facts,
+sections (Business & offering, Situation & triggers, Technographics, People map, Risks & fit concerns), sources,
+open_questions (each answered or marked unknown), people, signals, judgements for all factors (`"mode": "full"`),
+`"stage": "researched"`, changelog — and run `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts apply <file>`. Fix and
+re-apply only what it reports as failed.
 
 Return to the caller: 5 lines — what changed in our view of the account, top trigger, personas found, open questions
 left, spend.

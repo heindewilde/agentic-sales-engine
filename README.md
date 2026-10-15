@@ -335,17 +335,24 @@ Setup per backend in [docs/tracing.md](docs/tracing.md).
 Measured on real runs with live Exa and Firecrawl calls and real Claude sessions (API-equivalent model cost). Your
 numbers will vary with list size, model choice and how much research an account needs.
 
+The engine is built to be cheap per account. Each stage session gets one compact `ase context` instead of reading
+files one by one. It writes everything in one validated `ase apply` instead of re-typing markdown files. Page fetches
+return only the paragraphs relevant to the open questions, while the full page is still saved for citation. Numeric
+factors like headcount are scored by code, and each stage runs on the cheapest model that holds its quality bar.
+
 | Step | Typical cost | Of which data providers |
 |---|---|---|
-| Discovery | ~$0.002 per candidate company | Exa search |
-| Light enrichment + score (Haiku, batched) | $0.01–0.06 per account (≈ $0.013 in a 25-account run) | ≈ $0–0.01 |
-| Deep research + full score (Sonnet) | $0.30–0.90 per account | $0.02–0.06 |
+| Discovery (Haiku) | ~$0.003 per candidate company | Exa search |
+| Light enrichment + score (Haiku, 10 per session) | **~$0.002 per account** | ≈ $0.001 |
+| Deep research + full score (Sonnet, 2 per session) | **~$0.23 per account** | ~$0.04 |
 | Ways in · outreach draft · call prep | ~$0.30 · ~$0.30 · ~$0.40 per account | ~$0.01 |
 | Monitoring (`sync`) | ~$0.02 per watched account per check | Exa + Firecrawl |
 | Quality evals | free offline · ~$0.05 per account with Claude as judge | — |
 | **Real example:** autopilot, 25 companies discovered and light-scored, shortlist proposed | **$0.59 in total** | $0.09 |
 
-**A full cycle of 300 discovered and 45 deep-researched accounts comes to roughly $20–60, most of it deep research.** Every run has a budget:
+**A full cycle of 300 discovered and 45 deep-researched accounts comes to roughly $10–20, most of it deep research.**
+That's about 70% less than the first version of the engine on the same benchmark, with quality scores up rather than down:
+see [bench/](bench/) for the fixed workload, and run it yourself to compare changes. Every run has a budget:
 the engine estimates the cost before deep research, enforces per-run and per-day caps before each paid call, and logs
 every dollar to `ledger/costs.jsonl`.
 

@@ -58,5 +58,10 @@ agents write to it over months, and so that one stage can rely on what another l
 - Update `sections_updated.<Section>` and add a Changelog line whenever you write a brief section.
 - Move `icp_status.<icp>.stage` forward only when the stage contract holds (`ase validate --stage <s> --icp <slug>`).
 
+## Efficient by default
+Prefer `ase context` (one compact JSON with everything a stage needs) over reading files one by one, `fetch_pages` with
+a `focus` over full pages, and one `ase apply` JSON per chunk over editing account files. Fewer turns and less re-typed
+text is most of the cost of a run.
+
 ## Helper CLI
 `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts <command>` — run with no arguments for the command list. Output is JSON.

@@ -18,6 +18,8 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (below: `ase`).
 - Each factor: `id`, `name`, `group`, `weight` (1–5), `question`, four **concrete, observable** anchors (0–3) that two
   judges would apply identically, `evidence_hint`, `light: true` only if judgeable from a homepage + basic
   firmographics, and `knockout: {level_lte: 0}` only for hard exclusions.
+- Numeric factors (headcount, revenue, number of sites…) get an `auto` rule so the engine scores them from the fact
+  itself — cheaper and perfectly consistent: `auto: { fact: employees, levels: { 0: "<50 | >5000", 1: "50-99", 2: "100-149", 3: "150-700" } }`.
 - Present as a table (factor, group, weight, anchors in short, light?, knockout?) and let the user adjust.
 - Revision: run `ase score backtest` and `ase score sensitivity` first and start from what they show.
 

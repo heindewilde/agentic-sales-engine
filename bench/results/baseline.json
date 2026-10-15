@@ -1,0 +1,38 @@
+{
+  "label": "baseline",
+  "ran_at": "2026-10-15T15:26:05.485Z",
+  "workspace": "/var/folders/4h/tstcx78d6b7_gcvh_7bl126h0000gn/T/ase-bench-baseline-k4qhis/ws",
+  "cost": {
+    "light_model": 0.1111,
+    "research_model": 1.5056,
+    "providers": 0.235,
+    "total_pipeline": 1.8516,
+    "per_light_account": 0.0111,
+    "per_research_account": 0.7528
+  },
+  "sessions": {
+    "light": {
+      "sessions": 0,
+      "turns": 0,
+      "output_tokens": 0
+    },
+    "research": {
+      "sessions": 0,
+      "turns": 0,
+      "output_tokens": 0
+    }
+  },
+  "advanced": {
+    "light": 10,
+    "research": 2
+  },
+  "quality": {
+    "citation_faithfulness": 0.963,
+    "brief_grounding": 0.492,
+    "snapshot_coverage": 0.972,
+    "handoff_completeness": 0.983,
+    "research_trajectory": 1,
+    "claim_support": 0.5,
+    "judge_stability": 0.75
+  }
+}

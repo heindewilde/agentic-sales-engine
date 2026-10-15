@@ -2,26 +2,36 @@
 name: research
 description: Deep research on approved (shortlisted) accounts — triggers, buying committee, systems, fit risks — followed by the full score. Use after the shortlist is approved, or when the user asks to research specific accounts in depth.
 argument-hint: "--icp <slug> [--unattended] [domain ...]"
-allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/batch.ts *), Read, Write, Edit, Glob, Grep, Agent, WebSearch, WebFetch, mcp__plugin_agentic-sales-engine_ase__fetch_pages, mcp__plugin_agentic-sales-engine_ase__extract, mcp__plugin_agentic-sales-engine_ase__search_news, mcp__plugin_agentic-sales-engine_ase__find_people, mcp__plugin_agentic-sales-engine_ase__research, mcp__plugin_agentic-sales-engine_ase__estimate, mcp__plugin_agentic-sales-engine_ase__status
+allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/batch.ts *), Read, Write, Glob, Grep, Agent, WebSearch, WebFetch, mcp__plugin_agentic-sales-engine_ase__fetch_pages, mcp__plugin_agentic-sales-engine_ase__extract, mcp__plugin_agentic-sales-engine_ase__search_news, mcp__plugin_agentic-sales-engine_ase__find_people, mcp__plugin_agentic-sales-engine_ase__research, mcp__plugin_agentic-sales-engine_ase__estimate, mcp__plugin_agentic-sales-engine_ase__status
 ---
 
 # Deep research (deep funnel)
 
-Read `${CLAUDE_PLUGIN_ROOT}/references/rules.md`. CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
+CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 
-1. **Accounts:** domains in `$ARGUMENTS`, else `ase accounts --icp <slug> --stage shortlisted`. Research only
-   accounts that passed GATE 2 (stage `shortlisted` with `approved_by`) — if the user names others, run the shortlist
-   gate for them first.
-2. **Budget:** there should be an active run from the shortlist approval (`ase ledger report`). If not, propose one
-   (`budgets.deep_research_per_account_usd` × accounts) and start it after the user agrees
-   (`ase ledger run start --stage research --icp <slug> --budget <usd> --approved-by <member>`). Unattended: use the active run only.
-3. **Run:**
-   - ≤ 20 accounts (or `--unattended` with explicit domains): one `account-researcher` agent per account, up to 5 in
-     parallel, each told the ICP slug and its dollar cap.
-   - More: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/batch.ts --skill research --icp <slug>` (one account per session).
-4. **Full score** for each account that reached `researched`: run `/agentic-sales-engine:score` logic — the
-   `factor-judge` agent in `full` mode with today's date and the account's files, then
-   `ase score compute --icp <slug> --account <d> --mode full --judgements <file>`.
-5. **Ways in:** continue with `/agentic-sales-engine:ways-in` for accounts scoring tier A/B.
-6. **Report:** per account one line (score light → full, tier, top trigger, best way in or "none yet"); accounts whose
-   full score dropped a tier and why; total spend vs budget. `ase ledger run end` when done (interactive only — in `--unattended` runs the batch driver owns the run).
+1. **Accounts:** domains in `$ARGUMENTS`, else `ase accounts --icp <slug> --stage shortlisted`. Only accounts that passed
+   GATE 2 (stage `shortlisted` with `approved_by`).
+2. **Budget:** there should be an active run from the shortlist approval (`ase ledger report`). Interactive and none
+   active → propose one (`budgets.deep_research_per_account_usd` × accounts) and start it once the user agrees.
+3. **How:** more than ~4 accounts and interactive → `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/batch.ts --skill research --icp <slug>`
+   (2 accounts per session). Otherwise do the fast path below yourself — **no sub-agents** (each one re-reads everything).
+
+## Fast path (1–2 accounts)
+1. `ase context <domains…> --icp <slug> --mode full` → ICP (personas, triggers), all factors with anchors and
+   evidence hints, auto factors, rules digest, learnings, each account's facts, snapshot, open questions, signals and
+   team warm matches.
+2. Research cheapest-first, batching calls across accounts where possible:
+   - **one** `fetch_pages` for About/Team/Careers/News pages, with `focus` = the open questions + factor evidence hints,
+     `max_chars` 3000 (job ads reveal systems and pains; leadership pages reveal people);
+   - `search_news` for each company since 18 months ago (local language too if not English) → dated trigger events;
+   - `find_people` once per ICP persona (current company must be the account; business data only; never LinkedIn scraping);
+   - `extract` or `research` (effort low) **only** for important questions the above didn't answer.
+3. Write **one** JSON file `.ase/tmp/research-<first-domain>.json` (same shape as `ase apply`; see enrich-light) with,
+   per account: `facts`; `sections` for "Business & offering", "Situation & triggers" (dated), "Technographics",
+   "People map", "Risks & fit concerns" (footnoted, concise); `sources`; `open_questions` (every question either
+   `- [x] … → answer[^id]` or `- [ ] … (unknown after research; owner: <stage>)`); `people`; `signals` (event date,
+   relevance 0–3); `judgements` for **all** factors in `factors` (`"mode": "full"`); `"stage": "researched"`; `changelog`.
+   Quote evidence exactly from the pages/snapshots you read and pass their `raw_ref`.
+4. `ase apply <file>` → each account ends at `scored` (or lists errors to fix and re-apply).
+5. Interactive: one line per account (light → full score, tier, top trigger, best way in or "none yet") and spend.
+   Unattended: ≤ 3 lines. Then `/agentic-sales-engine:ways-in` for tier A/B.
