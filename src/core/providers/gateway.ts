@@ -11,6 +11,7 @@ import { cassetteDir, providerMode, withCassettes, type Mode } from "./cassette.
 import { exaAdapter } from "./exa.ts";
 import { firecrawlAdapter } from "./firecrawl.ts";
 import { estimate } from "./pricing.ts";
+import { focusText } from "../focus.ts";
 import { setAttrs, withSpan } from "../tracing.ts";
 import { ProviderError, type Adapter, type Op, type OpInputs, type OpResults, type ProviderName } from "./types.ts";
 
@@ -38,7 +39,11 @@ export const INPUT_SCHEMAS = {
     num_results: z.number().int().min(1).max(50).optional(),
     include_domains: z.array(z.string()).optional(),
   }),
-  fetch_pages: z.object({ urls, max_chars: z.number().int().min(500).max(50_000).optional() }),
+  fetch_pages: z.object({
+    urls,
+    max_chars: z.number().int().min(500).max(50_000).optional(),
+    focus: z.string().max(300).optional().describe("what you need from these pages; returns only the relevant paragraphs (full page saved as raw_ref)"),
+  }),
   extract: z.object({ urls, schema: z.record(z.string(), z.unknown()), prompt: z.string().optional() }),
   research: z.object({
     instructions: z.string().min(10),
@@ -173,7 +178,10 @@ async function callProviderInner<O extends Op>(op: O, rawInput: unknown, opts: G
   const parsed = INPUT_SCHEMAS[op].safeParse(rawInput);
   if (!parsed.success) throw new ProviderError(`invalid input for ${op}: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, "bad_input");
   // Workspace-only options (where to save results) never reach the provider or the cassette key.
-  const { icp: _icp, run_id: _runId, ...providerInput } = parsed.data as Record<string, unknown>;
+  const { icp: _icp, run_id: _runId, focus, ...providerInput } = parsed.data as Record<string, unknown>;
+  // With a focus, fetch the full page for the snapshot and hand the model only the relevant paragraphs.
+  const focusMax = op === "fetch_pages" && typeof focus === "string" ? Number(providerInput.max_chars ?? 3000) : null;
+  if (focusMax !== null) providerInput.max_chars = 20_000;
   const input = providerInput as OpInputs[O];
   const { ws } = opts;
   const cfg = await loadConfig(ws).catch(() => null);
@@ -228,8 +236,12 @@ async function callProviderInner<O extends Op>(op: O, rawInput: unknown, opts: G
         if (dnc.linkedin(h.linkedin_url)) return (dropped++, false);
         return true;
       });
-      results = hits;
       rawRef = writeRaw(ws, { ...meta, query: (input as OpInputs["find_people"]).query }, hits.map((h) => `- ${h.name} — ${h.title ?? "?"} @ ${h.company ?? "?"} — ${h.source_url}`).join("\n"));
+      // One snapshot per person (the index's record for that profile), so a citation to the profile stays verifiable.
+      results = hits.map((h) => ({
+        ...h,
+        raw_ref: writeRaw(ws, { ...meta, url: h.linkedin_url ?? h.source_url }, `${h.name}\n${h.title ?? ""}${h.company ? ` @ ${h.company}` : ""}${h.location ? `\n${h.location}` : ""}`),
+      }));
       break;
     }
     case "search_news": {
@@ -241,7 +253,11 @@ async function callProviderInner<O extends Op>(op: O, rawInput: unknown, opts: G
       break;
     }
     case "fetch_pages":
-      results = (results as OpResults["fetch_pages"]).map((p) => ({ ...p, raw_ref: writeRaw(ws, { ...meta, url: p.url, title: p.title }, p.text) }));
+      results = (results as OpResults["fetch_pages"]).map((p) => ({
+        ...p,
+        raw_ref: writeRaw(ws, { ...meta, url: p.url, title: p.title }, p.text),
+        text: focusMax !== null ? focusText(p.text, String(focus), focusMax) : p.text,
+      }));
       break;
     case "extract":
       results = (results as OpResults["extract"]).map((x) => ({ ...x, raw_ref: writeRaw(ws, { ...meta, url: x.url }, `\`\`\`json\n${JSON.stringify(x.data, null, 2)}\n\`\`\``) }));

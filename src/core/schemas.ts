@@ -168,6 +168,8 @@ export const Factor = z.object({
   question: z.string(),
   levels: z.object({ 0: z.string(), 1: z.string(), 2: z.string(), 3: z.string() }),
   evidence_hint: z.string().optional(),
+  /** rule-based judging from a numeric fact — see autojudge.ts */
+  auto: z.object({ fact: z.string(), levels: z.object({ 0: z.string().optional(), 1: z.string().optional(), 2: z.string().optional(), 3: z.string().optional() }) }).optional(),
 });
 export type Factor = z.infer<typeof Factor>;
 
@@ -259,9 +261,17 @@ export const Config = z.object({
       deep_research_per_account_usd: z.number().positive().default(0.6),
     })
     .default({ per_run_usd: 5, per_day_usd: 20, deep_research_per_account_usd: 0.6 }),
+  /** Model per stage. Cheap stages run on Haiku; research, judging and writing stay on Sonnet (quality-checked by evals). */
   models: z
-    .object({ light: z.string().default("haiku"), research: z.string().default("sonnet"), judge: z.string().default("sonnet") })
-    .default({ light: "haiku", research: "sonnet", judge: "sonnet" }),
+    .object({
+      light: z.string().default("haiku"),
+      research: z.string().default("sonnet"),
+      judge: z.string().default("sonnet"),
+      discover: z.string().default("haiku"),
+      ways_in: z.string().default("haiku"),
+      drafts: z.string().default("sonnet"),
+    })
+    .default({ light: "haiku", research: "sonnet", judge: "sonnet", discover: "haiku", ways_in: "haiku", drafts: "sonnet" }),
   providers: z
     .object({
       discover: z.enum(["exa", "web"]).default("exa"),

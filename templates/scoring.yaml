@@ -19,6 +19,8 @@ factors:
       2: "Inside range but near an edge"
       3: "Squarely in the 50-500 sweet spot"
     evidence_hint: About page, LinkedIn company size via provider, registry filings
+    # Numeric factor → scored by code from the `employees` fact (cheaper, perfectly consistent).
+    auto: { fact: employees, levels: { 0: "<20 | >2000", 1: "20-39 | 701-2000", 2: "40-49 | 501-700", 3: "50-500" } }
   - id: recent_trigger
     name: Recent trigger event
     group: intent

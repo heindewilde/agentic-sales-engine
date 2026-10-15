@@ -1,0 +1,185 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { z } from "zod";
+import { autoJudge, type AutoRule } from "./autojudge.ts";
+import { advanceStage } from "./waysin.ts";
+import { parseDoc, readDoc, stringifyDoc } from "./frontmatter.ts";
+import { normalizeLinkedIn, personId } from "./normalize.ts";
+import { BRIEF_SECTIONS, Fact, FactorScore, SIGNAL_TYPES, type Company, type Person } from "./schemas.ts";
+import { factorsFor } from "./score.ts";
+import { loadScoring, writeScore } from "./scorefile.ts";
+import { validateContent } from "./validate.ts";
+import { dncMatcher, loadConfig, loadDnc, paths, today } from "./workspace.ts";
+import { briefSkeleton } from "./accounts.ts";
+
+/**
+ * Structured writes: a stage session sends ONE compact JSON for a whole chunk of accounts and the engine does the
+ * file work — merge facts, rewrite brief sections and footnotes, create people and signal files, auto-judge rule
+ * factors, compute the score, advance the stage. Validated per account before anything is written (all-or-nothing
+ * per account), so there are no rejected-write retries and the model never re-types whole markdown files.
+ */
+
+const FactIn = Fact.omit({ retrieved_at: true }).extend({ retrieved_at: z.string().optional() });
+
+export const AccountUpdate = z.object({
+  domain: z.string(),
+  facts: z.record(z.string(), FactIn).optional(),
+  /** brief sections to (re)write, by heading — e.g. { "Snapshot": "… [^s1]" } */
+  sections: z.record(z.string(), z.string()).optional(),
+  /** footnote definitions used in sections: { s1: "About page, https://… (2026-10-15)" } */
+  sources: z.record(z.string(), z.string()).optional(),
+  /** replaces the Open questions section; use "- [x] q → answer[^id]" and "- [ ] q (owner: <stage>)" */
+  open_questions: z.array(z.string()).optional(),
+  people: z.array(z.object({
+    name: z.string(), title: z.string().optional(), linkedin_url: z.string().optional(), persona: z.string().optional(),
+    seniority: z.enum(["c_level", "vp", "director", "manager", "ic", "owner", "other"]).optional(),
+    source_url: z.string(), confidence: z.number().min(0).max(1), raw_ref: z.string().optional(),
+  })).optional(),
+  signals: z.array(z.object({
+    type: z.enum(SIGNAL_TYPES), title: z.string(), date: z.string(), source_url: z.string(), confidence: z.number().min(0).max(1),
+    relevance: z.number().int().min(0).max(3), raw_ref: z.string().optional(), note: z.string().optional(), ttl_days: z.number().int().positive().optional(),
+  })).optional(),
+  judgements: z.array(z.unknown()).optional(),
+  mode: z.enum(["light", "full"]).optional(),
+  /** advance to this stage after writing (contracts are checked) — e.g. "researched" */
+  stage: z.enum(["researched", "outreach_ready"]).optional(),
+  changelog: z.string().optional(),
+});
+export const ApplyInput = z.object({ icp: z.string(), member: z.string().optional(), accounts: z.array(AccountUpdate).min(1) });
+export type ApplyInput = z.infer<typeof ApplyInput>;
+
+interface AccountResult { domain: string; ok: boolean; errors: string[]; written: string[]; stage?: string | null; score?: { total: number; tier: string; coverage: number } }
+
+/** Rebuild a brief body with replaced sections, merged footnote definitions and a changelog line. */
+export function rebuildBrief(body: string, sections: Record<string, string>, sources: Record<string, string>, openQuestions: string[] | undefined, changelog: string | undefined): string {
+  const lines = body.split("\n");
+  const defs = new Map<string, string>();
+  const kept: string[] = [];
+  for (const l of lines) {
+    const m = /^\[\^([^\]]+)\]:\s*(.*)$/.exec(l);
+    if (m) defs.set(m[1]!, m[2]!);
+    else kept.push(l);
+  }
+  for (const [k, v] of Object.entries(sources)) defs.set(k, v);
+  const text = kept.join("\n");
+  const head = text.split(/^##\s/m)[0]!.trimEnd();
+  const parsed = new Map<string, string>();
+  for (const m of text.matchAll(/^##\s+(.+?)\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/gm)) parsed.set(m[1]!.trim(), m[2]!.trim());
+  for (const [k, v] of Object.entries(sections)) parsed.set(k, v.trim());
+  if (openQuestions) parsed.set("Open questions", openQuestions.join("\n"));
+  if (changelog) parsed.set("Changelog", `${parsed.get("Changelog") ?? ""}\n- ${today()} ${changelog}`.trim());
+  const order = [...BRIEF_SECTIONS, ...[...parsed.keys()].filter((k) => !(BRIEF_SECTIONS as readonly string[]).includes(k))];
+  const out = [head, ""];
+  for (const s of order) out.push(`## ${s}`, parsed.get(s) ?? "", "");
+  if (defs.size) out.push(...[...defs].map(([k, v]) => `[^${k}]: ${v}`), "");
+  return out.join("\n");
+}
+
+async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUpdate>, privacyMode: boolean, dnc: ReturnType<typeof dncMatcher>): Promise<AccountResult> {
+  const res: AccountResult = { domain: u.domain, ok: false, errors: [], written: [] };
+  const cp = paths.company(ws, u.domain);
+  if (!existsSync(cp)) return { ...res, errors: ["no account file — discover or import it first"] };
+  const pending: { rel: string; content: string }[] = [];
+
+  // facts: never overwrite a higher-confidence fact with a lower one
+  const company = await readDoc<Company>(cp);
+  for (const [k, f] of Object.entries(u.facts ?? {})) {
+    const prev = company.data.facts?.[k];
+    if (prev && prev.confidence > f.confidence && String(prev.value) !== String(f.value)) continue;
+    company.data.facts = { ...(company.data.facts ?? {}), [k]: { ...f, retrieved_at: f.retrieved_at ?? today() } as z.infer<typeof Fact> };
+  }
+  pending.push({ rel: `accounts/${u.domain}/company.md`, content: stringifyDoc(company.data, company.body) });
+
+  // brief
+  if (u.sections || u.open_questions || u.changelog) {
+    const bp = paths.brief(ws, u.domain);
+    const brief = existsSync(bp) ? await readDoc<{ account: string; sections_updated?: Record<string, string>; open_questions?: number }>(bp) : parseDoc<{ account: string; sections_updated?: Record<string, string>; open_questions?: number }>(briefSkeleton(u.domain, company.data.name, "created by apply"));
+    const updated = { ...(brief.data.sections_updated ?? {}) };
+    for (const s of Object.keys(u.sections ?? {})) updated[s] = today();
+    if (u.open_questions) updated["Open questions"] = today();
+    const body = rebuildBrief(brief.body, u.sections ?? {}, u.sources ?? {}, u.open_questions, u.changelog);
+    const open = (u.open_questions ?? []).filter((q) => /^\s*-\s*\[ \]/.test(q)).length;
+    const data = { ...brief.data, account: u.domain, sections_updated: updated, open_questions: u.open_questions ? open : (brief.data.open_questions ?? 0) };
+    pending.push({ rel: `accounts/${u.domain}/brief.md`, content: stringifyDoc(data, body) });
+  }
+
+  // people
+  for (const p of u.people ?? []) {
+    const li = normalizeLinkedIn(p.linkedin_url) ?? undefined;
+    const id = personId(li, p.name, u.domain);
+    const ppath = paths.person(ws, id);
+    const prev = existsSync(ppath) ? await readDoc<Person>(ppath) : null;
+    const person: Person = {
+      ...(prev?.data ?? { id, name: p.name, lawful_basis: "legitimate_interest", dnc: false, known_by: [], facts: {} }),
+      id, name: p.name, company: u.domain, ...(li ? { linkedin_url: li } : {}), ...(p.persona ? { persona: p.persona } : {}), ...(p.seniority ? { seniority: p.seniority } : {}),
+      facts: { ...(prev?.data.facts ?? {}), ...(p.title ? { title: { value: p.title, source_url: p.source_url, retrieved_at: today(), confidence: p.confidence, ...(p.raw_ref ? { raw_ref: p.raw_ref } : {}) } } : {}) },
+    } as Person;
+    pending.push({ rel: `people/${id}.md`, content: stringifyDoc(person, prev?.body ?? "Business-relevant context only.\n") });
+  }
+
+  // signals
+  for (const s of u.signals ?? []) {
+    let rel = `accounts/${u.domain}/signals/${s.date.slice(0, 10)}-${s.type}.md`;
+    for (let i = 2; existsSync(join(ws, rel)) || pending.some((x) => x.rel === rel); i++) rel = `accounts/${u.domain}/signals/${s.date.slice(0, 10)}-${s.type}-${i}.md`;
+    const data = { account: u.domain, type: s.type, title: s.title, date: s.date, source_url: s.source_url, retrieved_at: today(), confidence: s.confidence, relevance: { [icp]: s.relevance }, ttl_days: s.ttl_days ?? 180, status: "new", ...(s.raw_ref ? { raw_ref: s.raw_ref } : {}) };
+    pending.push({ rel, content: stringifyDoc(data, `${s.note ?? ""}\n`) });
+  }
+
+  // validate everything first; write nothing for this account if anything is invalid
+  for (const p of pending) {
+    const errs = validateContent(p.rel, p.content, { privacyMode, dnc, exists: existsSync(join(ws, p.rel)) });
+    for (const e of errs) res.errors.push(`${p.rel}: ${e}`);
+  }
+  if (res.errors.length) return res;
+  for (const p of pending) {
+    mkdirSync(dirname(join(ws, p.rel)), { recursive: true });
+    writeFileSync(join(ws, p.rel), p.content);
+    res.written.push(p.rel);
+  }
+
+  if (u.stage) {
+    const a = await advanceStage(ws, u.domain, icp, u.stage);
+    if (!a.advanced) res.errors.push(...a.errors.map((e) => `stage ${u.stage}: ${e}`));
+  }
+
+  // score: model judgements + rule-based factors
+  if (u.judgements || u.mode) {
+    const mode = u.mode ?? "light";
+    const scoring = await loadScoring(ws, icp);
+    const judged = (u.judgements ?? []).map((j) => FactorScore.safeParse(j)).filter((r) => r.success).map((r) => r.data!);
+    const fresh = (await readDoc<Company>(cp)).data;
+    for (const f of factorsFor(scoring, mode) as (ReturnType<typeof factorsFor>[number] & { auto?: AutoRule })[]) {
+      if (!f.auto) continue;
+      const a = autoJudge(f, fresh);
+      const i = judged.findIndex((j) => j.id === f.id);
+      if (a && (i < 0 || judged[i]!.level === null)) {
+        if (i >= 0) judged.splice(i, 1);
+        judged.push(a);
+      }
+    }
+    try {
+      const s = await writeScore({ ws, icp, domain: u.domain, mode, judgements: judged });
+      res.score = { total: s.total, tier: s.tier, coverage: s.coverage };
+      res.stage = s.stage;
+      res.written.push(s.path);
+    } catch (e) {
+      res.errors.push(`score: ${(e as Error).message}`);
+    }
+  }
+  res.stage ??= (await readDoc<Company>(cp)).data.icp_status?.[icp]?.stage ?? null;
+  res.ok = res.errors.length === 0;
+  return res;
+}
+
+export async function applyUpdates(ws: string, raw: unknown) {
+  const input = ApplyInput.parse(raw);
+  const cfg = await loadConfig(ws).catch(() => null);
+  const dnc = dncMatcher(await loadDnc(ws).catch(() => ({ entries: [] })));
+  const results: AccountResult[] = [];
+  for (const u of input.accounts) results.push(await applyAccount(ws, input.icp, u, cfg?.privacy_mode ?? true, dnc));
+  return { ok: results.every((r) => r.ok), applied: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
+}
+
+export function readApplyFile(path: string): unknown {
+  return JSON.parse(readFileSync(path, "utf8"));
+}

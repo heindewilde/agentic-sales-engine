@@ -213,7 +213,7 @@ async function execStep(ws: string, s: AutopilotState, id: StepId, deps: Autopil
       const run = ensureLedgerRun(ws, s);
       const remaining = run.budget_usd - spentForRun(ws, run.run_id);
       const prompt = `/agentic-sales-engine:discover --icp ${s.icp} --target ${s.target_candidates - have} --unattended\n\nUnattended autopilot run ${s.run_id}: use the active ledger run, don't start or end runs, don't ask questions. Stop at the target or when queries saturate.`;
-      const r = await (deps.session ?? sdkRunner)({ ws, prompt, model: (await loadConfig(ws)).models.research, maxBudgetUsd: Math.max(0.1, Math.min(remaining * 0.25, 5)), pluginRoot: deps.pluginRoot, span: trace.getActiveSpan() });
+      const r = await (deps.session ?? sdkRunner)({ ws, prompt, model: (await loadConfig(ws)).models.discover, maxBudgetUsd: Math.max(0.1, Math.min(remaining * 0.25, 5)), pluginRoot: deps.pluginRoot, span: trace.getActiveSpan() });
       if (!r.ok) throw new Error(`discover session did not succeed: ${r.summary.slice(0, 200)}`);
       const { appendLedger } = await import("./ledger.ts");
       appendLedger(ws, { run_id: s.run_id, provider: "anthropic", op: "autopilot:discover", usd: r.cost_usd, kind: "actual" });

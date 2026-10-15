@@ -16,11 +16,12 @@ import { childTracingEnv, setAttrs, setContent, startSpan, withSpan } from "./tr
 
 export const BATCH_SKILLS = {
   "enrich-light": { fromStage: "discovered", toStage: "light_scored", defaultModel: "light" as const, defaultChunk: 10 },
-  research: { fromStage: "shortlisted", toStage: "researched", defaultModel: "research" as const, defaultChunk: 1 },
+  // two accounts per session halves the fixed start-up cost per account
+  research: { fromStage: "shortlisted", toStage: "researched", defaultModel: "research" as const, defaultChunk: 2 },
   score: { fromStage: "researched", toStage: "scored", defaultModel: "research" as const, defaultChunk: 5 },
-  "ways-in": { fromStage: "scored", toStage: "outreach_ready", defaultModel: "research" as const, defaultChunk: 3 },
+  "ways-in": { fromStage: "scored", toStage: "outreach_ready", defaultModel: "ways_in" as const, defaultChunk: 5 },
   // drafts don't move the stage; progress is measured by draft files (see autopilot)
-  "draft-outreach": { fromStage: "outreach_ready", toStage: "outreach_ready", defaultModel: "research" as const, defaultChunk: 3 },
+  "draft-outreach": { fromStage: "outreach_ready", toStage: "outreach_ready", defaultModel: "drafts" as const, defaultChunk: 3 },
 } as const;
 export type BatchSkill = keyof typeof BATCH_SKILLS;
 
@@ -64,6 +65,8 @@ export const UNATTENDED_NOTE = (root: string) =>
     "Use Glob/Read/Grep to explore files (not ls/find/cat). Write judgement JSON with the Write tool to .ase/tmp/<domain>-<mode>.json (never inside accounts/), then pass it with --judgements <file>.",
     "If one command is denied, the rest of the toolset still works — adjust and continue.",
     "The batch driver owns the ledger run and its budget: never run `ase ledger run start|end|extend` in this session.",
+    `Work through the fast path: \`bun ${root}/src/cli/ase.ts context …\` once, then ONE \`ase apply\` JSON — don't read or write account files one by one, and don't spawn agents.`,
+    "Final reply: at most 3 short lines (counts, notable exclusions, anything that failed). Nobody reads more.",
   ].join("\n");
 
 const MODEL_ALIASES: Record<string, string> = { haiku: "haiku", sonnet: "sonnet", opus: "opus" };

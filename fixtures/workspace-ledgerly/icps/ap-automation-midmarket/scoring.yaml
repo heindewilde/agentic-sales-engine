@@ -12,6 +12,7 @@ factors:
     knockout: { level_lte: 0 }
     question: Is headcount within 100-1000?
     levels: { 0: "<50 or >5000", 1: "50-99 or 1000-5000", 2: "100-149 or 700-1000", 3: "150-700" }
+    auto: { fact: employees, levels: { 0: "<50 | >5000", 1: "50-99 | 1001-5000", 2: "100-149 | 701-1000", 3: "150-700" } }
     evidence_hint: About page, registry, provider headcount
   - id: industry_fit
     name: Invoice-heavy industry

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { CONTRACTS } from "../core/contracts.ts";
 import { parseDoc } from "../core/frontmatter.ts";
 import { readLedger } from "../core/ledger.ts";
+import { normalizeLinkedIn } from "../core/normalize.ts";
 import { BRIEF_SECTIONS, STAGES, type Company, type Draft, type ScoreFile } from "../core/schemas.ts";
 
 const STAGE_ORDER: readonly string[] = STAGES;
@@ -179,6 +180,11 @@ export function draftRules(ws: string): EvalResult[] {
   return out;
 }
 
+/** Same page, different spelling: LinkedIn locale subdomains, www., trailing slash. */
+function canonicalUrl(u: string): string {
+  return normalizeLinkedIn(u) ?? u.replace(/^https?:\/\/www\./, "https://").replace(/\/$/, "");
+}
+
 /**
  * snapshot_coverage: share of URLs cited in a brief that have a stored raw snapshot. Without one, nobody can
  * later verify the claim (and LLM claim-support checks can't run) — typically facts taken from web search
@@ -191,7 +197,7 @@ export function snapshotCoverage(ws: string): EvalResult[] {
     const dir = join(root, month);
     for (const f of existsSync(dir) ? readdirSync(dir).filter((x) => x.endsWith(".md")) : []) {
       const url = /^url:\s*(\S+)/m.exec(readFileSync(join(dir, f), "utf8"))?.[1];
-      if (url) stored.add(url.replace(/\/$/, ""));
+      if (url) stored.add(canonicalUrl(url));
     }
   }
   const out: EvalResult[] = [];
@@ -200,7 +206,7 @@ export function snapshotCoverage(ws: string): EvalResult[] {
     if (!existsSync(p)) continue;
     const body = parseDoc(readFileSync(p, "utf8")).body;
     const urls = new Set<string>();
-    for (const m of body.matchAll(/^\[\^[^\]]+\]:.*?(https?:\/\/[^\s)]+)/gm)) urls.add(m[1]!.replace(/[).,;]+$/, "").replace(/\/$/, ""));
+    for (const m of body.matchAll(/^\[\^[^\]]+\]:.*?(https?:\/\/[^\s)]+)/gm)) urls.add(canonicalUrl(m[1]!.replace(/[).,;]+$/, "")));
     if (!urls.size) continue;
     const missing = [...urls].filter((u) => !stored.has(u));
     out.push({ key: "snapshot_coverage", target: `accounts/${d}/brief.md`, score: (urls.size - missing.length) / urls.size, comment: `${urls.size - missing.length}/${urls.size} cited URLs have a stored snapshot`, failures: missing.map((u) => `no snapshot for ${u}`) });

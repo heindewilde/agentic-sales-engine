@@ -23,6 +23,8 @@ import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
 import { accountStates, logEvent, migrateLegacy, openItems, outcomeStats, readEvents, winLossCases, type EventType, type OutcomeEvent } from "../core/outcomes.ts";
 import { runOffline } from "../evals/offline.ts";
+import { buildContext } from "../core/context.ts";
+import { applyUpdates, readApplyFile } from "../core/apply.ts";
 import { initTracing, setAttrs, shutdownTracing, withSpan } from "../core/tracing.ts";
 import { runLlm } from "../evals/llm.ts";
 import { compare, formatReport, latestResult, saveResult } from "../evals/report.ts";
@@ -147,6 +149,9 @@ const HELP = `ase <command>
                                           quality evals: citation faithfulness, grounding, handoffs, draft rules (offline);
                                           claim support, judge stability, draft quality (llm, via Claude). Exit 3 on regression,
                                           exit 4 when an evaluator's mean is below --min.
+  context <domain...> --icp <s> [--mode light|full]   compact JSON with everything a stage session needs
+  apply <file.json>                       structured writes for a chunk of accounts (facts, brief sections, people,
+                                          signals, judgements → score + stage), validated per account
   keys status                             which provider keys the CLI/batch will use (masked) and from where
   keys set <EXA_API_KEY|FIRECRAWL_API_KEY|FIRECRAWL_BASE_URL>   read the value from stdin (e.g. pbpaste | …)
   keys pull-firecrawl                     import the key from the official Firecrawl CLI login
@@ -420,6 +425,27 @@ switch (cmd) {
       else fail("usage: drafts list|snapshot|mark|edits|learned");
     } catch (e) {
       fail((e as Error).message, 2);
+    }
+    break;
+  }
+  case "context": {
+    const w = ws();
+    const mode = ((flags.mode as string) ?? "light") as "light" | "full";
+    const domains = positionals.map((d) => normalizeDomain(d) ?? d);
+    if (!domains.length) fail("usage: context <domain...> --icp <slug> [--mode light|full]");
+    process.stdout.write(`${JSON.stringify(await buildContext(w, (flags.icp as string) ?? fail("--icp is required"), domains, mode))}\n`);
+    break;
+  }
+  case "apply": {
+    const w = ws();
+    const file = positionals[0] ?? fail("usage: apply <file.json>  (or - for stdin)");
+    const raw = file === "-" ? JSON.parse(await Bun.stdin.text()) : readApplyFile(resolve(file));
+    try {
+      const r = await applyUpdates(w, raw);
+      out({ ...r, results: r.results.map((x) => ({ domain: x.domain, ok: x.ok, stage: x.stage, score: x.score, errors: x.errors })) });
+      if (!r.ok) process.exitCode = 2;
+    } catch (e) {
+      fail(`invalid apply file: ${(e as Error).message.slice(0, 800)}`, 2);
     }
     break;
   }

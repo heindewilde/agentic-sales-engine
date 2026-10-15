@@ -1,0 +1,38 @@
+{
+  "label": "optimized",
+  "ran_at": "2026-10-15T15:30:09.955Z",
+  "workspace": "/var/folders/4h/tstcx78d6b7_gcvh_7bl126h0000gn/T/ase-bench-optimized-bd3vc8/ws",
+  "cost": {
+    "light_model": 0.018,
+    "research_model": 0.4576,
+    "providers": 0.092,
+    "total_pipeline": 0.5676,
+    "per_light_account": 0.0018,
+    "per_research_account": 0.2288
+  },
+  "sessions": {
+    "light": {
+      "sessions": 1,
+      "turns": 6,
+      "output_tokens": 11166
+    },
+    "research": {
+      "sessions": 1,
+      "turns": 22,
+      "output_tokens": 12686
+    }
+  },
+  "advanced": {
+    "light": 10,
+    "research": 2
+  },
+  "quality": {
+    "citation_faithfulness": 1,
+    "brief_grounding": 0.852,
+    "snapshot_coverage": 0.922,
+    "handoff_completeness": 1,
+    "research_trajectory": 1,
+    "claim_support": 0.6,
+    "judge_stability": 0.875
+  }
+}
