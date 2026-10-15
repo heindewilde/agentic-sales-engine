@@ -16,7 +16,7 @@ and leaves it better. Everything lives in a git-tracked **workspace** of markdow
 
 > **Status:** v1 feature set complete (M0–M6): ICP → scoring design → discover → light score → shortlist → deep research →
 > full score → ways in, with the knowledge harness, provider gateway and batch driver. Verified end-to-end in real Claude
-> sessions at tier T0; live Exa/Firecrawl calls are unit-tested but not yet exercised against the real APIs.
+> sessions; Exa and Firecrawl adapters verified against the live APIs (`ASE_LIVE=1 bun test tests/live`).
 > Next: freshness monitoring (M7), outreach drafts (M8), call prep (M9). See [docs/architecture.md](docs/architecture.md).
 
 ## Install
@@ -38,7 +38,9 @@ Large lists run as batches of headless sessions:
 `bun <plugin>/src/cli/batch.ts --skill enrich-light|research|score --icp <slug> --budget 5` (resumable, budget-capped).
 
 Without keys the engine runs on Claude Code's built-in web search and your CSV imports (slower, shallower).
-For CLI/batch runs outside Claude Code, put `EXA_API_KEY` / `FIRECRAWL_API_KEY` in a gitignored `.env` in the workspace.
+For CLI/batch runs outside Claude Code, store keys once per machine (never in a repo):
+`pbpaste | bun <plugin>/src/cli/ase.ts keys set EXA_API_KEY`, and `npx firecrawl-cli login --browser` followed by
+`bun <plugin>/src/cli/ase.ts keys pull-firecrawl`. Check with `ase keys status`.
 
 ## How a run flows
 
@@ -87,7 +89,8 @@ advances when its handoff contract holds (`ase validate --stage`).
 
 ```
 bun install
-bun test            # unit + hook tests
+bun test            # unit + hook tests (offline)
+ASE_LIVE=1 bun test tests/live   # real Exa/Firecrawl calls, ~$0.05
 bun run typecheck
 claude plugin validate .
 claude --plugin-dir .   # try the plugin from a checkout, inside a workspace folder
