@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
-    <img alt="agentic-sales-engine — your AI research team for B2B prospecting, inside Claude Code" src="assets/banner-light.svg" width="860">
+    <img alt="agentic-sales-engine — the AI research team for B2B prospecting, inside Claude Code" src="assets/banner-light.svg" width="860">
   </picture>
 </p>
 
