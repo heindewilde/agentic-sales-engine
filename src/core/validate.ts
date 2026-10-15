@@ -7,7 +7,7 @@ import {
 import type { DncMatcher } from "./workspace.ts";
 
 export type EntityKind =
-  | "company" | "brief" | "score" | "signal" | "person" | "icp" | "scoring" | "config" | "dnc" | "raw" | "other";
+  | "company" | "brief" | "score" | "calibration" | "signal" | "person" | "icp" | "scoring" | "config" | "dnc" | "raw" | "other";
 
 /** Classify a workspace-relative path into the entity it holds. */
 export function classify(rel: string): { kind: EntityKind; account?: string; icp?: string } {
@@ -23,6 +23,7 @@ export function classify(rel: string): { kind: EntityKind; account?: string; icp
   if (/^people\/[^/]+\.md$/.test(rel)) return { kind: "person" };
   if ((m = /^icps\/([^/]+)\/icp\.md$/.exec(rel))) return { kind: "icp", icp: m[1] };
   if ((m = /^icps\/([^/]+)\/scoring\.yaml$/.exec(rel))) return { kind: "scoring", icp: m[1] };
+  if ((m = /^icps\/([^/]+)\/calibration\/([^/]+)\.md$/.exec(rel))) return { kind: "calibration", icp: m[1] };
   return { kind: "other" };
 }
 
@@ -99,6 +100,11 @@ export function validateContent(rel: string, content: string, opts: ValidateOpts
       errors.push(...zodErrors(ScoreFile, data, "score"));
       if (data.icp && data.icp !== c.icp) errors.push(`icp "${data.icp}" must match file name "${c.icp}"`);
       if (data.account && data.account !== c.account) errors.push(`account "${data.account}" must match folder "${c.account}"`);
+      break;
+    case "calibration":
+      errors.push(...zodErrors(ScoreFile, data, "calibration score"));
+      if (!data.label) errors.push("calibration scores need label: good | bad");
+      if (data.icp && data.icp !== c.icp) errors.push(`icp "${data.icp}" must match folder "${c.icp}"`);
       break;
     case "signal":
       errors.push(...zodErrors(Signal, data, "signal"));

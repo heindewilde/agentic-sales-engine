@@ -14,7 +14,8 @@ A Claude Code plugin that takes a team from **"who should we sell to?"** to **"h
 The value is in the handoffs: every stage reads what the previous one learned (an account **brief** with open questions)
 and leaves it better. Everything lives in a git-tracked **workspace** of markdown files that your team can read, edit and review.
 
-> **Status:** early development — M0–M2 done: plugin skeleton, knowledge harness, provider gateway. See [docs/architecture.md](docs/architecture.md).
+> **Status:** early development — M0–M4 done: knowledge harness, provider gateway, ICP builder, scoring design & calibration.
+> Next: wide funnel (discover → light score → shortlist), then deep research and ways in. See [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
@@ -49,12 +50,15 @@ For CLI/batch runs outside Claude Code, put `EXA_API_KEY` / `FIRECRAWL_API_KEY` 
 | Skill | What it does |
 |---|---|
 | `/agentic-sales-engine:setup` | Create or check a workspace |
+| `/agentic-sales-engine:icp-build` | Define your ICP from your site, materials and best customers; approve it (gate 1) |
+| `/agentic-sales-engine:scoring-design` | Design Fit × Intent × Access factors, back-test on known customers, version changes |
+| `/agentic-sales-engine:log-outcome` | Record meetings, wins and losses so scoring can recalibrate |
 | `/agentic-sales-engine:status` | Funnel, gates, spend, next action |
 | `/agentic-sales-engine:lint` | Knowledge-base health: unsourced, stale, duplicates, contradictions |
 | `/agentic-sales-engine:dnc` | Manage the do-not-contact list |
 | `/agentic-sales-engine:forget-person` | GDPR erasure |
 | `/agentic-sales-engine:learn` | Teach the engine a correction or preference |
-| *coming:* `icp-build`, `scoring-design`, `import`, `discover`, `enrich-light`, `shortlist`, `research`, `score`, `ways-in` | |
+| *coming:* `import`, `discover`, `enrich-light`, `shortlist`, `research`, `score`, `ways-in` | |
 
 ## Development
 
