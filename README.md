@@ -19,12 +19,12 @@
 </p>
 
 <p align="center">
+  <a href="#why-its-different">Why it's different</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#autopilot">Autopilot</a> ·
   <a href="#quality-and-observability">Quality & observability</a> ·
   <a href="#what-it-costs">What it costs</a> ·
-  <a href="#how-it-compares">How it compares</a> ·
   <a href="#faq">FAQ</a>
 </p>
 
@@ -35,25 +35,21 @@
 
 ---
 
-## Why
+## Why it's different
 
 Outbound works when it's specific: the right company, at the right moment, with something to say that is about
 *them*. That takes about an hour of research per account, so most teams skip it and send templates to bought lists.
-**agentic-sales-engine does that hour for every account, on its own, and shows its sources.**
+**agentic-sales-engine does that hour for every account, on its own, cites every fact, and explains every score.**
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/why-dark.svg">
-    <img alt="One company as a bought list shows it (a name, a size band, a generic email) and as agentic-sales-engine hands it over: why now, who to talk to, a score with evidence, and a sourced first line" src="assets/why-light.svg" width="900">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/compare-dark.svg">
+    <img alt="Comparison of agentic-sales-engine with data platforms (e.g. Clay), contact databases (e.g. Apollo) and one-off AI chat across research, citations, scoring, memory, learning, quality checks, traces, autonomy, contact data, sending, data ownership, customisation and pricing" src="assets/compare-light.svg" width="900">
   </picture>
 </p>
 
-- **Every line is checkable.** Facts carry a source and a date, and a write hook rejects anything unsourced. What
-  isn't known stays unknown.
-- **Scored on your rubric.** Fit, intent and access, back-tested on the customers you already have, with the evidence
-  behind every point.
-- **You make the calls.** You approve the ICP, the shortlist and the scores. It drafts; you send.
-- **It's yours.** Plain markdown in your own git repo, running in Claude Code on your Claude subscription.
+It isn't a contact database or a sending tool, and it pairs well with one: import their lists as seeds, and send from
+whatever you already use.
 
 ## Quickstart
 
@@ -194,18 +190,6 @@ Figures are indicative and measured on real runs; they depend on the providers a
 key, Claude is billed per token and becomes most of the cost, mainly deep research. Budgets per run and per day then
 cover Claude too; on a subscription they only cap the data providers and the engine won't ask for one.
 `ase ledger report` shows what every run cost, and [bench/](bench/) measures cost and quality together.
-
-## How it compares
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/compare-dark.svg">
-    <img alt="Comparison of agentic-sales-engine with data platforms (e.g. Clay), contact databases (e.g. Apollo) and one-off AI chat across research, citations, scoring, memory, learning, quality checks, traces, autonomy, contact data, sending, data ownership, customisation and pricing" src="assets/compare-light.svg" width="900">
-  </picture>
-</p>
-
-It's not a contact database or a sending tool. It pairs well with one: import their lists as seeds, and send from
-whatever you already use.
 
 ## All commands
 
