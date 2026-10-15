@@ -2,11 +2,14 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } fro
 import { dirname, join } from "node:path";
 import { reindexAll } from "./db.ts";
 import { readDoc } from "./frontmatter.ts";
+import { claudeBilling, modelSpendIsBilled, type ClaudeBilling } from "./billing.ts";
+import { allowedTools, cliRunner, MODEL_ALIASES, sessionEnv, streamCollector } from "./headless.ts";
+import { waitMs, type LimitState } from "./limits.ts";
 import { appendLedger, currentRun, newRunId, spentForRun, type CurrentRun } from "./ledger.ts";
 import type { Company } from "./schemas.ts";
 import { loadConfig, paths } from "./workspace.ts";
 import type { Span } from "@opentelemetry/api";
-import { childTracingEnv, setAttrs, setContent, startSpan, withSpan } from "./tracing.ts";
+import { setAttrs, startSpan, withSpan } from "./tracing.ts";
 
 /**
  * Batch driver: runs a stage skill over many accounts in chunks, each chunk in its own headless Claude
@@ -25,8 +28,17 @@ export const BATCH_SKILLS = {
 } as const;
 export type BatchSkill = keyof typeof BATCH_SKILLS;
 
+export interface ChunkRunResult {
+  cost_usd: number;
+  ok: boolean;
+  summary: string;
+  denied?: string[];
+  /** set when a plan usage limit stopped the session, or it started using paid extra usage */
+  limit?: LimitState;
+}
+
 export interface ChunkRunner {
-  (args: { ws: string; prompt: string; model: string; maxBudgetUsd: number; pluginRoot: string; span?: Span }): Promise<{ cost_usd: number; ok: boolean; summary: string; denied?: string[] }>;
+  (args: { ws: string; prompt: string; model: string; maxBudgetUsd: number; pluginRoot: string; span?: Span }): Promise<ChunkRunResult>;
 }
 
 export interface BatchOptions {
@@ -42,6 +54,8 @@ export interface BatchOptions {
   domains?: string[];
   dryRun?: boolean;
   runner?: ChunkRunner;
+  /** injectable for tests (usage-limit waits) */
+  sleep?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
 }
 
@@ -69,23 +83,10 @@ export const UNATTENDED_NOTE = (root: string) =>
     "Final reply: at most 3 short lines (counts, notable exclusions, anything that failed). Nobody reads more.",
   ].join("\n");
 
-const MODEL_ALIASES: Record<string, string> = { haiku: "haiku", sonnet: "sonnet", opus: "opus" };
-
-/** Default runner: one Agent SDK session per chunk. */
+/** Agent SDK runner: one session per chunk. Used with an API key (servers, CI); see headless.ts. */
 export const sdkRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, pluginRoot, span }) => {
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (typeof v === "string") env[k] = v;
-  // .mcp.json overrides EXA_API_KEY with the plugin's userConfig value (empty in SDK runs) — pass ASE_* copies.
-  for (const k of ["EXA_API_KEY", "FIRECRAWL_API_KEY", "FIRECRAWL_BASE_URL"]) if (env[k]) env[`ASE_${k}`] = env[k]!;
-  // Hand the chunk's trace context to the session, so its MCP gateway and CLI calls nest under this chunk.
-  Object.assign(env, childTracingEnv(span));
-  const toolSpans = new Map<string, Span>();
-  let cost = 0;
-  let ok = false;
-  let summary = "";
-  const denied: string[] = [];
-  const pending = new Map<string, string>();
+  const c = streamCollector(span);
   for await (const m of query({
     prompt,
     options: {
@@ -94,55 +95,25 @@ export const sdkRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, 
       plugins: [{ type: "local", path: pluginRoot }],
       settingSources: [],
       permissionMode: "dontAsk",
-      allowedTools: [
-        "Read", "Write", "Edit", "Glob", "Grep", "Agent", "WebSearch", "WebFetch",
-        `Bash(bun ${pluginRoot}/src/cli/ase.ts *)`,
-        "mcp__plugin_agentic-sales-engine_ase",
-      ],
+      allowedTools: allowedTools(pluginRoot),
       maxBudgetUsd,
       maxTurns: 200,
-      env,
+      env: sessionEnv(span),
     },
-  })) {
-    // Record refused tool calls so batch logs show permission problems instead of silent non-progress.
-    if (m.type === "assistant") {
-      for (const c of (m as { message: { content: { type: string; id?: string; name?: string; input?: unknown }[] } }).message.content) {
-        if (c.type === "tool_use" && c.id) {
-          pending.set(c.id, `${c.name} ${JSON.stringify(c.input).slice(0, 300)}`);
-          if (span) {
-            const t = startSpan(`tool.${c.name}`, { "ase.tool": c.name }, span);
-            setContent(t, "ase.tool_input", JSON.stringify(c.input));
-            toolSpans.set(c.id, t);
-          }
-        }
-      }
-    }
-    if (m.type === "user") {
-      const content = (m as { message: { content?: unknown } }).message.content;
-      for (const c of Array.isArray(content) ? (content as { type: string; tool_use_id?: string; is_error?: boolean; content?: unknown }[]) : []) {
-        if (c.type === "tool_result" && c.is_error && /permission|denied|not allowed/i.test(JSON.stringify(c.content))) {
-          denied.push(pending.get(c.tool_use_id ?? "") ?? "unknown tool");
-        }
-        const t = c.type === "tool_result" ? toolSpans.get(c.tool_use_id ?? "") : undefined;
-        if (t) {
-          setAttrs(t, { "ase.tool_error": Boolean(c.is_error) });
-          if (c.is_error) t.setStatus({ code: 2 });
-          t.end();
-          toolSpans.delete(c.tool_use_id ?? "");
-        }
-      }
-    }
-    if (m.type === "result") {
-      const r = m as { subtype: string; total_cost_usd?: number; result?: string; num_turns?: number; usage?: { input_tokens?: number; output_tokens?: number } };
-      if (span) setAttrs(span, { "ase.turns": r.num_turns, "gen_ai.usage.input_tokens": r.usage?.input_tokens, "gen_ai.usage.output_tokens": r.usage?.output_tokens, "ase.result": r.subtype });
-      cost = r.total_cost_usd ?? 0;
-      ok = r.subtype === "success";
-      summary = (r.result ?? r.subtype).slice(0, 2000);
-    }
-  }
-  for (const t of toolSpans.values()) t.end(); // tools still open when the session stopped
-  return { cost_usd: cost, ok, summary, denied };
+  })) c.add(m as unknown as Record<string, unknown>);
+  return c.finish();
 };
+
+/**
+ * Which transport runs headless sessions: `claude -p` on a subscription (Claude Code's own headless mode, on your
+ * login), the Agent SDK with an API key. ASE_HEADLESS=cli|sdk overrides.
+ */
+export function defaultRunner(billing: ClaudeBilling = claudeBilling()): ChunkRunner {
+  const forced = process.env.ASE_HEADLESS;
+  if (forced === "sdk") return sdkRunner;
+  if (forced === "cli") return cliRunner;
+  return billing === "api" ? sdkRunner : cliRunner;
+}
 
 async function pool<T>(items: T[], limit: number, fn: (t: T, i: number) => Promise<void>): Promise<void> {
   let next = 0;
@@ -170,6 +141,9 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
   const chunks: string[][] = [];
   for (let i = 0; i < domains.length; i += chunkSize) chunks.push(domains.slice(i, i + chunkSize));
   const model = o.model ?? cfg.models[spec.defaultModel];
+  const billing = claudeBilling(cfg.claude_billing);
+  const runner = o.runner ?? defaultRunner(billing);
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
 
   // Reuse the active run (e.g. the budget approved at GATE 2) or start one.
   let run: CurrentRun | null = currentRun(o.ws);
@@ -180,9 +154,9 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
       writeFileSync(paths.currentRun(o.ws), JSON.stringify(run, null, 2));
     }
   }
-  const plan = { run_id: run.run_id, skill: o.skill, icp: o.icp, model, accounts: domains.length, chunks: chunks.length, chunk_size: chunkSize, budget_usd: run.budget_usd };
+  const plan = { run_id: run.run_id, skill: o.skill, icp: o.icp, model, accounts: domains.length, chunks: chunks.length, chunk_size: chunkSize, budget_usd: run.budget_usd, claude_billing: billing };
   type ChunkResult = { chunk: number; domains: string[]; ok: boolean; cost_usd: number; advanced: string[] };
-  const empty = { processed: 0, advanced: 0, not_advanced: [] as string[], spent_usd: 0, stopped: null as string | null, log: null as string | null, results: [] as ChunkResult[] };
+  const empty = { processed: 0, advanced: 0, not_advanced: [] as string[], spent_usd: 0, stopped: null as string | null, usage_limit: null as { resets_at: string | null; overage: boolean } | null, log: null as string | null, results: [] as ChunkResult[] };
   if (o.dryRun || chunks.length === 0) return { ...plan, dry_run: Boolean(o.dryRun), ...empty };
 
   const logFile = join(o.ws, "lists", o.icp, run.run_id, `batch-${o.skill}.md`);
@@ -191,7 +165,13 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
 
   const results: ChunkResult[] = [];
   let stopped: string | null = null;
+  let usageLimit: LimitState | null = null;
+  let pausedUntil = 0;
+  let limitAttempts = 0;
+  const maxWait = cfg.usage_limits.max_wait_minutes * 60_000;
   await pool(chunks, o.concurrency ?? 3, async (chunk, i) => {
+    if (stopped) return;
+    if (pausedUntil > Date.now()) await sleep(pausedUntil - Date.now()); // another chunk hit a plan limit
     if (stopped) return;
     const spent = spentForRun(o.ws, run!.run_id);
     const remaining = run!.budget_usd - spent;
@@ -204,14 +184,37 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
     const prompt = `/agentic-sales-engine:${o.skill} --icp ${o.icp} --unattended ${chunk.join(" ")}\n\n${UNATTENDED_NOTE(o.pluginRoot)}`;
     log(`[${i + 1}/${chunks.length}] ${o.skill} ${chunk.join(", ")} (≤ $${chunkBudget.toFixed(2)})`);
     const chunkSpan = startSpan("batch.chunk", { "ase.skill": o.skill, "ase.icp": o.icp, "ase.chunk": i, "ase.domains": chunk, "ase.budget_usd": chunkBudget, "ase.model": model }, runSpan);
-    let r: Awaited<ReturnType<ChunkRunner>>;
-    try {
-      r = await (o.runner ?? sdkRunner)({ ws: o.ws, prompt, model, maxBudgetUsd: chunkBudget, pluginRoot: o.pluginRoot, span: chunkSpan });
-    } catch (e) {
-      r = { cost_usd: 0, ok: false, summary: `error: ${(e as Error).message}` };
-      chunkSpan.recordException(e as Error);
+    const attempt = async (): Promise<ChunkRunResult> => {
+      let r: ChunkRunResult;
+      try {
+        r = await runner({ ws: o.ws, prompt, model, maxBudgetUsd: chunkBudget, pluginRoot: o.pluginRoot, span: chunkSpan });
+      } catch (e) {
+        r = { cost_usd: 0, ok: false, summary: `error: ${(e as Error).message}` };
+        chunkSpan.recordException(e as Error);
+      }
+      // On a subscription the figure is API-equivalent usage, not money: logged, but outside the budget.
+      appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: `batch:${o.skill}`, usd: r.cost_usd, kind: "actual", note: chunk.join(" "), ...(modelSpendIsBilled(billing) ? {} : { billed: false }) });
+      return r;
+    };
+    let r = await attempt();
+    // Plan usage limit: wait for the reset when it's near (and retry this chunk), else stop the batch to resume later.
+    while (r.limit?.limited && !stopped) {
+      const wait = waitMs(r.limit, limitAttempts++);
+      if (wait > maxWait) {
+        usageLimit = r.limit;
+        stopped = `usage limit: Claude plan usage limit reached${r.limit.resetsAt ? `, resets ${new Date(r.limit.resetsAt).toISOString()}` : ""}`;
+        break;
+      }
+      pausedUntil = Math.max(pausedUntil, Date.now() + wait);
+      log(`usage limit reached — waiting ${Math.round(wait / 60_000)} min for the reset, then retrying ${chunk.join(", ")}`);
+      await sleep(Math.max(0, pausedUntil - Date.now()));
+      pausedUntil = 0;
+      r = await attempt();
     }
-    appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: `batch:${o.skill}`, usd: r.cost_usd, kind: "actual", note: chunk.join(" ") });
+    if (r.limit?.overage && !cfg.usage_limits.allow_extra_usage && !stopped) {
+      usageLimit = r.limit;
+      stopped = "usage limit: the session started using paid extra usage — stopped (set usage_limits.allow_extra_usage: true to allow it)";
+    }
     const advanced: string[] = [];
     for (const d of chunk) {
       const p = paths.company(o.ws, d);
@@ -236,6 +239,7 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
     not_advanced: domains.filter((d) => results.some((r) => r.domains.includes(d)) && !advanced.includes(d)),
     spent_usd: spentForRun(o.ws, run.run_id),
     stopped: stopped as string | null,
+    usage_limit: usageLimit ? { resets_at: (usageLimit as LimitState).resetsAt ? new Date((usageLimit as LimitState).resetsAt!).toISOString() : null, overage: (usageLimit as LimitState).overage } : null,
     log: logFile.slice(o.ws.length + 1) as string | null,
     results,
   };

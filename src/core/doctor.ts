@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { openDb, reindexAll } from "./db.ts";
 import { readDoc } from "./frontmatter.ts";
+import { claudeBilling, type ClaudeBilling } from "./billing.ts";
 import { currentRun, spentToday } from "./ledger.ts";
 import { loadConfig, paths } from "./workspace.ts";
 
@@ -34,6 +35,8 @@ export interface Health {
   stages: Record<string, Record<string, number>>;
   staleFacts: number;
   spentToday: number;
+  /** subscription: Claude usage is covered by the plan (budgets cap Exa/Firecrawl only); api: billed per token, budgets cover everything */
+  claudeBilling: ClaudeBilling;
   dayBudget: number;
   run: ReturnType<typeof currentRun>;
   gates: string[];
@@ -44,8 +47,11 @@ export interface Health {
 export async function health(ws: string): Promise<Health> {
   const problems: string[] = [];
   let dayBudget = 20;
+  let billing: ClaudeBilling = claudeBilling();
   try {
-    dayBudget = (await loadConfig(ws)).budgets.per_day_usd;
+    const cfg = await loadConfig(ws);
+    dayBudget = cfg.budgets.per_day_usd;
+    billing = claudeBilling(cfg.claude_billing);
   } catch (e) {
     problems.push(`ase.config.yaml is invalid: ${(e as Error).message.split("\n")[0]}`);
   }
@@ -104,12 +110,13 @@ export async function health(ws: string): Promise<Health> {
     else if (r.status === "failed") problems.push(`Autopilot ${r.run_id} (${r.icp}) failed at ${r.steps.find((s) => s.status === "failed")?.id ?? "?"} — fix and run: bun <plugin>/src/cli/autopilot.ts resume ${r.run_id}`);
     else gates.unshift(`Autopilot ${r.run_id} (${r.icp}) is running (step ${r.steps.find((s) => s.status === "running")?.id ?? "?"}).`);
   }
-  return { tier: tier(), icps, stages, staleFacts, spentToday: spentToday(ws), dayBudget, run: currentRun(ws), gates, problems, outcomes };
+  return { tier: tier(), icps, stages, staleFacts, spentToday: spentToday(ws), claudeBilling: billing, dayBudget, run: currentRun(ws), gates, problems, outcomes };
 }
 
 export function formatBrief(h: Health): string {
   const lines = [`Sales engine workspace — provider tier ${h.tier.tier} (${h.tier.detail}).`];
-  lines.push(`Spend today: $${h.spentToday.toFixed(2)} of $${h.dayBudget.toFixed(2)}.` + (h.run ? ` Active run: ${h.run.run_id} (budget $${h.run.budget_usd}).` : ""));
+  lines.push(h.claudeBilling === "api" ? "Claude: API key — billed per token; budgets cover Claude and data providers." : "Claude: your subscription — no per-token cost (plan usage limits apply); budgets only cap Exa/Firecrawl, don't ask for one.");
+  lines.push(`${h.claudeBilling === "api" ? "Spend" : "Provider spend"} today: $${h.spentToday.toFixed(2)} of $${h.dayBudget.toFixed(2)}.` + (h.run ? ` Active run: ${h.run.run_id} (budget $${h.run.budget_usd}).` : ""));
   if (h.icps.length === 0) lines.push("No ICP defined yet — start with /agentic-sales-engine:icp-build.");
   else lines.push(`ICPs: ${h.icps.map((i) => `${i.slug} [${i.status}${i.hasScoring ? ", scoring ✓" : ""}]`).join(", ")}.`);
   for (const [icp, s] of Object.entries(h.stages)) {

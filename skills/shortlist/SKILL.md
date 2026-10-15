@@ -17,6 +17,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/rules.md`. CLI: `bun ${CLAUDE_PLUGIN_ROOT
 3. Ask the user to approve as-is, adjust (drop/add domains — edit the ticks in the file for them, or let them edit it),
    or change the percentage. **Never approve on the user's behalf**, and never in an unattended run.
 4. On approval: `ase shortlist approve --icp <slug> --file <shortlist.md> --approved-by <member-id>`. It moves the
-   ticked accounts to `shortlisted` and returns a suggested research budget. Confirm the budget, then start the run:
+   ticked accounts to `shortlisted` and returns a suggested research budget. With `claude_billing: api` confirm the budget; on a subscription use the
+   suggestion without asking (it only covers Exa/Firecrawl). Then start the run:
    `ase ledger run start --stage research --icp <slug> --budget <usd> --approved-by <member-id>`.
 5. Next: `/agentic-sales-engine:research --icp <slug>` (deep research, people, triggers, full score).

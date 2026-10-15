@@ -1,7 +1,7 @@
 ---
 name: autopilot
 description: Run the whole funnel for an ICP hands-off — discover, light score, shortlist, deep research, full score, ways in and outreach drafts — pausing only at the human gates (shortlist approval, draft review) and staying within one budget. Use when the user wants the engine to "just run", to prospect a new ICP end to end, or to check on, approve or resume a running autopilot.
-argument-hint: "start --icp <slug> --budget <usd> [--target N] [--until step] | status | approve | resume | abort"
+argument-hint: "start --icp <slug> [--budget <usd>] [--target N] [--until step] | status | approve | resume | abort"
 allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts *), Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read, Edit, AskUserQuestion
 ---
 
@@ -14,10 +14,12 @@ Each step is resumable; state lives in `lists/<icp>/<run>/autopilot.json`; one b
 ## Start
 1. Preconditions: the ICP is approved and has a scoring model (`ase doctor`). Provider keys for headless runs must be
    in the shell, the workspace `.env` or `~/.config/agentic-sales-engine/credentials.env` (`ase keys status`).
-2. Agree the budget with the user. Rule of thumb: ~$0.03 per discovered account + ~$0.60 per researched account +
-   ~$0.60 per drafted account (see the README cost table). Agree `--target` (candidates, default 300) and `--until`
-   (default `drafts`; use `shortlist` to stop after the proposal).
-3. Run it **in the background** (it takes a while): `autopilot start --icp <slug> --budget <usd> --target <n> --by <member> --text`.
+2. Budget — only with `claude_billing: api` (see rules): agree it with the user. Rule of thumb: ~$0.01 per discovered
+   account + ~$0.26 per researched account + ~$0.10 per drafted account. On a subscription, don't ask: leave out
+   `--budget` (it defaults to `budgets.per_run_usd` as a cap on Exa/Firecrawl, ≈ $0.04 per researched account) and say
+   the run uses the plan's usage. Agree `--target` (candidates, default 300) and `--until` (default `drafts`; use
+   `shortlist` to stop after the proposal).
+3. Run it **in the background** (it takes a while): `autopilot start --icp <slug> [--budget <usd>] --target <n> --by <member> --text`.
    Tell the user they can keep working; check progress with `autopilot status --text`.
 
 ## At a gate
@@ -35,6 +37,12 @@ Each step is resumable; state lives in `lists/<icp>/<run>/autopilot.json`; one b
 ## Extending a run
 Started with `--until shortlist` and now want to go further? `autopilot extend --until score --budget <usd> --by <member> --resume --text`
 re-enables the later steps and raises the run budget; finished work is kept.
+
+## Usage limits (subscription)
+When the plan's usage limit is hit, batches wait for the reset if it's within `usage_limits.max_wait_minutes` (default 6 h)
+and retry the same accounts. A later reset pauses the run (`⏸ … Paused at <step>`): nothing is lost, and
+`autopilot resume --text` after the reset continues without a new approval. Runs never continue into paid extra
+usage unless `usage_limits.allow_extra_usage: true`.
 
 ## Failures
 `autopilot status --text` shows the failed step and error. Fix the cause (keys, budget, a lint problem), then

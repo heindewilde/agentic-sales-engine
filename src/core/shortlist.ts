@@ -1,3 +1,4 @@
+import { claudeBilling } from "./billing.ts";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { canTransition } from "./contracts.ts";
@@ -13,7 +14,7 @@ export interface ShortlistProposal {
   path: string;
   pool: number;
   picked: (RankRow & { why: string })[];
-  cost: { per_account_p50: number; per_account_p90: number; total_p50: number; total_p90: number };
+  cost: { per_account_p50: number; per_account_p90: number; total_p50: number; total_p90: number; basis: string };
 }
 
 /**
@@ -36,13 +37,16 @@ export async function proposeShortlist(ws: string, icp: string, opts: { pct?: nu
     .map((r) => ({ ...r, why: `research to resolve (upside ${r.upside}, coverage ${Math.round(r.coverage * 100)}%)` }));
   const picked = [...top, ...resolve].slice(0, max);
 
-  const perP50 = cfg?.budgets.deep_research_per_account_usd ?? 0.6;
+  // On a subscription only Exa/Firecrawl cost money; Claude usage comes out of the plan.
+  const billing = claudeBilling(cfg?.claude_billing);
+  const perP50 = billing === "api" ? (cfg?.budgets.deep_research_per_account_usd ?? 0.3) : (cfg?.budgets.research_providers_per_account_usd ?? 0.04);
   const perP90 = Math.round(perP50 * 2 * 100) / 100;
   const cost = {
     per_account_p50: perP50,
     per_account_p90: perP90,
     total_p50: Math.round(perP50 * picked.length * 100) / 100,
     total_p90: Math.round(perP90 * picked.length * 100) / 100,
+    basis: billing === "api" ? "providers + Claude (API key)" : "Exa/Firecrawl only — Claude on your subscription",
   };
   const runId = newRunId("shortlist");
   const rel = `lists/${icp}/${runId}/shortlist.md`;
@@ -53,7 +57,7 @@ export async function proposeShortlist(ws: string, icp: string, opts: { pct?: nu
     `# Shortlist proposal — ${icp} (${today()})`,
     "",
     `Pool: ${pool.length} light-scored accounts. Proposed for deep research: **${picked.length}**.`,
-    `Estimated cost: **$${cost.total_p50} typical, up to $${cost.total_p90}** ($${perP50}–$${perP90} per account, provider + model usage).`,
+    `Estimated cost: **$${cost.total_p50} typical, up to $${cost.total_p90}** ($${perP50}–$${perP90} per account, ${billing === "api" ? "provider + model usage" : "Exa/Firecrawl only; Claude usage comes from your subscription and counts toward its usage limits"}).`,
     "",
     "Untick `[x]` → `[ ]` to drop an account; add a row with `[x]` to include another. Then approve (GATE 2).",
     "",
@@ -112,7 +116,7 @@ export async function approveShortlist(ws: string, icp: string, shortlistRel: st
     writeFileSync(cp, stringifyDoc(doc.data, doc.body));
     approved.push(d);
   }
-  const cost = (data.cost as { per_account_p90?: number } | undefined)?.per_account_p90 ?? cfg?.budgets.deep_research_per_account_usd ?? 0.6;
+  const cost = (data.cost as { per_account_p90?: number } | undefined)?.per_account_p90 ?? cfg?.budgets.deep_research_per_account_usd ?? 0.3;
   data.status = "approved";
   data.approved_by = by;
   data.approved_at = today();

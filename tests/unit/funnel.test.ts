@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +7,7 @@ import { runBatch, accountsAtStage } from "../../src/core/batch.ts";
 import { openDb, reindexAll } from "../../src/core/db.ts";
 import { readDoc } from "../../src/core/frontmatter.ts";
 import { companyKey, importConnections, parseConnectedOn, parseConnections, readSeedCsv, readWarmMatches, rematchAll } from "../../src/core/importers.ts";
-import { readLedger } from "../../src/core/ledger.ts";
+import { readLedger, subscriptionUsage } from "../../src/core/ledger.ts";
 import { lint } from "../../src/core/lint.ts";
 import type { Company } from "../../src/core/schemas.ts";
 import { writeScore } from "../../src/core/scorefile.ts";
@@ -130,6 +130,10 @@ async function lightScoredPool(ws: string, n: number) {
 }
 
 describe("shortlist (GATE 2)", () => {
+  // estimates below are the API-key figures (Claude + providers); the subscription figure is tested separately
+  beforeAll(() => void (process.env.ASE_CLAUDE_BILLING = "api"));
+  afterAll(() => void delete process.env.ASE_CLAUDE_BILLING);
+
   test("proposes top % + research-to-resolve, excludes knockouts, estimates cost", async () => {
     const ws = fixture();
     await lightScoredPool(ws, 20);
@@ -162,6 +166,21 @@ describe("shortlist (GATE 2)", () => {
   });
 });
 
+test("shortlist on a subscription: the estimate is Exa/Firecrawl only", async () => {
+  const ws = fixture();
+  process.env.ASE_CLAUDE_BILLING = "subscription";
+  try {
+    await persistCandidates(ws, ICP, "r", "test", [{ name: "Q", domain: "q.example", source_url: "https://q.example" }]);
+    await writeScore({ ws, icp: ICP, domain: "q.example", mode: "light", judgements: [{ id: "industry_fit", level: 3, confidence: 0.9, evidence: [{ quote: "q", source_url: "https://q.example" }] }] });
+    const p = await proposeShortlist(ws, ICP);
+    expect(p.cost.per_account_p50).toBe(0.04);
+    expect(p.cost.basis).toContain("subscription");
+    expect(readFileSync(join(ws, p.path), "utf8")).toContain("Claude usage comes from your subscription");
+  } finally {
+    delete process.env.ASE_CLAUDE_BILLING;
+  }
+});
+
 describe("batch driver", () => {
   test("chunks accounts, records model cost, stops at budget, resumes by stage", async () => {
     const ws = fixture();
@@ -178,7 +197,8 @@ describe("batch driver", () => {
     const dry = await runBatch({ ws, skill: "enrich-light", icp: ICP, pluginRoot: PLUGIN_ROOT, chunk: 3, dryRun: true });
     expect(dry).toMatchObject({ accounts: 7, chunks: 3, dry_run: true, model: "haiku" });
 
-    const r = await runBatch({ ws, skill: "enrich-light", icp: ICP, pluginRoot: PLUGIN_ROOT, chunk: 3, concurrency: 1, budgetUsd: 0.5, runner, log: () => {} });
+    process.env.ASE_CLAUDE_BILLING = "api"; // model cost counts against the budget only when billed per token
+    const r = await runBatch({ ws, skill: "enrich-light", icp: ICP, pluginRoot: PLUGIN_ROOT, chunk: 3, concurrency: 1, budgetUsd: 0.5, runner, log: () => {} }).finally(() => delete process.env.ASE_CLAUDE_BILLING);
     // budget 0.5, $0.30 per chunk → second chunk runs (0.2 left > 0.01), third is stopped
     expect(r.stopped).toContain("budget exhausted");
     expect(r.processed).toBe(6);
@@ -188,5 +208,35 @@ describe("batch driver", () => {
     expect(readLedger(ws).filter((e) => e.provider === "anthropic")).toHaveLength(2);
     expect(await accountsAtStage(ws, ICP, "discovered")).toEqual(["p6.example"]);
     expect(existsSync(join(ws, r.log!))).toBe(true);
+  });
+
+  test("on a subscription, Claude usage is logged but not budgeted; a near plan limit is waited out, a far one stops the batch", async () => {
+    const ws = fixture();
+    await persistCandidates(ws, ICP, "r", "test", Array.from({ length: 6 }, (_, i) => ({ name: `S${i}`, domain: `s${i}.example`, source_url: `https://s${i}.example` })));
+    process.env.ASE_CLAUDE_BILLING = "subscription";
+    let calls = 0;
+    const slept: number[] = [];
+    const runner = async ({ prompt }: { prompt: string }) => {
+      calls++;
+      if (calls === 2) return { cost_usd: 0.05, ok: false, summary: "You've hit your session limit", limit: { limited: true, overage: false, resetsAt: Date.now() + 30 * 60_000, kind: "five_hour" } };
+      if (calls === 4) return { cost_usd: 0, ok: false, summary: "You've hit your weekly limit", limit: { limited: true, overage: false, resetsAt: Date.now() + 3 * 86_400_000, kind: "seven_day" } };
+      for (const d of prompt.split("\n")[0]!.match(/[a-z0-9-]+\.example/g) ?? []) {
+        await writeScore({ ws, icp: ICP, domain: d, mode: "light", judgements: [{ id: "industry_fit", level: 2, confidence: 0.8, evidence: [{ quote: "q", source_url: `https://${d}` }] }] });
+      }
+      return { cost_usd: 0.3, ok: true, summary: "done" };
+    };
+    try {
+      const r = await runBatch({ ws, skill: "enrich-light", icp: ICP, pluginRoot: PLUGIN_ROOT, chunk: 2, concurrency: 1, budgetUsd: 0.5, runner, sleep: async (ms) => void slept.push(ms), log: () => {} });
+      expect(r.claude_billing).toBe("subscription");
+      expect(slept).toHaveLength(1); // 30 min reset: waited, then retried the same chunk
+      expect(slept[0]).toBeGreaterThan(30 * 60_000);
+      expect(r.stopped).toMatch(/^usage limit/); // 3-day reset: stop and resume later
+      expect(r.usage_limit?.resets_at).toBeTruthy();
+      expect(r.advanced).toBe(4);
+      expect(r.spent_usd).toBe(0); // $0.65 of API-equivalent usage, none of it billed against the $0.5 budget
+      expect(subscriptionUsage(readLedger(ws))).toBeCloseTo(0.65);
+    } finally {
+      delete process.env.ASE_CLAUDE_BILLING;
+    }
   });
 });

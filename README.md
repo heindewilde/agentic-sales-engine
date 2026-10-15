@@ -267,7 +267,7 @@ autopilot 20261015-145833-autopilot · ap-automation-midmarket · waiting · spe
   – drafts
 
 GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist.md
-        (6 accounts, ≈ $3–6) and approve: ase autopilot approve --by <member>
+        (6 accounts, ≈ $0.24–0.48 Exa/Firecrawl) and approve: ase autopilot approve --by <member>
 ```
 
 - **Three gates, never skipped.** It waits for you to approve the shortlist (with its cost estimate) before deep
@@ -275,8 +275,12 @@ GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist
   accounts in the shortlist file to leave them out.
 - **Resumable.** Progress is checkpointed after every step; the account files remain the source of truth. After a crash, a
   gate or a budget stop, `resume` continues where it left off without repeating finished work.
-- **One budget.** Every model and data call counts against it. When it runs out, the run waits for you to raise it
+- **One budget, only where money is spent.** With an API key, every model and data call counts against it. On a
+  subscription it only caps Exa/Firecrawl and needs no `--budget`. When it runs out, the run waits for you to raise it
   instead of failing.
+- **Plan limits pause, they don't fail.** On a subscription, a usage limit that resets within 6 hours is waited out. A
+  later one pauses the run, and `resume` continues after the reset. Runs never continue into paid extra usage unless
+  you allow it.
 - **Retries, not surprises.** A step whose sessions crash is retried with backoff and only re-processes the accounts
   that didn't advance. Accounts a session couldn't move forward are listed, not hidden.
 
@@ -334,6 +338,12 @@ Setup in [docs/observability.md](docs/observability.md) and [docs/tracing.md](do
 
 ## What it costs
 
+**On a Claude subscription (Pro, Max, Team), Claude itself costs you nothing extra.** Every session, including batch
+and autopilot runs, runs through Claude Code on your login, so it uses your plan's usage instead of API credits. The
+only money you spend goes to Exa and Firecrawl, about **$0.04 per deep-researched account**. With an API key (or
+Bedrock or Vertex), Claude is billed per token. The figures below are those API prices, which on a subscription show
+how much plan usage a run takes.
+
 Measured on real runs with live Exa and Firecrawl calls and real Claude sessions (API-equivalent model cost). Your
 numbers will vary with list size, model choice and how much research an account needs.
 
@@ -356,7 +366,8 @@ factors like headcount are scored by code, and each stage runs on the cheapest m
 That's about 70% less than the first version of the engine on the same benchmark, with quality scores up rather than down:
 see [bench/](bench/) for the fixed workload, and run it yourself to compare changes. Every run has a budget:
 the engine estimates the cost before deep research, enforces per-run and per-day caps before each paid call, and logs
-every dollar to `ledger/costs.jsonl`.
+every dollar to `ledger/costs.jsonl`. On a subscription, budgets only cap Exa/Firecrawl and the engine won't ask you for
+one. Claude usage is logged as an API-equivalent figure that isn't counted as spend.
 
 ## How it compares
 
@@ -448,7 +459,9 @@ discovery, people search and site extraction are much better, and both have free
 <summary><b>Which models does it use?</b></summary>
 
 Claude. By default Haiku for wide, cheap passes and Sonnet for research and judging, configurable per stage in
-`ase.config.yaml`. Interactive use runs on your Claude Code plan. Batch runs use the Claude Agent SDK.
+`ase.config.yaml`. Everything runs on whatever Claude Code is logged in with. On a subscription, batch and autopilot
+sessions run through Claude Code's own headless mode (`claude -p`). With an API key they use the Claude Agent SDK
+(override with `ASE_HEADLESS=cli|sdk`).
 </details>
 
 <details>

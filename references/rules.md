@@ -51,6 +51,12 @@ agents write to it over months, and so that one stage can rely on what another l
 - Deep work happens inside a budgeted run: `ase ledger run start --stage <s> --budget <usd>` (calls over $0.50 are
   refused outside a run). Check spend with `ase ledger report`.
 - When a call is refused for budget, stop and report — never switch providers or tools to get around it.
+- **Who pays for Claude decides whether to talk budgets** (`claude_billing` in `ase doctor` / the gateway `status` tool):
+  - `subscription` (the default when no API key is set): Claude usage is covered by the user's plan. Budgets only cap
+    Exa/Firecrawl, which cost cents per account. **Don't ask the user for a budget** — runs use `budgets.per_run_usd`
+    as a silent cap. Do mention that big runs count toward the plan's usage limits, and quote Claude figures only as
+    "≈ $X API-equivalent", never as spend.
+  - `api` (API key, Bedrock, Vertex): every token is billed. Agree a budget before paid runs, as the steps describe.
 
 ## 6. Handoffs
 - Read before you write: `learnings/preferences.md`, `learnings/corrections.md`, the ICP, and (per account) `brief.md`.

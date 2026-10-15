@@ -259,8 +259,16 @@ export const Config = z.object({
       per_run_usd: z.number().positive().default(5),
       per_day_usd: z.number().positive().default(20),
       deep_research_per_account_usd: z.number().positive().default(0.3),
+      /** Exa/Firecrawl only, per researched account (what a subscription user actually pays) */
+      research_providers_per_account_usd: z.number().positive().default(0.04),
     })
-    .default({ per_run_usd: 5, per_day_usd: 20, deep_research_per_account_usd: 0.3 }),
+    .default({ per_run_usd: 5, per_day_usd: 20, deep_research_per_account_usd: 0.3, research_providers_per_account_usd: 0.04 }),
+  /** How Claude is paid for. auto: an API key / Bedrock / Vertex means api, otherwise your Claude subscription. */
+  claude_billing: z.enum(["auto", "subscription", "api"]).default("auto"),
+  /** Subscription plan limits: wait for a reset up to max_wait_minutes inside a batch, else pause; never use paid extra usage unless allowed. */
+  usage_limits: z
+    .object({ max_wait_minutes: z.number().min(0).default(360), allow_extra_usage: z.boolean().default(false) })
+    .default({ max_wait_minutes: 360, allow_extra_usage: false }),
   /** Model per stage. Cheap stages run on Haiku; research, judging and writing stay on Sonnet (quality-checked by evals). */
   models: z
     .object({

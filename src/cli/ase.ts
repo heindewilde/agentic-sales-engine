@@ -14,7 +14,8 @@ import { reindexAll } from "../core/db.ts";
 import { formatBrief, health, tier } from "../core/doctor.ts";
 import { forgetPerson } from "../core/forget.ts";
 import { parseYaml, readDoc, stringifyYaml } from "../core/frontmatter.ts";
-import { appendLedger, currentRun, newRunId, readLedger, spentForRun, spentToday, sumSpend } from "../core/ledger.ts";
+import { claudeBilling } from "../core/billing.ts";
+import { appendLedger, currentRun, newRunId, readLedger, spentForRun, spentToday, subscriptionUsage, sumSpend } from "../core/ledger.ts";
 import { lint } from "../core/lint.ts";
 import { normalizeDomain, normalizeLinkedIn } from "../core/normalize.ts";
 import { DncEntry, Stage, type Company } from "../core/schemas.ts";
@@ -683,7 +684,8 @@ switch (cmd) {
         byProvider[e.provider] = sumSpend(entries.filter((x) => x.provider === e.provider));
         byRun[e.run_id ?? "(none)"] = sumSpend(entries.filter((x) => (x.run_id ?? "(none)") === (e.run_id ?? "(none)")));
       }
-      out({ days, total_usd: sumSpend(entries), today_usd: spentToday(w), byProvider, byRun, active_run: currentRun(w) });
+      const sub = subscriptionUsage(entries);
+      out({ days, claude_billing: claudeBilling((await loadConfig(w).catch(() => null))?.claude_billing), total_usd: sumSpend(entries), today_usd: spentToday(w), byProvider, byRun, ...(sub ? { claude_on_subscription_usd_equivalent: sub } : {}), active_run: currentRun(w) });
     } else fail("usage: ledger run start|extend|end, ledger record, ledger report");
     break;
   }

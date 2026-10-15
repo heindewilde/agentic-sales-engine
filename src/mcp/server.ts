@@ -8,6 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { tier } from "../core/doctor.ts";
+import { claudeBilling } from "../core/billing.ts";
 import { currentRun, spentForRun, spentToday } from "../core/ledger.ts";
 import { callProvider, estimateCall, INPUT_SCHEMAS } from "../core/providers/gateway.ts";
 import { OPS, ProviderError, type CompanyHit, type Op } from "../core/providers/types.ts";
@@ -149,6 +150,8 @@ server.registerTool(
     return text({
       workspace: ws,
       tier: tier(),
+      claude_billing: claudeBilling(cfg?.claude_billing),
+      budget_covers: claudeBilling(cfg?.claude_billing) === "api" ? "claude + data providers" : "data providers only (Claude usage is on the subscription)",
       today: { spent_usd: spentToday(ws), cap_usd: cfg?.budgets.per_day_usd ?? null },
       run: run ? { ...run, spent_usd: spentForRun(ws, run.run_id) } : null,
     });
