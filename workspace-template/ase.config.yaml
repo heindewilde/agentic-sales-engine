@@ -1,0 +1,45 @@
+# Agentic sales engine — workspace configuration.
+# This file marks the folder as a workspace. Everything here is plain text and git-tracked.
+
+workspace:
+  name: "My Company"            # your company name
+  website: ""                   # e.g. https://example.com — the ICP builder starts here
+
+# Team members. Each member can import their own LinkedIn Connections.csv for warm intros.
+members:
+  - id: me                      # lowercase, used in file paths and approvals
+    name: "Your Name"
+
+# Privacy mode (recommended, required for EU teams): only business-relevant personal data is stored,
+# personal mailboxes are refused, every person carries a lawful basis. See LEGITIMATE-INTEREST.md.
+privacy_mode: true
+
+# Provider spend caps (USD). The engine estimates cost before deep research and stops at these limits.
+budgets:
+  per_run_usd: 5
+  per_day_usd: 20
+  deep_research_per_account_usd: 0.6
+
+# Models per stage: cheap for wide discovery, stronger for research and judging.
+models:
+  light: haiku
+  research: sonnet
+  judge: sonnet
+
+# Which provider handles which operation (falls back automatically when a key is missing).
+providers:
+  discover: exa
+  extract: firecrawl
+  research: exa
+  news: exa
+
+# How long facts stay fresh before /refresh re-checks them (days).
+ttl_days:
+  firmographics: 180
+  people: 90
+  signals: 90
+  default: 120
+
+funnel:
+  shortlist_pct: 15             # share of light-scored accounts proposed for deep research
+  max_deep_research: 50         # hard cap per run

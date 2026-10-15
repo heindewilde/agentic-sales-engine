@@ -1,0 +1,3 @@
+entries:
+  - { kind: domain, value: northwind-cargo.example, reason: customer }
+  - { kind: domain, value: payflow.example, reason: competitor }

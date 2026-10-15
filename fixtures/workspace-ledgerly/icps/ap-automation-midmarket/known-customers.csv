@@ -1,0 +1,21 @@
+domain,name,label,note
+brightline-foods.example,Brightline Foods,good,wholesale food distributor 320 staff
+kessler-armaturen.example,Kessler Armaturen,good,valve manufacturer 450 staff SAP B1
+vandam-logistics.example,Van Dam Logistics,good,3PL 210 staff
+ostara-parts.example,Ostara Parts,good,auto parts wholesaler 600 staff
+meridian-textiles.example,Meridian Textiles,good,textile manufacturer 180 staff
+hollis-electro.example,Hollis Electro,good,electrical wholesaler 270 staff
+fjord-packaging.example,Fjord Packaging,good,packaging manufacturer 390 staff
+tessel-chem.example,Tessel Chemicals,good,chemicals distributor 150 staff
+quaynor-steel.example,Quaynor Steel,good,steel stockholder 520 staff
+alba-pharma-dist.example,Alba Pharma Distribution,good,pharma wholesaler 640 staff
+pixelpond.example,Pixelpond,bad,design agency 40 staff few suppliers
+cloudmint.example,Cloudmint,bad,SaaS 120 staff software only
+gemeente-voorbeeld.example,Gemeente Voorbeeld,bad,municipality public sector
+megacorp-industries.example,Megacorp Industries,bad,25000 staff SAP S/4 shared service center
+lawson-partners.example,Lawson Partners,bad,law firm 90 staff
+tinybrew.example,Tinybrew,bad,craft brewery 18 staff
+finova-bank.example,Finova Bank,bad,bank excluded
+stellar-consult.example,Stellar Consulting,bad,consultancy 300 staff services
+recent-buyer.example,Recent Buyer GmbH,bad,just renewed competitor contract
+oakfield-retail.example,Oakfield Retail,bad,retail chain 2000 staff centralized AP in HQ abroad

@@ -1,0 +1,4 @@
+# Append-only logs: let concurrent team edits merge by concatenation
+ledger/costs.jsonl merge=union
+outcomes/outcomes.csv merge=union
+learnings/*.md merge=union

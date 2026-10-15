@@ -1,0 +1,45 @@
+# Scoring model — Fit × Intent × Access, judged per factor by an LLM against these anchored levels,
+# with cited evidence. The total is computed deterministically by `ase score compute`.
+icp: my-icp
+version: 1
+groups: { fit: 0.5, intent: 0.3, access: 0.2 }   # must sum to 1
+tiers: { A: 70, B: 50 }                           # total >= A -> tier A, >= B -> B, else C; knocked out -> X
+unknown_prior: 1                                  # level assumed when evidence is missing (0-3); not zero, not optimistic
+factors:
+  - id: company_size
+    name: Company size in sweet spot
+    group: fit
+    weight: 3
+    light: true                                   # judged in the cheap light pass (homepage + firmographics)
+    knockout: { level_lte: 0 }                    # a KNOWN level 0 excludes the account
+    question: Does headcount fall within the ICP range?
+    levels:
+      0: "Far outside range (<20 or >2000 employees)"
+      1: "Just outside range"
+      2: "Inside range but near an edge"
+      3: "Squarely in the 50-500 sweet spot"
+    evidence_hint: About page, LinkedIn company size via provider, registry filings
+  - id: recent_trigger
+    name: Recent trigger event
+    group: intent
+    weight: 2
+    question: Has a trigger from the ICP happened in the last 12 months?
+    levels:
+      0: "No relevant event found after a real search"
+      1: "Weak or old signal (>12 months)"
+      2: "One relevant trigger in the last 12 months"
+      3: "Strong, recent trigger directly tied to our offering"
+    evidence_hint: Dated news, press releases, job posts
+  - id: warm_path
+    name: Warm path available
+    group: access
+    weight: 2
+    question: Can someone on our team get a warm introduction to a target persona?
+    levels:
+      0: "No connection to anyone at the company"
+      1: "Connection to someone at the company, not a target persona"
+      2: "Second-hand path to a target persona (connector known)"
+      3: "Direct connection to a target persona"
+    evidence_hint: team/*/warm-matches.yaml
+changelog:
+  - { version: 1, date: 2026-10-15, by: me, change: initial model }

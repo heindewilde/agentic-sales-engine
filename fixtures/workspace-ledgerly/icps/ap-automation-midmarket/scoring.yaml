@@ -1,0 +1,63 @@
+icp: ap-automation-midmarket
+version: 1
+groups: { fit: 0.5, intent: 0.3, access: 0.2 }
+tiers: { A: 70, B: 50 }
+unknown_prior: 1
+factors:
+  - id: company_size
+    name: Headcount in range
+    group: fit
+    weight: 3
+    light: true
+    knockout: { level_lte: 0 }
+    question: Is headcount within 100-1000?
+    levels: { 0: "<50 or >5000", 1: "50-99 or 1000-5000", 2: "100-149 or 700-1000", 3: "150-700" }
+    evidence_hint: About page, registry, provider headcount
+  - id: industry_fit
+    name: Invoice-heavy industry
+    group: fit
+    weight: 3
+    light: true
+    question: Is the business model invoice-heavy (wholesale, distribution, manufacturing, logistics)?
+    levels: { 0: "Services/software with few suppliers", 1: "Mixed", 2: "Adjacent (retail, construction)", 3: "Wholesale, distribution, manufacturing or logistics" }
+  - id: erp_fit
+    name: Compatible mid-market ERP
+    group: fit
+    weight: 2
+    question: Do they run an ERP we integrate with?
+    levels: { 0: "Custom/legacy with no integration path", 1: "Unknown tier-1 ERP (SAP S/4 at scale)", 2: "Supported ERP mentioned indirectly (job ad)", 3: "Supported ERP confirmed" }
+    evidence_hint: Job postings, case studies, partner pages
+  - id: no_ap_tool
+    name: No AP automation yet
+    group: fit
+    weight: 2
+    knockout: { level_lte: 0 }
+    question: Do they lack an AP automation tool?
+    levels: { 0: "Uses a competitor, recently renewed", 1: "Uses a competitor", 2: "Some partial tooling", 3: "Clearly manual (job ads for invoice data entry)" }
+  - id: finance_change
+    name: Finance leadership or system change
+    group: intent
+    weight: 3
+    question: New CFO/finance director, ERP migration or acquisition in the last 12 months?
+    levels: { 0: "None found after search", 1: "Older than 12 months", 2: "One relevant change in 12 months", 3: "Change in last 6 months" }
+  - id: ap_hiring
+    name: Hiring AP clerks
+    group: intent
+    weight: 2
+    light: true
+    question: Are they hiring for invoice processing / AP roles?
+    levels: { 0: "No", 1: "General finance hiring", 2: "One AP role", 3: "Multiple AP/data-entry roles" }
+  - id: warm_path
+    name: Warm path to a persona
+    group: access
+    weight: 2
+    question: Does a team member know a finance leader or AP lead there?
+    levels: { 0: "No connections", 1: "Connection at company, other function", 2: "Connection who can intro to persona", 3: "Direct connection to persona" }
+  - id: persona_reachable
+    name: Named persona identified
+    group: access
+    weight: 1
+    question: Have we identified the CFO/AP lead by name with a business contact channel?
+    levels: { 0: "No", 1: "Name only", 2: "Name + LinkedIn", 3: "Name + business email" }
+changelog:
+  - { version: 1, date: 2026-10-02, by: hein, change: initial model from customer analysis }

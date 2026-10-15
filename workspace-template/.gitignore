@@ -1,0 +1,7 @@
+# Derived index — rebuilt from files with `ase reindex`
+.ase/
+# Raw LinkedIn exports contain third-party personal data: keep them local. Only warm-matches.yaml is committed.
+team/*/connections.csv
+team/*/messages.csv
+company/materials/private/
+.DS_Store
