@@ -44,7 +44,7 @@ Outbound works when it's specific: the right company, at the right moment, with 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/why-dark.svg">
-    <img alt="The same company as a bought list shows it (a name, a size band, a generic email) and as agentic-sales-engine hands it over: why now, who to talk to, a score with evidence, and a sourced first line" src="assets/why-light.svg" width="900">
+    <img alt="One company as a bought list shows it (a name, a size band, a generic email) and as agentic-sales-engine hands it over: why now, who to talk to, a score with evidence, and a sourced first line" src="assets/why-light.svg" width="900">
   </picture>
 </p>
 
