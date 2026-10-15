@@ -4,6 +4,7 @@ import { parseDoc, readDoc, stringifyDoc } from "./frontmatter.ts";
 import { Draft } from "./schemas.ts";
 import { relPath, today } from "./workspace.ts";
 import { lineDiff } from "./watch.ts";
+import { logEvent } from "./outcomes.ts";
 
 /**
  * Outreach drafts live in accounts/<d>/drafts/. When the engine writes a draft it also freezes a copy in
@@ -56,13 +57,24 @@ export async function listDrafts(ws: string, opts: { status?: string; account?: 
   return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export async function markDraft(ws: string, rel: string, status: "draft" | "edited" | "sent" | "discarded") {
+export async function markDraft(ws: string, rel: string, status: "draft" | "edited" | "sent" | "discarded", opts: { member?: string; date?: string } = {}) {
   const abs = join(ws, rel);
   const { data, body } = await readDoc<Draft>(abs);
+  const wasSent = data.status === "sent";
   data.status = status;
-  if (status === "sent") data.sent_at = today();
+  let event = null;
+  if (status === "sent") {
+    data.sent_at = opts.date ?? today();
+    // The outcome log starts here: a sent draft is the first touch the 21-day silence rule counts from.
+    if (!wasSent) {
+      event = logEvent(ws, {
+        account: data.account, icp: data.icp, type: "sent", person: data.person, member: opts.member,
+        channel: data.channel, draft: rel, date: data.sent_at, source: "draft",
+      });
+    }
+  }
   writeFileSync(abs, stringifyDoc(data, body));
-  return { path: rel, status };
+  return { path: rel, status, event };
 }
 
 /** Pairs of (engine original, human final) for edited/sent drafts not yet learned from. */

@@ -229,16 +229,16 @@ export async function rank(ws: string, icp: string, opts: { stage?: string; limi
 
 export async function runRecalibrate(ws: string, icp: string) {
   const scoring = await loadScoring(ws, icp);
-  // Same outcome semantics as the dashboard: latest per account, a trailing no_response never hides engagement.
-  const { latestOutcomes, readOutcomes, POSITIVE } = await import("./outcomes.ts");
+  // Same semantics as the dashboard: resolved accounts only (in-flight outreach excluded); engaged = positive reply or later.
+  const { resolvedStates } = await import("./outcomes.ts");
   const data: { judged: { id: string; level: 0 | 1 | 2 | 3 | null }[]; positive: boolean }[] = [];
-  for (const r of latestOutcomes(readOutcomes(ws, icp)).values()) {
-    const s = readScoreDoc(paths.score(ws, r.account, icp));
-    if (s?.mode === "full") data.push({ judged: s.factors, positive: POSITIVE.has(r.outcome) });
+  for (const st of resolvedStates(ws, icp)) {
+    const s = readScoreDoc(paths.score(ws, st.account, icp));
+    if (s?.mode === "full") data.push({ judged: s.factors, positive: st.engaged });
   }
   const positives = data.filter((d) => d.positive).length;
   if (data.length < 30 || positives < 5 || data.length - positives < 5) {
-    return { ready: false, n: data.length, positives, message: "Need ≥30 fully-scored accounts with logged outcomes, including ≥5 positive and ≥5 negative, before recalibrating." };
+    return { ready: false, n: data.length, positives, message: "Need ≥30 resolved, fully-scored accounts (≥5 engaged and ≥5 not) before recalibrating." };
   }
   return { ready: true, n: data.length, positives, scoring_version: scoring.version, proposal: recalibrate(scoring, data) };
 }

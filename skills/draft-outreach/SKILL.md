@@ -35,5 +35,6 @@ Per account:
 6. Optional follow-ups (step 2–3, different angle each — a proof point, a question) only if the user asks.
 
 Finish with a table: account, person, channel, way in, file. Remind the user: edit freely, then
-`ase drafts mark <file> sent` (or `edited`) — the engine learns from their changes via `voice-profile --learn`.
+`ase drafts mark <file> sent --member <id>` once sent (this starts outcome tracking; silence counts as no response
+after 21 days) or `edited` — the engine learns from their changes via `voice-profile --learn`.
 If the user explicitly asks for Gmail drafts and a Gmail tool is available, create drafts there too — never send.
