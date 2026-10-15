@@ -20,6 +20,9 @@ import { DncEntry, type Company } from "../core/schemas.ts";
 import { dncMatcher, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
 import { callProvider, estimateCall } from "../core/providers/gateway.ts";
+import { persistCandidates } from "../core/accounts.ts";
+import { importConnections, readSeedCsv, rematchAll } from "../core/importers.ts";
+import { approveShortlist, proposeShortlist } from "../core/shortlist.ts";
 import { archiveScoring, rank, recomputeAll, runBacktest, runRecalibrate, runSensitivity, writeScore } from "../core/scorefile.ts";
 import { OPS, ProviderError, type Op, type ProviderName } from "../core/providers/types.ts";
 
@@ -51,6 +54,11 @@ const { values: flags, positionals } = parseArgs({
     mode: { type: "string" },
     judgements: { type: "string" },
     limit: { type: "string" },
+    map: { type: "string", multiple: true },
+    run: { type: "string" },
+    pct: { type: "string" },
+    max: { type: "string" },
+    file: { type: "string" },
   },
 });
 
@@ -88,6 +96,12 @@ const HELP = `ase <command>
   score recompute --icp <s>                        re-score all files from stored judgements (after weight edits)
   scoring archive --icp <s>                        snapshot scoring.yaml to scoring.history/ before editing
   outcome log <domain> <meeting|opportunity|won|lost|no_response|disqualified> --icp <s> [--member m] [--note]
+  import seeds <file.csv> --icp <s> [--map field=Column ...] [--run <id>]   add a seed list as candidates
+  import connections <Connections.csv> --member <id>   LinkedIn export → local copy + warm-matches.yaml
+  connections match                       recompute every member's warm matches (after discovery)
+  accounts --icp <s> [--stage <stage>]    list account domains for an ICP (optionally at one stage)
+  shortlist propose --icp <s> [--pct N] [--max N]     GATE 2 proposal with cost estimate
+  shortlist approve --icp <s> --file <lists/.../shortlist.md> --approved-by <member>
   contracts                               list stage contracts`;
 
 const ws = () => requireWorkspace(flags.workspace as string | undefined);
@@ -229,6 +243,75 @@ switch (cmd) {
     const note = String(flags.note ?? "").replace(/"/g, "'");
     writeFileSync(f, `${today()},${domain},${icp},${flags.member ?? ""},${outcome},"${note}"\n`, { flag: "a" });
     out({ logged: { date: today(), account: domain, icp, outcome } });
+    break;
+  }
+  case "import": {
+    const w = ws();
+    const kind = positionals[0];
+    const file = positionals[1] ?? fail("usage: import seeds|connections <file>");
+    if (!existsSync(resolve(file))) fail(`${file} not found`);
+    try {
+      if (kind === "seeds") {
+        const icp = (flags.icp as string) ?? fail("--icp is required");
+        const overrides = Object.fromEntries(((flags.map as string[] | undefined) ?? []).map((m) => m.split("=") as [string, string]));
+        const src = resolve(file);
+        // Keep a copy of the seed list in the workspace so import:<path> sources resolve for everyone.
+        const dest = src.startsWith(w) ? src : join(w, "imports", "seeds", src.split("/").pop()!);
+        if (dest !== src) cpSync(src, dest);
+        const { candidates, columns, rows } = readSeedCsv(w, dest, overrides);
+        const runId = (flags.run as string) ?? `${today()}-import`;
+        const res = await persistCandidates(w, icp, runId, `import:${dest.slice(w.length + 1)}`, candidates);
+        await rematchAll(w);
+        out({ rows, columns, ...res, created: res.created.length, added_to_icp: res.added_to_icp.length, already_in_icp: res.already_in_icp.length, created_domains: res.created });
+      } else if (kind === "connections") {
+        const member = (flags.member as string[] | undefined)?.[0] ?? fail("--member is required");
+        const cfg = await loadConfig(w);
+        if (cfg.members.length && !cfg.members.some((m) => m.id === member)) fail(`"${member}" is not a member in ase.config.yaml`);
+        out(await importConnections(w, member, resolve(file)));
+      } else fail("usage: import seeds|connections <file>");
+    } catch (e) {
+      fail((e as Error).message, 2);
+    }
+    await reindexAll(w);
+    break;
+  }
+  case "connections": {
+    const w = ws();
+    if (positionals[0] !== "match") fail("usage: connections match");
+    const r = await rematchAll(w);
+    await reindexAll(w);
+    out(r);
+    break;
+  }
+  case "accounts": {
+    const w = ws();
+    const icp = (flags.icp as string) ?? fail("--icp is required");
+    const dir = join(w, "accounts");
+    const res: { domain: string; stage: string; name: string }[] = [];
+    for (const d of existsSync(dir) ? readdirSync(dir) : []) {
+      const p = paths.company(w, d);
+      if (!existsSync(p)) continue;
+      const { data } = await readDoc<Company>(p);
+      const st = data.icp_status?.[icp];
+      if (st && (!flags.stage || st.stage === flags.stage)) res.push({ domain: d, stage: st.stage, name: data.name });
+    }
+    out(res, res.map((r) => `${r.domain}\t${r.stage}\t${r.name}`).join("\n"));
+    break;
+  }
+  case "shortlist": {
+    const w = ws();
+    const icp = (flags.icp as string) ?? fail("--icp is required");
+    try {
+      if (positionals[0] === "propose") {
+        const p = await proposeShortlist(w, icp, { pct: flags.pct ? Number(flags.pct) : undefined, max: flags.max ? Number(flags.max) : undefined });
+        out({ ...p, picked: p.picked.map((x) => ({ domain: x.domain, name: x.name, total: x.total, upside: x.upside, coverage: x.coverage, tier: x.tier, why: x.why })) });
+      } else if (positionals[0] === "approve") {
+        const by = (flags["approved-by"] as string) ?? fail("--approved-by is required: GATE 2 is a human decision");
+        out(await approveShortlist(w, icp, (flags.file as string) ?? fail("--file is required"), by));
+      } else fail("usage: shortlist propose|approve --icp <slug>");
+    } catch (e) {
+      fail((e as Error).message, 2);
+    }
     break;
   }
   case "contracts":

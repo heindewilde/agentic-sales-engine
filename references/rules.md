@@ -34,7 +34,8 @@ agents write to it over months, and so that one stage can rely on what another l
   - **GATE 1** — ICP approval (`status: approved` + `approved_by`).
   - **GATE 2** — shortlist approval before deep research, with a cost estimate (`approved_by` on each account).
 - Nothing is ever sent to a prospect. Outreach is drafted only.
-- In unattended runs (batch/scheduled), never pass a gate: write proposals and stop.
+- In unattended runs (batch/scheduled), never pass a gate: write proposals and stop. Batch sessions may only run
+  `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts …` via Bash (one command per call); explore with Glob/Read/Grep.
 
 ## 5. Providers & cost
 - All paid data access goes through the plugin's `ase` MCP tools: `discover_companies`, `find_people`, `search_news`,

@@ -15,8 +15,8 @@ const has = (...names: string[]) => names.some((n) => {
 
 export function providerKeys(): { exa: boolean; firecrawl: boolean } {
   return {
-    exa: has("EXA_API_KEY", "CLAUDE_PLUGIN_OPTION_EXA_API_KEY"),
-    firecrawl: has("FIRECRAWL_API_KEY", "CLAUDE_PLUGIN_OPTION_FIRECRAWL_API_KEY", "FIRECRAWL_BASE_URL", "CLAUDE_PLUGIN_OPTION_FIRECRAWL_BASE_URL"),
+    exa: has("EXA_API_KEY", "ASE_EXA_API_KEY", "CLAUDE_PLUGIN_OPTION_EXA_API_KEY"),
+    firecrawl: has("FIRECRAWL_API_KEY", "ASE_FIRECRAWL_API_KEY", "ASE_FIRECRAWL_BASE_URL", "CLAUDE_PLUGIN_OPTION_FIRECRAWL_API_KEY", "FIRECRAWL_BASE_URL", "CLAUDE_PLUGIN_OPTION_FIRECRAWL_BASE_URL"),
   };
 }
 
