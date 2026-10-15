@@ -22,6 +22,8 @@ const urls = z.array(z.string().url()).min(1).max(25);
 export const INPUT_SCHEMAS = {
   discover_companies: z.object({
     query: z.string().min(3),
+    icp: z.string().regex(/^[a-z0-9-]+$/).optional().describe("save new candidates as accounts for this ICP (stage discovered) and return a compact summary"),
+    run_id: z.string().optional().describe("discovery run id to group candidates (lists/<icp>/<run_id>/); defaults to today's discover run"),
     num_results: z.number().int().min(1).max(100).optional(),
     country: z.string().length(2).optional(),
     exclude_domains: z.array(z.string()).optional(),
@@ -80,10 +82,18 @@ export interface GatewayResult<O extends Op> {
   budget: { day_spent_usd: number; day_cap_usd: number; run_id: string | null; run_spent_usd: number | null; run_budget_usd: number | null };
 }
 
+/**
+ * Provider keys: EXA_API_KEY etc. (set from plugin userConfig in .mcp.json, or from a .env for CLI runs),
+ * falling back to ASE_EXA_API_KEY etc. — batch runs pass those, because .mcp.json's env block overrides
+ * the inherited EXA_API_KEY with the (possibly empty) userConfig value.
+ */
 function envKey(name: string): string | undefined {
-  const v = process.env[name];
-  // Unset plugin userConfig values may arrive as empty strings or unexpanded placeholders.
-  return v && !v.startsWith("${") ? v : undefined;
+  for (const n of [name, `ASE_${name}`]) {
+    const v = process.env[n];
+    // Unset plugin userConfig values may arrive as empty strings or unexpanded placeholders.
+    if (v && !v.startsWith("${")) return v;
+  }
+  return undefined;
 }
 
 export function availableAdapters(opts: Pick<GatewayOptions, "adapters" | "mode" | "cassettes">): Partial<Record<ProviderName, Adapter>> {
@@ -145,7 +155,9 @@ export function writeRaw(ws: string, meta: Record<string, unknown>, content: str
 export async function callProvider<O extends Op>(op: O, rawInput: unknown, opts: GatewayOptions): Promise<GatewayResult<O>> {
   const parsed = INPUT_SCHEMAS[op].safeParse(rawInput);
   if (!parsed.success) throw new ProviderError(`invalid input for ${op}: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, "bad_input");
-  const input = parsed.data as OpInputs[O];
+  // Workspace-only options (where to save results) never reach the provider or the cassette key.
+  const { icp: _icp, run_id: _runId, ...providerInput } = parsed.data as Record<string, unknown>;
+  const input = providerInput as OpInputs[O];
   const { ws } = opts;
   const cfg = await loadConfig(ws).catch(() => null);
   const adapter = chooseProvider(op, cfg, availableAdapters(opts), opts.provider);
@@ -248,8 +260,8 @@ export async function callProvider<O extends Op>(op: O, rawInput: unknown, opts:
 
 /** Dry-run: which provider would answer and roughly what it costs. */
 export async function estimateCall<O extends Op>(op: O, rawInput: unknown, opts: GatewayOptions): Promise<{ provider: ProviderName; est_usd: number }> {
-  const input = INPUT_SCHEMAS[op].parse(rawInput) as OpInputs[O];
+  const { icp: _icp, run_id: _runId, ...input } = INPUT_SCHEMAS[op].parse(rawInput) as Record<string, unknown>;
   const cfg = await loadConfig(opts.ws).catch(() => null);
   const adapter = chooseProvider(op, cfg, availableAdapters(opts), opts.provider);
-  return { provider: adapter.name, est_usd: estimate(adapter.name, op, input) };
+  return { provider: adapter.name, est_usd: estimate(adapter.name, op, input as OpInputs[O]) };
 }

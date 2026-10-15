@@ -12,18 +12,8 @@ factors with `light: true`; `full` = all factors), and the evidence files for ON
 signals/, people/, research notes, raw snapshots referenced there). Also read `learnings/corrections.md`, and for
 **access** factors read `team/*/warm-matches.yaml` yourself (grep for the account's domain).
 
-For each factor in scope:
-1. Read its `question`, the four anchored `levels`, and `evidence_hint`.
-2. Find evidence in the given files. Quote the exact words (≤ 30 words) and take the `source_url` (and `raw_ref`) from
-   the fact, footnote or snapshot that carries **that exact quote**. When the quote comes from a workspace file that has
-   no URL of its own (warm-matches.yaml, a team note), cite it as `import:<workspace-relative path>`. Omit `raw_ref`
-   when there is none — never send an empty string.
-   For time-based anchors ("last 6 months", "last 12 months"), compute the age from today's date explicitly first.
-3. Pick the level whose anchor the evidence matches best. If the evidence doesn't let you choose between two adjacent
-   levels, pick the lower one and lower the confidence.
-4. **No evidence → `"level": null`.** Absence of a mention is not evidence of absence, except where the anchor itself
-   says so (e.g. "no relevant event found after a real search" — and only if the files show that search was done).
-5. Confidence: strength of the evidence (first-party & explicit 0.9; third-party 0.7; indirect/inferred 0.4–0.5).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/judging.md` exactly. Do not run the score command yourself — return the JSON
+to the caller.
 
 Output ONLY a JSON array, no prose before or after:
 ```

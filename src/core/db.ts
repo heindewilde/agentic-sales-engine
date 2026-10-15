@@ -154,6 +154,12 @@ export async function reindexAll(ws: string, defaultTtl = 120): Promise<{ files:
     );
     const files = [...walk(join(ws, "accounts")), ...walk(join(ws, "people")), ...walk(join(ws, "icps"))];
     for (const f of files) await indexFile(db, ws, f, defaultTtl);
+    // Warm paths from each member's committed matches (the raw connection exports stay local).
+    const { readWarmMatches } = await import("./importers.ts");
+    const ins = db.prepare("INSERT INTO warm_paths VALUES (?,?,?,?,?)");
+    db.transaction(() => {
+      for (const m of readWarmMatches(ws)) ins.run(m.member, m.person_id, m.account, `linkedin_connections:${m.quality}`, m.connected_on);
+    })();
     return { files: files.length };
   } finally {
     db.close();

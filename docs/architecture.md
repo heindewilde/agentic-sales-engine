@@ -153,7 +153,7 @@ index.md                         # generated LLM-wiki index
   - `dnc`
   - `forget-person`
 - **Skills (later):** `sync`, `voice-profile`, `draft-outreach`, `call-prep`.
-- **Agents:** `icp-analyst`, `light-enricher` (Haiku), `account-researcher`, `people-finder`, `signal-scout`, `factor-judge`, `wiki-linter`. Tools are restricted per agent. Only the researcher and enricher agents call providers.
+- **Agents:** `icp-analyst`, `account-researcher`, `people-finder`, `signal-scout`, `factor-judge`, `wiki-linter`. Tools are restricted per agent. Only the researcher and analyst agents call providers; light enrichment runs in the enrich-light skill itself (batched).
 - **Hooks** (all are `bun src/hooks/<x>.ts`):
   - **PreToolUse on Write|Edit** runs `validate`, which denies:
     - unsourced facts
