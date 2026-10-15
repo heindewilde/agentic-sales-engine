@@ -127,9 +127,15 @@ export const cliRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, 
   return r;
 };
 
+/**
+ * Effort for one-shot judging (second opinions, LLM evals): picking a level against an anchor needs little reasoning,
+ * and an unbounded think on a hard call can cost 20× a normal one. Override with ASE_JUDGE_EFFORT.
+ */
+export const judgeEffort = () => (process.env.ASE_JUDGE_EFFORT || "low") as "low" | "medium" | "high";
+
 /** One question, one answer, no tools: `claude -p` on the user's Claude Code login. */
 export async function askOnceCli(prompt: string, opts: { model: string }): Promise<{ text: string; cost_usd: number }> {
-  const args = [process.env.ASE_CLAUDE_BIN || "claude", "-p", "--output-format", "json", "--model", MODEL_ALIASES[opts.model] ?? opts.model, "--tools", "", "--setting-sources", ""];
+  const args = [process.env.ASE_CLAUDE_BIN || "claude", "-p", "--output-format", "json", "--model", MODEL_ALIASES[opts.model] ?? opts.model, "--effort", judgeEffort(), "--tools", "", "--setting-sources", ""];
   const proc = Bun.spawn(args, { env: sessionEnv(), stdin: new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
   const out = await new Response(proc.stdout).text();
   await proc.exited;
@@ -146,7 +152,7 @@ export async function askOnceSdk(prompt: string, opts: { model: string }): Promi
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
   let text = "";
   let cost = 0;
-  for await (const m of query({ prompt, options: { model: MODEL_ALIASES[opts.model] ?? opts.model, allowedTools: [], settingSources: [], maxTurns: 1, permissionMode: "dontAsk" } })) {
+  for await (const m of query({ prompt, options: { model: MODEL_ALIASES[opts.model] ?? opts.model, allowedTools: [], settingSources: [], maxTurns: 1, permissionMode: "dontAsk", effort: judgeEffort() } })) {
     if (m.type === "result") {
       const r = m as { result?: string; total_cost_usd?: number };
       text = r.result ?? "";
