@@ -117,10 +117,16 @@ describe("score files", () => {
     stringifyDoc({ icp: "mm", account: "acme.com", scoring_version: 1, mode: "full", total: 60, upside: 80, coverage: 0.5, tier: "B", scored_at: "2026-10-15", factors });
   test("a level needs evidence; null level does not", () => {
     expect(validateContent("accounts/acme.com/scores/mm.md", score([{ id: "size", level: null, confidence: 0 }]), opts)).toEqual([]);
-    expect(validateContent("accounts/acme.com/scores/mm.md", score([{ id: "size", level: 2, confidence: 0.7 }]), opts).join()).toContain("cite at least one");
+    expect(validateContent("accounts/acme.com/scores/mm.md", score([{ id: "size", level: 2, confidence: 0.7 }]), opts).join()).toContain("must cite evidence");
     expect(
       validateContent("accounts/acme.com/scores/mm.md", score([{ id: "size", level: 2, confidence: 0.7, evidence: [{ quote: "120 staff", source_url: "https://acme.com" }] }]), opts),
     ).toEqual([]);
+  });
+
+  test("a checked absence backs level 0 only", () => {
+    const absent = { quote: "careers page lists no marketing roles — not found", source_url: "https://acme.com/careers", checked: true };
+    expect(validateContent("accounts/acme.com/scores/mm.md", score([{ id: "hire", level: 0, confidence: 0.7, evidence: [absent] }]), opts)).toEqual([]);
+    expect(validateContent("accounts/acme.com/scores/mm.md", score([{ id: "hire", level: 2, confidence: 0.7, evidence: [absent] }]), opts).join()).toContain("only back level 0");
   });
 });
 

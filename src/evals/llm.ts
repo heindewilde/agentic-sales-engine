@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parseDoc } from "../core/frontmatter.ts";
 import { appendLedger } from "../core/ledger.ts";
@@ -88,7 +88,7 @@ function rawByUrl(ws: string): Map<string, string> {
   if (!existsSync(root)) return out;
   for (const month of readdirSync(root)) {
     const dir = join(root, month);
-    for (const f of existsSync(dir) ? readdirSync(dir).filter((x) => x.endsWith(".md")) : []) {
+    for (const f of existsSync(dir) && statSync(dir).isDirectory() ? readdirSync(dir).filter((x) => x.endsWith(".md")) : []) {
       const text = readFileSync(join(dir, f), "utf8");
       const url = /^url:\s*(\S+)/m.exec(text)?.[1];
       if (url) out.set(url.replace(/\/$/, ""), text);

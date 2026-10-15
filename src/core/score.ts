@@ -1,3 +1,4 @@
+import { evidenceSupportsLevel } from "./schemas.ts";
 import type { Factor, FactorScore, Level, Scoring } from "./schemas.ts";
 import { auc, kendallTau, logisticRegression, median, percentileRank, precisionAtK } from "./stats.ts";
 
@@ -95,7 +96,7 @@ export function computeScore(scoring: Scoring, judged: Pick<FactorScore, "id" | 
 
 /** Strip levels the judge could not back with evidence (the hook would reject them anyway). */
 export function sanitizeJudgements(judged: FactorScore[]): FactorScore[] {
-  return judged.map((j) => (j.level !== null && (!j.evidence || j.evidence.length === 0) ? { ...j, level: null, confidence: 0 } : j));
+  return judged.map((j) => (evidenceSupportsLevel(j.level, j.evidence ?? []) ? j : { ...j, level: null, confidence: 0 }));
 }
 
 // ---------- calibration ----------
