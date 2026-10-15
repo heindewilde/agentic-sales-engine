@@ -1,0 +1,15 @@
+# Fixture workspace for tests: a fictional accounts-payable automation vendor ("Ledgerly").
+# All companies use the reserved .example TLD — none are real.
+workspace:
+  name: Ledgerly
+  website: https://ledgerly.example
+members:
+  - id: hein
+    name: Hein
+  - id: sam
+    name: Sam
+privacy_mode: true
+budgets:
+  per_run_usd: 2
+  per_day_usd: 5
+  deep_research_per_account_usd: 0.5

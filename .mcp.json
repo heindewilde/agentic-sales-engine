@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "ase": {
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp/server.ts"],
+      "env": {
+        "EXA_API_KEY": "${user_config.EXA_API_KEY}",
+        "FIRECRAWL_API_KEY": "${user_config.FIRECRAWL_API_KEY}",
+        "FIRECRAWL_BASE_URL": "${user_config.FIRECRAWL_BASE_URL}",
+        "ASE_DEFAULT_RUN_BUDGET_USD": "${user_config.DEFAULT_RUN_BUDGET_USD}"
+      }
+    }
+  }
+}

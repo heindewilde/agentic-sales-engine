@@ -1,0 +1,14 @@
+{
+  "name": "agentic-sales-engine",
+  "description": "Agentic B2B sales engine for Claude Code.",
+  "owner": {
+    "name": "Hein de Wilde"
+  },
+  "plugins": [
+    {
+      "name": "agentic-sales-engine",
+      "source": "./",
+      "description": "Agentic B2B sales engine: ICP, discovery, scoring, ways in, outreach and call prep."
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "agentic-sales-engine",
+  "version": "0.1.0",
+  "description": "Agentic B2B sales engine: define your ICP, discover and score prospects with cited evidence, find ways in, and prep outreach and calls. Knowledge lives in a git-tracked markdown workspace.",
+  "author": { "name": "Hein de Wilde" },
+  "license": "MIT",
+  "keywords": ["sales", "prospecting", "icp", "lead-scoring", "b2b", "research"],
+  "userConfig": {
+    "EXA_API_KEY": {
+      "type": "string",
+      "title": "Exa API key",
+      "description": "Used for company/people discovery, news and deep research. Optional; without it the engine falls back to built-in web search.",
+      "sensitive": true,
+      "required": false
+    },
+    "FIRECRAWL_API_KEY": {
+      "type": "string",
+      "title": "Firecrawl API key",
+      "description": "Used for structured extraction from company websites and page monitoring. Optional.",
+      "sensitive": true,
+      "required": false
+    },
+    "FIRECRAWL_BASE_URL": {
+      "type": "string",
+      "title": "Firecrawl base URL",
+      "description": "Only set this when you self-host Firecrawl (e.g. http://localhost:3002).",
+      "required": false
+    },
+    "DEFAULT_RUN_BUDGET_USD": {
+      "type": "string",
+      "title": "Default budget per run (USD)",
+      "description": "Hard cap on provider spend per run unless the workspace config overrides it.",
+      "default": "5",
+      "required": false
+    }
+  }
+}

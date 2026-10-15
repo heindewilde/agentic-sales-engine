@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "agentic-sales-engine": {
+      "source": { "source": "github", "repo": "heindewilde/agentic-sales-engine" }
+    }
+  },
+  "enabledPlugins": {
+    "agentic-sales-engine@agentic-sales-engine": true
+  }
+}
