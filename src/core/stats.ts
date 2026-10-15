@@ -106,3 +106,17 @@ export function logisticRegression(
   }
   return { intercept: b, coef: w };
 }
+
+/**
+ * Wilson score interval for a proportion (95% by default). Honest error bars for small samples:
+ * 2 of 3 is "somewhere between 21% and 94%", not "67%".
+ */
+export function wilson(successes: number, n: number, z = 1.96): { rate: number | null; low: number; high: number } {
+  if (n === 0) return { rate: null, low: 0, high: 1 };
+  const p = successes / n;
+  const denom = 1 + (z * z) / n;
+  const centre = p + (z * z) / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  const r = (x: number) => Math.round(x * 1000) / 1000;
+  return { rate: r(p), low: r(Math.max(0, (centre - margin) / denom)), high: r(Math.min(1, (centre + margin) / denom)) };
+}

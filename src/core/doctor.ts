@@ -38,6 +38,7 @@ export interface Health {
   run: ReturnType<typeof currentRun>;
   gates: string[];
   problems: string[];
+  outcomes: Record<string, { accounts: number; engaged: number }>;
 }
 
 export async function health(ws: string): Promise<Health> {
@@ -83,7 +84,13 @@ export async function health(ws: string): Promise<Health> {
   for (const [icp, s] of Object.entries(stages)) {
     if ((s.light_scored ?? 0) > 0) gates.push(`GATE 2 pending: ${s.light_scored} light-scored accounts for "${icp}" await shortlist approval (/agentic-sales-engine:shortlist)`);
   }
-  return { tier: tier(), icps, stages, staleFacts, spentToday: spentToday(ws), dayBudget, run: currentRun(ws), gates, problems };
+  const { readOutcomes, latestOutcomes, POSITIVE } = await import("./outcomes.ts");
+  const outcomes: Health["outcomes"] = {};
+  for (const i of icps) {
+    const latest = [...latestOutcomes(readOutcomes(ws, i.slug)).values()];
+    if (latest.length) outcomes[i.slug] = { accounts: latest.length, engaged: latest.filter((r) => POSITIVE.has(r.outcome)).length };
+  }
+  return { tier: tier(), icps, stages, staleFacts, spentToday: spentToday(ws), dayBudget, run: currentRun(ws), gates, problems, outcomes };
 }
 
 export function formatBrief(h: Health): string {
@@ -93,6 +100,9 @@ export function formatBrief(h: Health): string {
   else lines.push(`ICPs: ${h.icps.map((i) => `${i.slug} [${i.status}${i.hasScoring ? ", scoring ✓" : ""}]`).join(", ")}.`);
   for (const [icp, s] of Object.entries(h.stages)) {
     lines.push(`Funnel ${icp}: ${Object.entries(s).map(([k, v]) => `${k} ${v}`).join(", ")}.`);
+  }
+  for (const [icp, o] of Object.entries(h.outcomes)) {
+    lines.push(`Outcomes ${icp}: ${o.accounts} accounts, ${o.engaged} engaged (meeting+)${o.accounts >= 30 ? " — enough for recalibration; consider /agentic-sales-engine:win-loss" : ""}.`);
   }
   if (h.staleFacts) lines.push(`${h.staleFacts} facts are past their TTL (/agentic-sales-engine:refresh).`);
   for (const g of h.gates) lines.push(g);

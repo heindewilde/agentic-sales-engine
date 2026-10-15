@@ -14,5 +14,5 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read, Edit
    ask whether it should become a learning or a rubric change, and offer `/agentic-sales-engine:learn` or
    `/agentic-sales-engine:scoring-design`.
 5. If the person asked not to be contacted again, add them to the do-not-contact list.
-6. Show progress toward recalibration: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts score recalibrate --icp <slug>`
-   (it reports how many usable outcomes exist).
+6. Show progress: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts outcomes stats --icp <slug>` (engagement by tier, and how
+   close recalibration is). Suggest `/agentic-sales-engine:win-loss` after every ~10 new outcomes.

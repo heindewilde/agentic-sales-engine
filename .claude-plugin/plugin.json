@@ -1,6 +1,6 @@
 {
   "name": "agentic-sales-engine",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Agentic B2B sales engine: define your ICP, discover and score prospects with cited evidence, find ways in, and prep outreach and calls. Knowledge lives in a git-tracked markdown workspace.",
   "author": { "name": "Hein de Wilde" },
   "license": "MIT",
