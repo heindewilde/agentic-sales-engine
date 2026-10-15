@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Batch driver — runs a stage skill over many accounts in headless Claude sessions (Agent SDK).
+ * Batch driver — runs a stage skill over many accounts in headless Claude sessions (`claude -p` on a subscription, Agent SDK with an API key).
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/batch.ts --skill enrich-light --icp <slug> [--budget 5] [--chunk 10]
  *       [--concurrency 3] [--model haiku] [--limit N] [--domains a.com,b.com] [--dry-run]
  * Provider keys for headless runs come from EXA_API_KEY / FIRECRAWL_API_KEY in the environment or a

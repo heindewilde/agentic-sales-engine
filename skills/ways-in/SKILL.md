@@ -25,6 +25,10 @@ Per account:
    Mention when the team member should be asked first how well they really know the person.
    Update `sections_updated."Ways in"`, add a Changelog line.
 4. If the warm-path picture changed the access factors (`warm_path`, `persona_reachable`…), rescore those via the
-   score skill. Then `ase stage advance <domain> --icp <slug> --to outreach_ready`.
+   score skill. Then **always** advance: `ase stage advance <domain> --icp <slug> --to outreach_ready` (or
+   `"stage": "outreach_ready"` in the `ase apply` file) as soon as the Ways in section has at least one usable way —
+   cold trigger-based ways count. Hold an account back only when there is no usable way at all, or the only way is a
+   warm intro the team member must confirm first; then add an open question (owner `ways_in`) saying what's needed and
+   list it as "held" in the final reply.
 
 Finish with a table: account, tier, best way in, owner (team member to act). Nothing is sent to anyone.
