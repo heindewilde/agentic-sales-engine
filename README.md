@@ -64,8 +64,8 @@ You need [Claude Code](https://claude.com/claude-code) and [Bun](https://bun.sh)
 Then open Claude Code in an empty folder and run:
 
 ```text
-/agentic-sales-engine:setup          # creates your workspace (its own git repo) and checks your setup
-/agentic-sales-engine:icp-build      # reads your website, learns from your best customers, asks only what's missing
+/agentic-sales-engine:setup       # creates your workspace (its own git repo)
+/agentic-sales-engine:icp-build   # learns from your site and best customers, asks what's missing
 ```
 
 From there `/agentic-sales-engine:status` always tells you the next step. Or let it run hands-off:
@@ -229,8 +229,8 @@ good at: reading, judging against a rubric, and writing.
 my-sales-workspace/
 ├── ase.config.yaml            team, budgets, privacy mode, models, providers
 ├── company/                   who you are: profile, materials, voice
-├── icps/<slug>/               ICP, scoring.yaml (versioned), calibration, win-loss reviews
-├── accounts/<domain>/         company.md · brief.md · scores/ · signals/ · drafts/ · callprep/
+├── icps/<slug>/               ICP, scoring.yaml (versioned), calibration, win-loss
+├── accounts/<domain>/         company · brief · scores · signals · drafts · callprep
 ├── people/<id>.md             business-relevant data only, with lawful basis
 ├── outcomes/events.jsonl      sent → reply → meeting → deal, with reason codes
 ├── raw/                       immutable source snapshots every fact can point to
