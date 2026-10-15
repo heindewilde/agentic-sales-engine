@@ -14,7 +14,7 @@ A Claude Code plugin that takes a team from **"who should we sell to?"** to **"h
 The value is in the handoffs: every stage reads what the previous one learned (an account **brief** with open questions)
 and leaves it better. Everything lives in a git-tracked **workspace** of markdown files that your team can read, edit and review.
 
-> **Status:** early development (milestones M0–M1 done: plugin skeleton and knowledge harness). See [docs/architecture.md](docs/architecture.md).
+> **Status:** early development — M0–M2 done: plugin skeleton, knowledge harness, provider gateway. See [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
@@ -32,6 +32,7 @@ Provider keys (optional, entered via `/plugin` → configure, stored in your OS 
 - **Firecrawl** — structured extraction from company websites, page monitoring. Free tier: 1,000 credits/month; self-hostable.
 
 Without keys the engine runs on Claude Code's built-in web search and your CSV imports (slower, shallower).
+For CLI/batch runs outside Claude Code, put `EXA_API_KEY` / `FIRECRAWL_API_KEY` in a gitignored `.env` in the workspace.
 
 ## Principles
 
