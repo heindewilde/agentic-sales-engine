@@ -262,8 +262,8 @@ autopilot 20261015-145833-autopilot · ap-automation-midmarket · waiting · spe
   – ways_in
   – drafts
 
-GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist.md (6 accounts, ≈ $3–6)
-        and approve: ase autopilot approve --by <member>
+GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist.md
+        (6 accounts, ≈ $3–6) and approve: ase autopilot approve --by <member>
 ```
 
 - **Two gates, never skipped.** It waits for you to approve the shortlist (with its cost estimate) before deep research,
@@ -311,14 +311,14 @@ Set one environment variable and every run becomes a trace you can open in Langf
 OpenTelemetry backend:
 
 ```text
-autopilot.run                                  [autopilot]   budget, status, spent
+autopilot.run                        [autopilot]  budget · status · spent
 └─ autopilot.step.enrich_light
-   └─ batch.run                                [batch]       skill, accounts, advanced
-      └─ batch.chunk                                         model, tokens, cost, denied tool calls
-         ├─ tool.mcp__…__fetch_pages   2.8s    [session]
-         ├─ provider.fetch_pages       2.8s    [gateway]     firecrawl · $0.004 · raw snapshot saved
-         ├─ tool.Edit                  error   [session]     a rejected or failed edit, visible instead of silent
-         └─ score.compute                      [cli]         total 53.6 · tier B · light_scored
+   └─ batch.run                      [batch]      skill · accounts · advanced
+      └─ batch.chunk                              model · tokens · cost
+         ├─ tool.fetch_pages  2.8s   [session]
+         ├─ provider.fetch_pages     [gateway]    firecrawl · $0.004
+         ├─ tool.Edit  error         [session]    rejected or failed edit
+         └─ score.compute            [cli]        53.6 · tier B
 ```
 
 The labels in brackets are separate processes (the autopilot, batch driver, headless Claude session, provider gateway and
