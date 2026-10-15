@@ -88,8 +88,12 @@ describe("autopilot", () => {
     s = await approveGate(ws, loadState(ws, ICP, s.run_id), "hein");
     s = await advance(ws, s, deps);
     expect(s.status).toBe("waiting");
-    expect(s.gate!.step).toBe("drafts");
+    expect(s.gate!.step).toBe("score"); // scores are reviewed before ways in / drafts
+    expect(s.gate!.message).toMatch(/A · \d+ B/);
+    expect(calls).not.toContain("ways-in");
     expect(s.steps.find((x) => x.id === "research")!.summary).toMatch(/researched/);
+    s = await advance(ws, await approveGate(ws, s, "hein"), deps);
+    expect(s.gate!.step).toBe("drafts");
     s = await approveGate(ws, s, "hein");
     s = await advance(ws, s, deps);
     expect(s.status).toBe("done");
@@ -106,7 +110,7 @@ describe("autopilot", () => {
     let s = await advance(ws, await startAutopilot(ws, { icp: ICP, budgetUsd: 10, target: 4 }), w1.deps);
     s = await advance(ws, await approveGate(ws, s, "hein"), w1.deps);
     expect(s.steps.find((x) => x.id === "research")!.attempts).toBe(2); // failed once, succeeded on retry
-    expect(s.gate!.step).toBe("drafts");
+    expect(s.gate!.step).toBe("score");
 
     const ws2 = fixture();
     const w2 = world(ws2, { failResearch: 99 });
@@ -120,7 +124,7 @@ describe("autopilot", () => {
     for (const st of t.steps) if (st.status === "failed") (st.status = "pending"), (st.attempts = 0);
     t.status = "running";
     t = await advance(ws2, t, fixed.deps);
-    expect(t.gate!.step).toBe("drafts");
+    expect(t.gate!.step).toBe("score");
     expect(fixed.calls).not.toContain("discover");
   });
 

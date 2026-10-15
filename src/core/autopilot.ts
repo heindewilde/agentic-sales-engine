@@ -11,8 +11,8 @@ import { setAttrs, withSpan } from "./tracing.ts";
 import { loadConfig, paths } from "./workspace.ts";
 
 /**
- * Autopilot: runs the funnel end to end for one ICP — discover → light score → shortlist (gate) → research → score →
- * ways in → drafts (review) — as a small, resumable state machine. Every step is idempotent because the account files
+ * Autopilot: runs the funnel end to end for one ICP — discover → light score → shortlist (gate) → research → score
+ * (gate) → ways in → drafts (review) — as a small, resumable state machine. Every step is idempotent because the account files
  * hold the real state (stages, briefs, scores); autopilot.json only records progress, gates, attempts and spend.
  * It never passes a gate on its own and never sends anything.
  */
@@ -245,9 +245,19 @@ async function execStep(ws: string, s: AutopilotState, id: StepId, deps: Autopil
     }
     case "score": {
       const todo = await accountsAtStage(ws, s.icp, "researched");
-      if (!todo.length) return { summary: "nothing left to score" };
-      const r = await batch("score", todo);
-      return { summary: `${r.advanced}/${r.processed} scored${stuck(r)}` };
+      let summary = "nothing left to score";
+      if (todo.length) {
+        const r = await batch("score", todo);
+        summary = `${r.advanced}/${r.processed} scored${stuck(r)}`;
+      }
+      // GATE: a human reviews the full scores before any ways-in or outreach work is spent on them.
+      const scored = await rank(ws, s.icp, { stage: "scored" });
+      if (!scored.length) return { summary };
+      const tiers = ["A", "B", "C", "X"].map((t) => `${scored.filter((x) => x.tier === t).length} ${t}`).join(" · ");
+      return {
+        summary: `${summary}; ${scored.length} scored: ${tiers}`,
+        gate: { step: "score", since: now(), message: `Review the full scores (ase score rank --icp ${s.icp} --stage scored; score --explain <domain>) — ${tiers}. Ways in and drafts run for tier A/B after: ase autopilot approve --by <member> --resume` },
+      };
     }
     case "ways_in": {
       const todo = await tierAB(ws, s.icp, "scored");
