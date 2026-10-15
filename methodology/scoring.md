@@ -24,6 +24,15 @@ A verified absence (the page that would show it was read, and it isn't there) is
 evidence item citing that page: "we looked, it's not there" is information, "nobody looked" is not.
 The judge never averages or guesses.
 
+Consistency comes in three layers:
+- **Rules where possible.** Numeric factors are computed from a fact (`auto.fact`), time-window intent factors from
+  a count of dated signals (`auto.signals`). Code gives the same answer every time.
+- **Sharp anchors.** Each judged factor's levels can carry a worked `example`, so "two launches" or "premium" means
+  the same thing on every account.
+- **A second opinion.** After a full score, an independent judge re-scores from the same evidence. Where both agree
+  nothing changes; where they differ, a third judge decides, and a changed level must quote real evidence or the
+  original stands as "disputed" (`ase score reconcile`; on by default via `judging.second_opinion`).
+
 ## Computing (deterministic, `ase score compute`)
 - Unknown factors use `unknown_prior` (default 1 — below average, not zero; missing info is a mild negative).
 - Confidence weighting: `w_eff = w × (0.5 + 0.5 × confidence)`.

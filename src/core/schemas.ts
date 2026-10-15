@@ -280,6 +280,10 @@ export const Config = z.object({
       research_providers_per_account_usd: z.number().positive().default(0.04),
     })
     .default({ per_run_usd: 5, per_day_usd: 20, deep_research_per_account_usd: 0.3, research_providers_per_account_usd: 0.04 }),
+  /** Second opinion on full scores: an independent judge re-scores, a third settles disagreements (reconcile.ts). */
+  judging: z
+    .object({ second_opinion: z.boolean().default(true), model: z.string().default("sonnet") })
+    .default({ second_opinion: true, model: "sonnet" }),
   /** How Claude is paid for. auto: an API key / Bedrock / Vertex means api, otherwise your Claude subscription. */
   claude_billing: z.enum(["auto", "subscription", "api"]).default("auto"),
   /** Subscription plan limits: wait for a reset up to max_wait_minutes inside a batch, else pause; never use paid extra usage unless allowed. */
