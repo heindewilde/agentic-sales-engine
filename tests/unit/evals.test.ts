@@ -37,12 +37,31 @@ describe("offline suite", () => {
     for (const k of ["citation_faithfulness", "brief_grounding", "handoff_completeness", "draft_rules"]) expect(mean(r, k)).toBe(1);
   });
 
+  test("placeholder files (raw/.gitkeep) don't break the suite", async () => {
+    const ws = golden();
+    writeFileSync(join(ws, "raw/.gitkeep"), "");
+    expect(mean(await runOffline(ws), "snapshot_coverage")).toBe(1);
+  });
+
   test("catches a misquoted source", async () => {
     const ws = golden();
     edit(ws, `accounts/${D}/scores/ap-automation-midmarket.md`, "with approximately 310 employees", "with approximately 450 employees");
     const r = await runOffline(ws);
     expect(mean(r, "citation_faithfulness")!).toBeLessThan(1);
     expect(r.results.find((x) => x.key === "citation_faithfulness")!.failures![0]).toContain("450 employees");
+  });
+
+  test("a checked absence is faithful when the checked page was saved, and flagged when it wasn't", async () => {
+    const ws = golden();
+    const absence = (id: string, raw: string) =>
+      `factors:\n  - id: ${id}\n    level: 0\n    confidence: 0.7\n    evidence:\n      - quote: careers page lists no finance roles — not found\n        source_url: https://maasverhoeven.example/about\n        raw_ref: ${raw}\n        checked: true\n    rationale: checked, none.\n`;
+    edit(ws, `accounts/${D}/scores/ap-automation-midmarket.md`, "factors:\n", absence("absent_ok", "raw/2026-10/a1b2c3d4e5f6.md"));
+    let r = await runOffline(ws);
+    expect(mean(r, "citation_faithfulness")).toBe(1);
+    expect(r.results.find((x) => x.key === "citation_faithfulness")!.comment).toContain("1 checked absences");
+    edit(ws, `accounts/${D}/scores/ap-automation-midmarket.md`, "factors:\n", absence("absent_missing", "raw/2026-10/000000000000.md"));
+    r = await runOffline(ws);
+    expect(r.results.find((x) => x.key === "citation_faithfulness")!.failures!.join()).toContain("was never saved");
   });
 
   test("catches an uncited claim in the brief", async () => {

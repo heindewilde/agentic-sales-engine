@@ -23,7 +23,9 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
    team warm matches.
 2. Research cheapest-first, batching calls across accounts where possible:
    - **one** `fetch_pages` for About/Team/Careers/News pages, with `focus` = the open questions + factor evidence hints,
-     `max_chars` 3000 (job ads reveal systems and pains; leadership pages reveal people);
+     `max_chars` 3000 (job ads reveal systems and pains; leadership pages reveal people). Include the pages that settle
+     factors whose level 0 is an absence (e.g. the careers page for hiring factors) and, when a factor needs prices, one
+     product or collection page: then "checked, not there" can be judged as level 0 instead of unknown;
    - `search_news` for each company since 18 months ago (local language too if not English) → dated trigger events;
    - `find_people` once per ICP persona (current company must be the account; business data only; never LinkedIn scraping);
    - `extract` or `research` (effort low) **only** for important questions the above didn't answer.

@@ -11,8 +11,12 @@ For each factor in scope (`light` mode: only factors with `light: true`; `full`:
    when there is one — never an empty string.
 3. Pick the level whose anchor the evidence matches. Between two adjacent levels → the lower one, lower confidence.
    For time-based anchors compute the age from today's date first.
-4. **No evidence → `level: null`.** Absence of a mention is not evidence of absence, unless the anchor says so and the
-   files show the search was actually done.
+4. **No evidence → `level: null`.** Absence of a mention is not evidence of absence. But when the anchor's level 0
+   describes an absence ("careers page checked, no such roles", "no link to a current client") **and you actually read
+   the page that would show it**, judge level 0 with a checked-absence item:
+   `{"quote":"careers page lists no e-commerce, marketing or content roles","source_url":"https://…/careers","raw_ref":"raw/…","checked":true}`.
+   A checked absence only backs level 0, and only with the page you checked (its `raw_ref` when saved). If nobody
+   looked, it stays `null`.
 5. Confidence = evidence strength: first-party explicit 0.9 · reputable third party 0.7 · directory 0.5 · inferred 0.4.
 6. Re-read: the level must be the one the rationale argues for.
 

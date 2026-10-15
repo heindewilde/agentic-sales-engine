@@ -52,7 +52,7 @@ export async function proposeShortlist(ws: string, icp: string, opts: { pct?: nu
   const rel = `lists/${icp}/${runId}/shortlist.md`;
   const abs = join(ws, rel);
   mkdirSync(dirname(abs), { recursive: true });
-  const rows = picked.map((r) => `| [x] | ${r.domain} | ${r.name.replace(/\|/g, "/")} | ${r.total} | ${r.upside} | ${Math.round(r.coverage * 100)}% | ${r.tier} | ${r.needs_check.join(", ") || "—"} | ${r.why} |`);
+  const rows = picked.map((r) => `| [x] | ${r.domain} | ${r.name.replace(/\|/g, "/")} | ${r.total} | ${r.upside} | ${Math.round(r.coverage * 100)}% | ${r.needs_check.join(", ") || "—"} | ${r.why} |`);
   const body = [
     `# Shortlist proposal — ${icp} (${today()})`,
     "",
@@ -61,8 +61,11 @@ export async function proposeShortlist(ws: string, icp: string, opts: { pct?: nu
     "",
     "Untick `[x]` → `[ ]` to drop an account; add a row with `[x]` to include another. Then approve (GATE 2).",
     "",
-    "| Research | Domain | Name | Score | Upside | Coverage | Tier | Needs check | Why |",
-    "|---|---|---|---|---|---|---|---|---|",
+    "*Light fit* judges only the fit factors from public basics. It ranks accounts for research and runs high; the full",
+    "score after research adds intent and access, is usually lower, and is the one you review at gate 3.",
+    "",
+    "| Research | Domain | Name | Light fit | Upside | Coverage | Needs check | Why |",
+    "|---|---|---|---|---|---|---|---|",
     ...rows,
     "",
   ].join("\n");

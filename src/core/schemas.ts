@@ -202,10 +202,18 @@ export const Scoring = z
 export type Scoring = z.infer<typeof Scoring>;
 
 export const Evidence = z.object({
+  /** the exact words; for a `checked` item: what was looked for and not found on that page */
   quote: z.string().min(1),
   source_url: SourceRef,
   raw_ref: z.string().optional(),
+  /** a verified absence: the page at source_url was checked and does not contain what the anchor asks for */
+  checked: z.literal(true).optional(),
 });
+export type Evidence = z.infer<typeof Evidence>;
+
+/** Absence evidence ("checked, none found") can only back level 0; higher levels need a positive quote. */
+export const evidenceSupportsLevel = (level: number | null, evidence: { checked?: boolean }[]): boolean =>
+  level === null || (level === 0 ? evidence.length > 0 : evidence.some((e) => !e.checked));
 
 export const FactorScore = z
   .object({
@@ -215,8 +223,8 @@ export const FactorScore = z
     evidence: z.array(Evidence).default([]),
     rationale: z.string().optional(),
   })
-  .refine((f) => f.level === null || f.evidence.length > 0, {
-    message: "a factor with a level must cite at least one piece of evidence (use level: null when unknown)",
+  .refine((f) => evidenceSupportsLevel(f.level, f.evidence), {
+    message: "a factor with a level must cite evidence (use level: null when unknown); a `checked` absence can only back level 0",
   });
 export type FactorScore = z.infer<typeof FactorScore>;
 

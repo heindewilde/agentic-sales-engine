@@ -20,6 +20,8 @@ Good factors **discriminate** between known good and bad customers. A factor eve
 
 ## Judging
 An LLM judge scores one factor at a time, quoting evidence with a source. No evidence → `level: null` (unknown).
+A verified absence (the page that would show it was read, and it isn't there) is level 0 with a `checked: true`
+evidence item citing that page: "we looked, it's not there" is information, "nobody looked" is not.
 The judge never averages or guesses.
 
 ## Computing (deterministic, `ase score compute`)

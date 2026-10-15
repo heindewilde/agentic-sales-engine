@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CONTRACTS } from "../core/contracts.ts";
 import { parseDoc } from "../core/frontmatter.ts";
@@ -7,6 +7,7 @@ import { normalizeLinkedIn } from "../core/normalize.ts";
 import { BRIEF_SECTIONS, STAGES, type Company, type Draft, type ScoreFile } from "../core/schemas.ts";
 
 const STAGE_ORDER: readonly string[] = STAGES;
+import { kendallTau } from "../core/stats.ts";
 import { paths } from "../core/workspace.ts";
 import { summarize, type EvalResult, type SuiteResult } from "./types.ts";
 
@@ -54,16 +55,22 @@ export function citationFaithfulness(ws: string): EvalResult[] {
       let checked = 0;
       let ok = 0;
       let unverifiable = 0;
+      let absences = 0;
       const failures: string[] = [];
       for (const fac of s.factors ?? []) {
-        for (const e of fac.evidence ?? []) {
+        for (const e of (fac.evidence ?? []) as { quote: string; raw_ref?: string; checked?: boolean }[]) {
           if (!e.raw_ref) {
             unverifiable++;
             continue;
           }
           const raw = join(ws, e.raw_ref);
           checked++;
-          if (existsSync(raw) && quoteSupported(e.quote, readFileSync(raw, "utf8"))) ok++;
+          // A verified absence can't be quoted; it is faithful when the page that was checked was actually saved.
+          if (e.checked) {
+            absences++;
+            if (existsSync(raw)) ok++;
+            else failures.push(`${fac.id}: checked page ${e.raw_ref} was never saved`);
+          } else if (existsSync(raw) && quoteSupported(e.quote, readFileSync(raw, "utf8"))) ok++;
           else failures.push(`${fac.id}: "${e.quote.slice(0, 80)}" not found in ${e.raw_ref}`);
         }
       }
@@ -71,7 +78,7 @@ export function citationFaithfulness(ws: string): EvalResult[] {
         key: "citation_faithfulness",
         target: `accounts/${d}/scores/${f}`,
         score: checked ? ok / checked : null,
-        comment: `${ok}/${checked} quotes found in their snapshot; ${unverifiable} evidence items without raw_ref`,
+        comment: `${ok}/${checked} quotes found in their snapshot (incl. ${absences} checked absences); ${unverifiable} evidence items without raw_ref`,
         failures,
       });
     }
@@ -195,7 +202,7 @@ export function snapshotCoverage(ws: string): EvalResult[] {
   const root = join(ws, "raw");
   for (const month of existsSync(root) ? readdirSync(root) : []) {
     const dir = join(root, month);
-    for (const f of existsSync(dir) ? readdirSync(dir).filter((x) => x.endsWith(".md")) : []) {
+    for (const f of existsSync(dir) && statSync(dir).isDirectory() ? readdirSync(dir).filter((x) => x.endsWith(".md")) : []) {
       const url = /^url:\s*(\S+)/m.exec(readFileSync(join(dir, f), "utf8"))?.[1];
       if (url) stored.add(canonicalUrl(url));
     }
@@ -235,8 +242,50 @@ export function researchTrajectory(ws: string): EvalResult[] {
   return out;
 }
 
+/**
+ * light_full_agreement: does the cheap light score rank accounts the way full research does? Light scores judge only the
+ * fit factors, so their level is higher by design; what matters is the order (Kendall τ, ≥ 5 researched accounts).
+ * Failures name accounts the light pass put in its top third that full research put in the bottom third.
+ */
+export function lightFullAgreement(ws: string): EvalResult[] {
+  const byIcp = new Map<string, { d: string; light: number; full: number }[]>();
+  for (const d of accountDirs(ws)) {
+    const cp = paths.company(ws, d);
+    const sdir = join(ws, "accounts", d, "scores");
+    if (!existsSync(cp) || !existsSync(sdir)) continue;
+    const status = (parseDoc<Company>(readFileSync(cp, "utf8")).data.icp_status ?? {}) as Record<string, { light_score?: number }>;
+    for (const f of readdirSync(sdir).filter((x) => x.endsWith(".md"))) {
+      const s = parseDoc<ScoreFile>(readFileSync(join(sdir, f), "utf8")).data;
+      const light = status[s.icp]?.light_score;
+      if (s.mode !== "full" || typeof light !== "number") continue;
+      (byIcp.get(s.icp) ?? byIcp.set(s.icp, []).get(s.icp)!).push({ d, light, full: s.total });
+    }
+  }
+  const out: EvalResult[] = [];
+  for (const [icp, rows] of byIcp) {
+    if (rows.length < 5) {
+      out.push({ key: "light_full_agreement", target: `icp ${icp}`, score: null, comment: `${rows.length} accounts with both scores; need 5` });
+      continue;
+    }
+    const tau = kendallTau(rows.map((r) => r.light), rows.map((r) => r.full));
+    const third = Math.ceil(rows.length / 3);
+    const lightTop = new Set([...rows].sort((a, b) => b.light - a.light).slice(0, third).map((r) => r.d));
+    const fullBottom = new Set([...rows].sort((a, b) => a.full - b.full).slice(0, third).map((r) => r.d));
+    const failures = rows.filter((r) => lightTop.has(r.d) && fullBottom.has(r.d)).map((r) => `${r.d}: light ${r.light} → full ${r.full}`);
+    const avg = (xs: number[]) => Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10;
+    out.push({
+      key: "light_full_agreement",
+      target: `icp ${icp}`,
+      score: Math.max(0, Math.round(tau * 100) / 100),
+      comment: `Kendall τ ${tau.toFixed(2)} over ${rows.length} accounts; average light ${avg(rows.map((r) => r.light))} → full ${avg(rows.map((r) => r.full))}`,
+      failures,
+    });
+  }
+  return out;
+}
+
 export async function runOffline(ws: string): Promise<SuiteResult> {
-  const results = [...citationFaithfulness(ws), ...briefGrounding(ws), ...snapshotCoverage(ws), ...(await handoffCompleteness(ws)), ...draftRules(ws), ...researchTrajectory(ws)];
+  const results = [...citationFaithfulness(ws), ...briefGrounding(ws), ...snapshotCoverage(ws), ...(await handoffCompleteness(ws)), ...draftRules(ws), ...researchTrajectory(ws), ...lightFullAgreement(ws)];
   return { suite: "offline", workspace: ws, ran_at: new Date().toISOString(), results, summary: summarize(results), cost_usd: 0 };
 }
 
