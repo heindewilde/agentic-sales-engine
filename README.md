@@ -37,32 +37,23 @@
 
 ## Why
 
-Outbound works when it's specific: the right company, at the right moment, with a reason to talk that is about
-*them*. Getting there takes research, roughly an hour per account, so most teams skip it. They buy a list, blast a
-sequence, get ignored, and learn nothing.
+Outbound works when it's specific: the right company, at the right moment, with something to say that is about
+*them*. That takes about an hour of research per account, so most teams skip it and send templates to bought lists.
+**agentic-sales-engine does that hour for every account, on its own, and shows its sources.**
 
-**agentic-sales-engine does that hour of research for every account, on its own, and keeps what it learns.**
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/why-dark.svg">
+    <img alt="The same company as a bought list shows it (a name, a size band, a generic email) and as agentic-sales-engine hands it over: why now, who to talk to, a score with evidence, and a sourced first line" src="assets/why-light.svg" width="900">
+  </picture>
+</p>
 
-|  | The usual way | With agentic-sales-engine |
-|---|---|---|
-| **Who to target** | a bought list, stale and generic | companies found for *your* ICP, scored on *your* rubric |
-| **Why now** | no idea, so the timing is random | dated triggers: a new store, a hire, a funding round, a launch |
-| **Who to talk to** | whoever's title matches | the buying committee mapped to your personas, plus warm paths through your team |
-| **What to say** | a template with a first name | a first message built on what's actually going on at that company |
-| **Can you trust it?** | you can't check it | every fact sourced and dated; every score point linked to a quote |
-| **Next quarter** | start over | outcomes feed back into the ICP and the scoring |
-
-What makes it different:
-
-- **Research that holds up.** A write hook rejects any fact without a source. What isn't known stays unknown instead of
-  being guessed, and the engine's own evals check that quotes really appear in the pages they cite.
-- **Scores you can argue with.** Your own Fit × Intent × Access rubric, back-tested on customers you already have.
-  Ask why an account scored 72 and you get the evidence, factor by factor.
-- **You make the calls.** You approve the ICP, the shortlist and the scores before anyone is approached. It drafts,
-  you send. Nothing goes out on its own.
-- **Your data, in your git repo.** Plain markdown your team can read, edit, review and diff. No platform to leave.
-- **Runs on Claude Code.** On a Claude subscription, the AI part costs nothing extra; data providers are cents per
-  account.
+- **Every line is checkable.** Facts carry a source and a date, and a write hook rejects anything unsourced. What
+  isn't known stays unknown.
+- **Scored on your rubric.** Fit, intent and access, back-tested on the customers you already have, with the evidence
+  behind every point.
+- **You make the calls.** You approve the ICP, the shortlist and the scores. It drafts; you send.
+- **It's yours.** Plain markdown in your own git repo, running in Claude Code on your Claude subscription.
 
 ## Quickstart
 
