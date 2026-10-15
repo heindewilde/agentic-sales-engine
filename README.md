@@ -270,8 +270,9 @@ GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist
         (6 accounts, ≈ $3–6) and approve: ase autopilot approve --by <member>
 ```
 
-- **Two gates, never skipped.** It waits for you to approve the shortlist (with its cost estimate) before deep research,
-  and to review the drafts at the end. Untick accounts in the shortlist file to leave them out.
+- **Three gates, never skipped.** It waits for you to approve the shortlist (with its cost estimate) before deep
+  research, to review the full scores before any ways-in work or drafting, and to review the drafts at the end. Untick
+  accounts in the shortlist file to leave them out.
 - **Resumable.** Progress is checkpointed after every step; the account files remain the source of truth. After a crash, a
   gate or a budget stop, `resume` continues where it left off without repeating finished work.
 - **One budget.** Every model and data call counts against it. When it runs out, the run waits for you to raise it
