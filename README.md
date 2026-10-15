@@ -208,6 +208,11 @@ stored as `{value, source_url, retrieved_at, confidence}`. Claude Code hooks gua
 do-not-contact entities, non-business personal data and edits to source snapshots are rejected before they land.
 A SQLite index is rebuilt from the files for fast queries. Facts expire, and `refresh` and `sync` keep them current.
 
+**Measured, not assumed.** A built-in eval suite checks the engine's own work: quotes present in their sources, claims
+supported, handoffs complete, drafts within the rules, and the scoring judge stable. It runs offline in CI and with Claude as
+judge on real output. Optional OpenTelemetry tracing shows every step, tool call and dollar in Langfuse, LangSmith,
+Phoenix or any OTLP backend.
+
 **Deterministic where it matters.** Anything that must be exactly right is code with tests (≈120), not prompt
 instructions: score maths, back-tests, budgets, deduplication, privacy rules and stage contracts. The LLM does what it's
 good at: reading, judging against a rubric, and writing.
@@ -368,7 +373,7 @@ claude plugin validate .
 claude --plugin-dir .            # run the plugin from a checkout, inside a workspace folder
 ```
 
-Architecture notes are in [docs/architecture.md](docs/architecture.md) and scheduling in [docs/scheduling.md](docs/scheduling.md).
+More: [architecture](docs/architecture.md) · [quality evals](docs/evals.md) · [tracing (OpenTelemetry)](docs/tracing.md) · [scheduling](docs/scheduling.md).
 Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License

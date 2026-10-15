@@ -11,6 +11,7 @@ import { parseArgs } from "node:util";
 import { BATCH_SKILLS, runBatch, type BatchSkill } from "../core/batch.ts";
 import { requireWorkspace } from "../core/workspace.ts";
 import { loadCredentials } from "../core/credentials.ts";
+import { initTracing, shutdownTracing } from "../core/tracing.ts";
 
 const { values: f } = parseArgs({
   args: process.argv.slice(2),
@@ -36,6 +37,7 @@ if (!skill || !(skill in BATCH_SKILLS) || !f.icp) {
 }
 const ws = requireWorkspace(f.workspace);
 loadCredentials(ws);
+initTracing("batch");
 const num = (v: string | undefined) => (v === undefined ? undefined : Number(v));
 const res = await runBatch({
   ws,
@@ -51,3 +53,4 @@ const res = await runBatch({
   dryRun: f["dry-run"],
 });
 process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+await shutdownTracing();

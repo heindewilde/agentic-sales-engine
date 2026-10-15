@@ -7,6 +7,7 @@ import { normalizeDomain } from "./normalize.ts";
 import { FactorScore, Scoring, type Company, type ScoreFile } from "./schemas.ts";
 import { backtest, computeScore, recalibrate, sanitizeJudgements, sensitivity, type LabeledAccount, type Mode } from "./score.ts";
 import { validateContent } from "./validate.ts";
+import { setAttrs, withSpan } from "./tracing.ts";
 import { dncMatcher, loadConfig, loadDnc, paths, today } from "./workspace.ts";
 
 export const calibrationPath = (ws: string, icp: string, domain: string) => join(ws, "icps", icp, "calibration", `${domain}.md`);
@@ -53,6 +54,14 @@ export interface WriteScoreArgs {
 
 /** Validate judge output, compute the score, write the score file and (for accounts) advance the company's ICP status. */
 export async function writeScore(a: WriteScoreArgs) {
+  return withSpan("score.compute", { "ase.icp": a.icp, "ase.account": a.domain, "ase.mode": a.mode, "ase.calibration": a.calibration ?? null }, async (span) => {
+    const r = await writeScoreInner(a);
+    setAttrs(span, { "ase.total": r.total, "ase.tier": r.tier, "ase.coverage": r.coverage, "ase.stage": r.stage, "ase.scoring_version": r.scoring_version });
+    return r;
+  });
+}
+
+async function writeScoreInner(a: WriteScoreArgs) {
   const scoring = await loadScoring(a.ws, a.icp);
   const domain = normalizeDomain(a.domain) ?? a.domain;
   const raw = Array.isArray(a.judgements) ? a.judgements : (a.judgements as { factors?: unknown[] })?.factors;

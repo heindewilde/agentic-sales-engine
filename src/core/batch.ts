@@ -5,6 +5,8 @@ import { readDoc } from "./frontmatter.ts";
 import { appendLedger, currentRun, newRunId, spentForRun, type CurrentRun } from "./ledger.ts";
 import type { Company } from "./schemas.ts";
 import { loadConfig, paths } from "./workspace.ts";
+import type { Span } from "@opentelemetry/api";
+import { childTracingEnv, setAttrs, setContent, startSpan, withSpan } from "./tracing.ts";
 
 /**
  * Batch driver: runs a stage skill over many accounts in chunks, each chunk in its own headless Claude
@@ -20,7 +22,7 @@ export const BATCH_SKILLS = {
 export type BatchSkill = keyof typeof BATCH_SKILLS;
 
 export interface ChunkRunner {
-  (args: { ws: string; prompt: string; model: string; maxBudgetUsd: number; pluginRoot: string }): Promise<{ cost_usd: number; ok: boolean; summary: string; denied?: string[] }>;
+  (args: { ws: string; prompt: string; model: string; maxBudgetUsd: number; pluginRoot: string; span?: Span }): Promise<{ cost_usd: number; ok: boolean; summary: string; denied?: string[] }>;
 }
 
 export interface BatchOptions {
@@ -64,12 +66,15 @@ export const UNATTENDED_NOTE = (root: string) =>
 const MODEL_ALIASES: Record<string, string> = { haiku: "haiku", sonnet: "sonnet", opus: "opus" };
 
 /** Default runner: one Agent SDK session per chunk. */
-export const sdkRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, pluginRoot }) => {
+export const sdkRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, pluginRoot, span }) => {
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (typeof v === "string") env[k] = v;
   // .mcp.json overrides EXA_API_KEY with the plugin's userConfig value (empty in SDK runs) — pass ASE_* copies.
   for (const k of ["EXA_API_KEY", "FIRECRAWL_API_KEY", "FIRECRAWL_BASE_URL"]) if (env[k]) env[`ASE_${k}`] = env[k]!;
+  // Hand the chunk's trace context to the session, so its MCP gateway and CLI calls nest under this chunk.
+  Object.assign(env, childTracingEnv(span));
+  const toolSpans = new Map<string, Span>();
   let cost = 0;
   let ok = false;
   let summary = "";
@@ -96,7 +101,14 @@ export const sdkRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, 
     // Record refused tool calls so batch logs show permission problems instead of silent non-progress.
     if (m.type === "assistant") {
       for (const c of (m as { message: { content: { type: string; id?: string; name?: string; input?: unknown }[] } }).message.content) {
-        if (c.type === "tool_use" && c.id) pending.set(c.id, `${c.name} ${JSON.stringify(c.input).slice(0, 300)}`);
+        if (c.type === "tool_use" && c.id) {
+          pending.set(c.id, `${c.name} ${JSON.stringify(c.input).slice(0, 300)}`);
+          if (span) {
+            const t = startSpan(`tool.${c.name}`, { "ase.tool": c.name }, span);
+            setContent(t, "ase.tool_input", JSON.stringify(c.input));
+            toolSpans.set(c.id, t);
+          }
+        }
       }
     }
     if (m.type === "user") {
@@ -105,15 +117,24 @@ export const sdkRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, 
         if (c.type === "tool_result" && c.is_error && /permission|denied|not allowed/i.test(JSON.stringify(c.content))) {
           denied.push(pending.get(c.tool_use_id ?? "") ?? "unknown tool");
         }
+        const t = c.type === "tool_result" ? toolSpans.get(c.tool_use_id ?? "") : undefined;
+        if (t) {
+          setAttrs(t, { "ase.tool_error": Boolean(c.is_error) });
+          if (c.is_error) t.setStatus({ code: 2 });
+          t.end();
+          toolSpans.delete(c.tool_use_id ?? "");
+        }
       }
     }
     if (m.type === "result") {
-      const r = m as { subtype: string; total_cost_usd?: number; result?: string };
+      const r = m as { subtype: string; total_cost_usd?: number; result?: string; num_turns?: number; usage?: { input_tokens?: number; output_tokens?: number } };
+      if (span) setAttrs(span, { "ase.turns": r.num_turns, "gen_ai.usage.input_tokens": r.usage?.input_tokens, "gen_ai.usage.output_tokens": r.usage?.output_tokens, "ase.result": r.subtype });
       cost = r.total_cost_usd ?? 0;
       ok = r.subtype === "success";
       summary = (r.result ?? r.subtype).slice(0, 2000);
     }
   }
+  for (const t of toolSpans.values()) t.end(); // tools still open when the session stopped
   return { cost_usd: cost, ok, summary, denied };
 };
 
@@ -130,6 +151,10 @@ async function pool<T>(items: T[], limit: number, fn: (t: T, i: number) => Promi
 }
 
 export async function runBatch(o: BatchOptions) {
+  return withSpan("batch.run", { "ase.skill": o.skill, "ase.icp": o.icp, "ase.dry_run": Boolean(o.dryRun) }, (runSpan) => runBatchInner(o, runSpan));
+}
+
+async function runBatchInner(o: BatchOptions, runSpan: Span) {
   const spec = BATCH_SKILLS[o.skill];
   const cfg = await loadConfig(o.ws);
   const log = o.log ?? ((l: string) => process.stderr.write(`${l}\n`));
@@ -172,11 +197,13 @@ export async function runBatch(o: BatchOptions) {
     const chunkBudget = Math.max(0.05, Math.min(remaining, (remaining / left) * 1.5));
     const prompt = `/agentic-sales-engine:${o.skill} --icp ${o.icp} --unattended ${chunk.join(" ")}\n\n${UNATTENDED_NOTE(o.pluginRoot)}`;
     log(`[${i + 1}/${chunks.length}] ${o.skill} ${chunk.join(", ")} (≤ $${chunkBudget.toFixed(2)})`);
+    const chunkSpan = startSpan("batch.chunk", { "ase.skill": o.skill, "ase.icp": o.icp, "ase.chunk": i, "ase.domains": chunk, "ase.budget_usd": chunkBudget, "ase.model": model }, runSpan);
     let r: Awaited<ReturnType<ChunkRunner>>;
     try {
-      r = await (o.runner ?? sdkRunner)({ ws: o.ws, prompt, model, maxBudgetUsd: chunkBudget, pluginRoot: o.pluginRoot });
+      r = await (o.runner ?? sdkRunner)({ ws: o.ws, prompt, model, maxBudgetUsd: chunkBudget, pluginRoot: o.pluginRoot, span: chunkSpan });
     } catch (e) {
       r = { cost_usd: 0, ok: false, summary: `error: ${(e as Error).message}` };
+      chunkSpan.recordException(e as Error);
     }
     appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: `batch:${o.skill}`, usd: r.cost_usd, kind: "actual", note: chunk.join(" ") });
     const advanced: string[] = [];
@@ -187,6 +214,9 @@ export async function runBatch(o: BatchOptions) {
       if (st && st !== spec.fromStage) advanced.push(d);
     }
     results.push({ chunk: i, domains: chunk, ok: r.ok, cost_usd: r.cost_usd, advanced });
+    setAttrs(chunkSpan, { "ase.cost_usd": r.cost_usd, "ase.ok": r.ok, "ase.advanced": advanced.length, "ase.denied": r.denied?.length ?? 0 });
+    if (!r.ok) chunkSpan.setStatus({ code: 2, message: "chunk did not succeed" });
+    chunkSpan.end();
     const deniedNote = r.denied?.length ? `- denied tool calls:\n${r.denied.map((d) => `  - \`${d}\``).join("\n")}\n` : "";
     appendFileSync(logFile, `## Chunk ${i + 1}: ${chunk.join(", ")}\n- ok: ${r.ok}, cost $${r.cost_usd.toFixed(3)}, advanced ${advanced.length}/${chunk.length}\n${deniedNote}\n${r.summary}\n\n`);
   });
@@ -203,6 +233,7 @@ export async function runBatch(o: BatchOptions) {
     log: logFile.slice(o.ws.length + 1) as string | null,
     results,
   };
+  setAttrs(runSpan, { "ase.run_id": summary.run_id, "ase.accounts": summary.accounts, "ase.processed": summary.processed, "ase.advanced": summary.advanced, "ase.spent_usd": summary.spent_usd, "ase.stopped": summary.stopped });
   appendFileSync(logFile, `## Summary\nadvanced ${summary.advanced}/${summary.processed}, spent $${summary.spent_usd}${stopped ? `, stopped: ${stopped}` : ""}\n`);
   return summary;
 }
