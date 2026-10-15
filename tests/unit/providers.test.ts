@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stringifyDoc } from "../../src/core/frontmatter.ts";
@@ -10,7 +10,7 @@ import { tbsRange } from "../../src/core/providers/firecrawl.ts";
 import { callProvider, estimateCall, writeRaw } from "../../src/core/providers/gateway.ts";
 import { estimate } from "../../src/core/providers/pricing.ts";
 import type { Adapter, AdapterResult, Op, OpInputs } from "../../src/core/providers/types.ts";
-import { fact, makeWorkspace } from "../helpers.ts";
+import { fact, makeWorkspace, PLUGIN_ROOT } from "../helpers.ts";
 
 /** Fake adapter that returns canned results and records calls. */
 function fake(name: "exa" | "firecrawl", supports: Op[], results: Partial<Record<Op, unknown>>, cost = 0.01): Adapter & { calls: { op: Op; input: unknown }[] } {
@@ -174,4 +174,22 @@ describe("adapters' mapping", () => {
     expect(estimate("exa", "discover_companies", { query: "x", num_results: 25 })).toBeCloseTo(0.047);
     expect(estimate("firecrawl", "extract", { urls: ["a", "b"], schema: {} })).toBeCloseTo(0.04);
   });
+});
+
+test("fetch failures are reported, never silently dropped: errors, HTTP 4xx, empty pages, redirects to the homepage", async () => {
+  const { scrapeFailure } = await import("../../src/core/providers/firecrawl.ts");
+  expect(scrapeFailure({ error: "ERR_TUNNEL_CONNECTION_FAILED" }, true)).toContain("TUNNEL");
+  expect(scrapeFailure({ markdown: "Not found", metadata: { statusCode: 404 } }, true)).toContain("HTTP 404");
+  expect(scrapeFailure({ markdown: "  ", metadata: { statusCode: 200 } }, true)).toBe("empty page");
+  expect(scrapeFailure({ markdown: "Home", metadata: { statusCode: 200, sourceURL: "https://a.example/jobs", url: "https://a.example/" } }, true)).toContain("redirected to the homepage");
+  expect(scrapeFailure({ markdown: "Jobs", metadata: { statusCode: 200, sourceURL: "https://a.example/jobs", url: "https://a.example/careers" } }, true)).toBeNull();
+  expect(scrapeFailure({ markdown: "Home", metadata: { statusCode: 200, sourceURL: "https://a.example", url: "https://a.example/" } }, true)).toBeNull();
+
+  // the gateway passes `failed` through to the session
+  const ws = join(mkdtempSync(join(tmpdir(), "ase-fail-")), "ws");
+  cpSync(join(PLUGIN_ROOT, "fixtures/workspace-ledgerly"), ws, { recursive: true });
+  const fc: Adapter = { name: "firecrawl", supports: ["fetch_pages"], run: (async () => ({ results: [{ url: "https://a.example", title: null, text: "hello" }], failed: [{ url: "https://a.example/jobs", reason: "HTTP 404" }], cost_usd: 0.004, cost_kind: "actual" })) as Adapter["run"] };
+  const r = await callProvider("fetch_pages", { urls: ["https://a.example", "https://a.example/jobs"] }, { ws, adapters: { exa: null, firecrawl: fc }, mode: "live" });
+  expect(r.failed).toEqual([{ url: "https://a.example/jobs", reason: "HTTP 404" }]);
+  expect(r.results).toHaveLength(1);
 });

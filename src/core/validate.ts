@@ -69,6 +69,15 @@ export function validateContent(rel: string, content: string, opts: ValidateOpts
 
   if (c.kind === "raw") {
     if (opts.exists) errors.push("raw/ snapshots are immutable; write a new snapshot instead of modifying an existing one");
+    // Snapshots written by hand (the gateway writes its own, outside this hook) must say how they were obtained:
+    // a WebFetch result is a summary, so it can back an exact quote but never a "checked, not there" absence.
+    else {
+      const fm = /^---\n([\s\S]*?)\n---/.exec(content)?.[1] ?? "";
+      if (!/^url:\s*\S+/m.test(fm) || !/^fetched_at:\s*\S+/m.test(fm)) errors.push("a raw snapshot needs frontmatter with url and fetched_at");
+      if (!/^method:\s*(webfetch|websearch|manual)\s*$/m.test(fm)) {
+        errors.push("a hand-written raw snapshot needs `method: webfetch | websearch | manual` in its frontmatter. Prefer the ase fetch_pages tool (it saves the real page); if it listed the URL in `failed`, find the right URL first");
+      }
+    }
     return errors;
   }
 

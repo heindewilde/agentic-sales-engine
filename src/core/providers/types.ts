@@ -76,6 +76,8 @@ export interface AdapterResult<O extends Op> {
   /** USD; `actual` when the provider reported it, `est` when derived from our price table. */
   cost_usd: number;
   cost_kind: "actual" | "est";
+  /** URLs that could not be read (fetch_pages / extract), with the reason — never silently dropped */
+  failed?: { url: string; reason: string }[];
 }
 
 export interface Adapter {

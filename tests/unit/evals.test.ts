@@ -60,8 +60,12 @@ describe("offline suite", () => {
     expect(mean(r, "citation_faithfulness")).toBe(1);
     expect(r.results.find((x) => x.key === "citation_faithfulness")!.comment).toContain("1 checked absences");
     edit(ws, `accounts/${D}/scores/ap-automation-midmarket.md`, "factors:\n", absence("absent_missing", "raw/2026-10/000000000000.md"));
+    writeFileSync(join(ws, "raw/2026-10/summary1.md"), "---\nurl: https://maasverhoeven.example/jobs\nfetched_at: 2026-10-15\nmethod: webfetch\n---\nCareers page (WebFetch summary): no roles.\n");
+    edit(ws, `accounts/${D}/scores/ap-automation-midmarket.md`, "factors:\n", absence("absent_summary", "raw/2026-10/summary1.md"));
     r = await runOffline(ws);
-    expect(r.results.find((x) => x.key === "citation_faithfulness")!.failures!.join()).toContain("was never saved");
+    const fails = r.results.find((x) => x.key === "citation_faithfulness")!.failures!.join();
+    expect(fails).toContain("was never saved");
+    expect(fails).toContain("absence checked on a summary");
   });
 
   test("catches an uncited claim in the brief", async () => {

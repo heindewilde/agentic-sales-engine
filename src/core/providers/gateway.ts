@@ -85,6 +85,8 @@ export interface GatewayResult<O extends Op> {
   cost_kind: "actual" | "est";
   raw_ref: string | null;
   dropped_dnc: number;
+  /** URLs that could not be read, with the reason (fetch_pages / extract) */
+  failed?: { url: string; reason: string }[];
   budget: { day_spent_usd: number; day_cap_usd: number; run_id: string | null; run_spent_usd: number | null; run_budget_usd: number | null };
 }
 
@@ -281,6 +283,7 @@ async function callProviderInner<O extends Op>(op: O, rawInput: unknown, opts: G
     cost_kind: res.cost_kind,
     raw_ref: rawRef,
     dropped_dnc: dropped,
+    ...(res.failed?.length ? { failed: res.failed } : {}),
     budget: {
       day_spent_usd: spentToday(ws),
       day_cap_usd: dayCap,

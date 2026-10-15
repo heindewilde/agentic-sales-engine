@@ -68,8 +68,10 @@ export function citationFaithfulness(ws: string): EvalResult[] {
           // A verified absence can't be quoted; it is faithful when the page that was checked was actually saved.
           if (e.checked) {
             absences++;
-            if (existsSync(raw)) ok++;
-            else failures.push(`${fac.id}: checked page ${e.raw_ref} was never saved`);
+            const page = existsSync(raw) ? readFileSync(raw, "utf8") : null;
+            if (!page) failures.push(`${fac.id}: checked page ${e.raw_ref} was never saved`);
+            else if (/^method:\s*(webfetch|websearch)/m.test(page)) failures.push(`${fac.id}: absence checked on a summary (${e.raw_ref}), not the page itself`);
+            else ok++;
           } else if (existsSync(raw) && quoteSupported(e.quote, readFileSync(raw, "utf8"))) ok++;
           else failures.push(`${fac.id}: "${e.quote.slice(0, 80)}" not found in ${e.raw_ref}`);
         }

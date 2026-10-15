@@ -51,7 +51,7 @@ const TOOLS: Record<Op, { title: string; description: string }> = {
   fetch_pages: {
     title: "Fetch pages",
     description:
-      "Fetch the readable text of up to 25 known URLs (About, Team, Careers, Contact pages). Cheapest way to verify a fact. Each page is saved as an immutable raw snapshot (raw_ref)." + UNTRUSTED,
+      "Fetch the readable text of up to 25 known URLs (About, Team, Careers, Contact pages). Cheapest way to verify a fact. Each page is saved as an immutable raw snapshot (raw_ref). Pages that could not be read (404, redirect to the homepage, blocked) are listed in `failed` with the reason: find the real URL in the site's navigation and fetch again." + UNTRUSTED,
   },
   extract: {
     title: "Extract structured data",

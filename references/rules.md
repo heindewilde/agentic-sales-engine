@@ -48,8 +48,12 @@ agents write to it over months, and so that one stage can rely on what another l
 - All paid data access goes through the plugin's `ase` MCP tools: `discover_companies`, `find_people`, `search_news`,
   `fetch_pages`, `extract`, `research` (+ `estimate`, `status`). They enforce budgets, record cost, save raw snapshots
   (cite their `raw_ref`) and drop do-not-contact results. Don't call Exa/Firecrawl any other way.
-- If a tool answers `no_provider` (tier T0), use the built-in WebSearch/WebFetch instead, and save what you rely on as a
-  raw snapshot yourself (`raw/<yyyy-mm>/<slug>.md` with url + fetched_at frontmatter and the excerpt).
+- `fetch_pages` lists pages it could not read in `failed` (404, redirected to the homepage, blocked). Don't guess
+  again: find the real URL in the site's navigation (homepage links, footer) and fetch that.
+- Only when a tool answers `no_provider` (tier T0), or the provider failed on the real URL, use the built-in
+  WebSearch/WebFetch, and save what you rely on as a raw snapshot yourself (`raw/<yyyy-mm>/<slug>.md` with `url`,
+  `fetched_at` and `method: webfetch` frontmatter and the exact excerpt). WebFetch returns a summary: it can back a
+  quote of exact wording, never a checked absence (`checked: true` needs a page saved by the gateway).
 - Prefer the cheapest operation that answers the question: search result → `fetch_pages` → `extract` → `research`.
 - Deep work happens inside a budgeted run: `ase ledger run start --stage <s> --budget <usd>` (calls over $0.50 are
   refused outside a run). Check spend with `ase ledger report`.

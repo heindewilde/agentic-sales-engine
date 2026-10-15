@@ -84,9 +84,12 @@ describe("people & privacy", () => {
 });
 
 describe("raw snapshots", () => {
-  test("new snapshot ok, overwrite denied", () => {
-    expect(validateContent("raw/2026-10/abc.md", "x", { ...opts, exists: false })).toEqual([]);
-    expect(validateContent("raw/2026-10/abc.md", "x", { ...opts, exists: true }).join()).toContain("immutable");
+  test("new hand-written snapshot needs url, fetched_at and method; overwrite denied", () => {
+    const ok = "---\nurl: https://acme.com/about\nfetched_at: 2026-10-15\nmethod: webfetch\n---\nexcerpt\n";
+    expect(validateContent("raw/2026-10/abc.md", ok, { ...opts, exists: false })).toEqual([]);
+    expect(validateContent("raw/2026-10/abc.md", ok.replace("method: webfetch\n", ""), { ...opts, exists: false }).join()).toContain("method: webfetch");
+    expect(validateContent("raw/2026-10/abc.md", "x", { ...opts, exists: false }).join()).toContain("url and fetched_at");
+    expect(validateContent("raw/2026-10/abc.md", ok, { ...opts, exists: true }).join()).toContain("immutable");
   });
 });
 
