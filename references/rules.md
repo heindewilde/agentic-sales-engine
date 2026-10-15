@@ -14,7 +14,9 @@ agents write to it over months, and so that one stage can rely on what another l
 - **Confidence** reflects the source, not your certainty: 0.9 first-party (their site, filings), 0.7 reputable third party,
   0.5 directory / aggregator, 0.3 inferred from indirect signals.
 - Save a raw snapshot (`raw/<yyyy-mm>/<hash>.md`: url, fetched_at, the relevant excerpt) for anything a score or
-  outreach line will lean on, and reference it as `raw_ref`. Raw snapshots are never edited.
+  outreach line will lean on, and reference it as `raw_ref`. Raw snapshots are never edited. The `ase` provider tools
+  do this automatically; **with built-in WebSearch/WebFetch you must write the snapshot yourself**, containing the exact
+  passage you rely on — a cited URL without a snapshot can't be verified later (the eval suite measures this).
 - The workspace hook rejects writes that break these rules. When a write is denied, fix the content — do not route
   around the hook (e.g. via Bash redirection).
 
