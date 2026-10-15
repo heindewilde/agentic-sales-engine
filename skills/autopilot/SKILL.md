@@ -32,6 +32,10 @@ Each step is resumable; state lives in `lists/<icp>/<run>/autopilot.json`; one b
 - **Budget reached:** show spend vs budget; if the user raises it: `ase ledger run extend --budget <usd> --approved-by <member>`,
   then `autopilot resume --text`.
 
+## Extending a run
+Started with `--until shortlist` and now want to go further? `autopilot extend --until score --budget <usd> --by <member> --resume --text`
+re-enables the later steps and raises the run budget; finished work is kept.
+
 ## Failures
 `autopilot status --text` shows the failed step and error. Fix the cause (keys, budget, a lint problem), then
 `autopilot resume <run-id> --text` — completed steps are not repeated, and work already done on accounts is kept.

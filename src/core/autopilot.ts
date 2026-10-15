@@ -164,6 +164,38 @@ export async function approveGate(ws: string, s: AutopilotState, by: string): Pr
   return s;
 }
 
+/**
+ * Continue a run further than it was started for (e.g. started with --until shortlist, now continue to score),
+ * optionally with a new total budget. Skipped steps up to the new end become pending; finished work is kept.
+ */
+export function extendRun(ws: string, s: AutopilotState, opts: { until?: StepId; budgetUsd?: number; by?: string }): AutopilotState {
+  if (s.status === "aborted") throw new Error(`run ${s.run_id} was aborted`);
+  if (opts.until) {
+    const end = STEPS.indexOf(opts.until);
+    for (const st of s.steps) {
+      const i = STEPS.indexOf(st.id);
+      if (st.status === "skipped" && i <= end) st.status = "pending";
+      if (st.status === "pending" && i > end) st.status = "skipped";
+    }
+    s.until = opts.until;
+  }
+  if (opts.budgetUsd !== undefined) {
+    if (!(opts.budgetUsd > 0)) throw new Error("budget must be positive");
+    s.budget_usd = opts.budgetUsd;
+    const run = currentRun(ws);
+    const r: CurrentRun = run && run.run_id === s.run_id ? { ...run, budget_usd: opts.budgetUsd, approved_by: opts.by ?? run.approved_by } : { run_id: s.run_id, stage: "autopilot", icp: s.icp, budget_usd: opts.budgetUsd, started: s.created, approved_by: opts.by };
+    mkdirSync(dirname(paths.currentRun(ws)), { recursive: true });
+    writeFileSync(paths.currentRun(ws), JSON.stringify(r, null, 2));
+  }
+  if (s.status === "done" && s.steps.some((x) => x.status === "pending")) s.status = "running";
+  if (s.status === "waiting" && s.gate?.message.startsWith("Budget") && opts.budgetUsd) {
+    s.gate = null;
+    s.status = "running";
+  }
+  save(ws, s);
+  return s;
+}
+
 export function abortRun(ws: string, s: AutopilotState): AutopilotState {
   s.status = "aborted";
   save(ws, s);

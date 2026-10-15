@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { persistCandidates } from "../../src/core/accounts.ts";
-import { advance, approveGate, findRun, loadState, startAutopilot } from "../../src/core/autopilot.ts";
+import { advance, approveGate, extendRun, findRun, loadState, startAutopilot } from "../../src/core/autopilot.ts";
 import type { ChunkRunner } from "../../src/core/batch.ts";
 import { health } from "../../src/core/doctor.ts";
 import { readDoc, stringifyDoc } from "../../src/core/frontmatter.ts";
@@ -152,6 +152,14 @@ describe("autopilot", () => {
     s = await advance(ws, s, deps);
     s = await advance(ws, await approveGate(ws, s, "hein"), deps);
     expect(s.status).toBe("done");
+
+    // extend the finished run to research + score with a bigger budget: earlier steps are not repeated
+    const ext = extendRun(ws, s, { until: "score", budgetUsd: 20, by: "hein" });
+    expect(ext.status).toBe("running");
+    expect(ext.steps.map((x) => x.status)).toEqual(["done", "done", "done", "pending", "pending", "skipped", "skipped"]);
+    expect(ext.budget_usd).toBe(20);
+    const after = await advance(ws, ext, deps);
+    expect(after.gate!.step).toBe("score");
 
     mkdirSync(join(ws, ".ase"), { recursive: true });
     writeFileSync(join(ws, ".ase/autopilot.lock"), JSON.stringify({ run_id: "other-run", pid: process.pid }));
