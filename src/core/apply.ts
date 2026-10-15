@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { autoJudge, type AutoRule } from "./autojudge.ts";
 import { advanceStage } from "./waysin.ts";
 import { parseDoc, readDoc, stringifyDoc } from "./frontmatter.ts";
 import { normalizeLinkedIn, personId } from "./normalize.ts";
-import { BRIEF_SECTIONS, Fact, FactorScore, SIGNAL_TYPES, type Company, type Person } from "./schemas.ts";
+import { BRIEF_SECTIONS, Fact, FactorScore, SIGNAL_TYPES, type Company, type Person, type Signal } from "./schemas.ts";
 import { factorsFor } from "./score.ts";
 import { loadScoring, writeScore } from "./scorefile.ts";
 import { validateContent } from "./validate.ts";
@@ -148,9 +148,13 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
     const scoring = await loadScoring(ws, icp);
     const judged = (u.judgements ?? []).map((j) => FactorScore.safeParse(j)).filter((r) => r.success).map((r) => r.data!);
     const fresh = (await readDoc<Company>(cp)).data;
+    const sdir = join(ws, "accounts", u.domain, "signals");
+    const signals = existsSync(sdir) ? await Promise.all(readdirSync(sdir).filter((f) => f.endsWith(".md")).map(async (f) => (await readDoc<Signal>(join(sdir, f))).data)) : [];
+    const stage = fresh.icp_status?.[icp]?.stage;
+    const researched = mode === "full" && ["researched", "scored", "outreach_ready", "engaged"].includes(String(stage));
     for (const f of factorsFor(scoring, mode) as (ReturnType<typeof factorsFor>[number] & { auto?: AutoRule })[]) {
       if (!f.auto) continue;
-      const a = autoJudge(f, fresh);
+      const a = autoJudge(f, fresh, { signals, researched });
       const i = judged.findIndex((j) => j.id === f.id);
       if (a && (i < 0 || judged[i]!.level === null)) {
         if (i >= 0) judged.splice(i, 1);
