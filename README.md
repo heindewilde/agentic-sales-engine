@@ -191,9 +191,9 @@ Need-payoff  8. If invoices were routed automatically across entities, what woul
                 your team do with that time?
 
 ## 5. Qualification gaps (MEDDICC)
-| Metrics        | unknown — no invoice volumes yet            | invoices/month per entity, AP FTEs        |
-| Economic buyer | Sofie Claes, Finance Director (to confirm)  | who signs a €18–40k contract              |
-| Champion       | candidate: supplier-accounting lead         | will they sponsor a pilot?                |
+| Metrics        | unknown — no invoice volumes   | invoices/month per entity, AP FTEs |
+| Economic buyer | Sofie Claes, Finance Director  | who signs a €18–40k contract       |
+| Champion       | supplier-accounting lead (?)   | will they sponsor a pilot?         |
 ```
 </details>
 
@@ -494,8 +494,8 @@ your scoring rubric is a YAML file you own, and every stage is a skill file you 
 
 ```bash
 bun install
-bun test                         # ~130 offline tests (unit, hooks, CLI, autopilot, evals, simulated learning loop)
-bun src/cli/ase.ts eval run --workspace fixtures/workspace-ledgerly --min 1   # the CI quality gate
+bun test                         # ~130 offline tests, incl. a simulated learning loop
+bun src/cli/ase.ts eval run --workspace fixtures/workspace-ledgerly --min 1  # CI gate
 ASE_LIVE=1 bun test tests/live   # real Exa/Firecrawl calls (~$0.05)
 bun run typecheck
 claude plugin validate .
