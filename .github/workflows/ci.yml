@@ -12,6 +12,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun test
+      - name: Quality evals on the golden fixture (offline, no model calls)
+        run: bun src/cli/ase.ts eval run --workspace fixtures/workspace-ledgerly --no-save --min 1 --text
       - name: Validate plugin manifest
         run: |
           npm install -g @anthropic-ai/claude-code

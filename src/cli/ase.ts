@@ -22,6 +22,9 @@ import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, pars
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
 import { accountStates, logEvent, migrateLegacy, openItems, outcomeStats, readEvents, winLossCases, type EventType, type OutcomeEvent } from "../core/outcomes.ts";
+import { runOffline } from "../evals/offline.ts";
+import { runLlm } from "../evals/llm.ts";
+import { compare, formatReport, latestResult, saveResult } from "../evals/report.ts";
 import { listDrafts, markDraft, markLearned, pendingEdits, snapshotOriginal } from "../core/drafts.ts";
 import { dncMatcher, findWorkspace, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
@@ -66,6 +69,11 @@ const { values: flags, positionals } = parseArgs({
     max: { type: "string" },
     file: { type: "string" },
     to: { type: "string" },
+    suite: { type: "string" },
+    sample: { type: "string" },
+    model: { type: "string" },
+    "no-save": { type: "boolean" },
+    min: { type: "string" },
     page: { type: "string", multiple: true },
     query: { type: "string" },
     status: { type: "string" },
@@ -134,6 +142,10 @@ const HELP = `ase <command>
   drafts list [--status s] [--account d] | snapshot <file> | mark <file> <draft|edited|sent|discarded>
   drafts edits                            original vs human-final pairs not yet learned from
   drafts learned <file> [...]             mark edit pairs as absorbed into the voice profile
+  eval run [--suite offline|llm] [--budget usd] [--sample n] [--model m] [--min 0.9] [--no-save]
+                                          quality evals: citation faithfulness, grounding, handoffs, draft rules (offline);
+                                          claim support, judge stability, draft quality (llm, via Claude). Exit 3 on regression,
+                                          exit 4 when an evaluator's mean is below --min.
   keys status                             which provider keys the CLI/batch will use (masked) and from where
   keys set <EXA_API_KEY|FIRECRAWL_API_KEY|FIRECRAWL_BASE_URL>   read the value from stdin (e.g. pbpaste | …)
   keys pull-firecrawl                     import the key from the official Firecrawl CLI login
@@ -406,6 +418,27 @@ switch (cmd) {
       else fail("usage: drafts list|snapshot|mark|edits|learned");
     } catch (e) {
       fail((e as Error).message, 2);
+    }
+    break;
+  }
+  case "eval": {
+    const w = ws();
+    if (positionals[0] !== "run") fail("usage: eval run [--suite offline|llm] [--budget usd] [--sample n]");
+    const suite = ((flags.suite as string) ?? "offline") as "offline" | "llm";
+    if (suite !== "offline" && suite !== "llm") fail("--suite must be offline or llm");
+    const r = suite === "offline"
+      ? await runOffline(w)
+      : await runLlm(w, { budgetUsd: flags.budget ? Number(flags.budget) : 1, sample: flags.sample ? Number(flags.sample) : 3, model: (flags.model as string) ?? "sonnet" });
+    const saved = flags["no-save"] ? null : saveResult(w, r);
+    const cmp = compare(r, latestResult(w, suite, saved ?? undefined));
+    out({ saved, ...cmp, summary: r.summary, cost_usd: r.cost_usd, results: r.results }, formatReport(r, cmp));
+    if (cmp.regressions.length) process.exitCode = 3;
+    if (flags.min !== undefined) {
+      const below = Object.entries(r.summary).filter(([, v]) => v.mean !== null && v.mean < Number(flags.min)).map(([k]) => k);
+      if (below.length) {
+        process.stderr.write(`ase: below --min ${flags.min}: ${below.join(", ")}\n`);
+        process.exitCode = 4;
+      }
     }
     break;
   }

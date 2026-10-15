@@ -80,7 +80,8 @@ describe("score files on the Ledgerly fixture", () => {
     expect(r3.coverage).toBe(0);
     expect(readFileSync(join(ws, "accounts/gamma.example/scores", `${ICP}.md`), "utf8")).toContain("no evidence → unknown");
 
-    const ranked = await rank(ws, ICP);
+    // the fixture also holds a fully researched golden account; this test is about the three new ones
+    const ranked = (await rank(ws, ICP)).filter((r) => r.domain !== "maasverhoeven.example");
     expect(ranked.map((r) => r.domain)).toEqual(["alpha.example", "gamma.example", "beta.example"]);
     expect(ranked.find((r) => r.domain === "gamma.example")!.research_to_resolve).toBe(true);
     expect((await rank(ws, ICP, { stage: "light_scored" })).map((r) => r.domain)).toEqual(["alpha.example", "gamma.example"]);
@@ -106,7 +107,7 @@ describe("score files on the Ledgerly fixture", () => {
     const path = join(ws, `icps/${ICP}/scoring.yaml`);
     writeFileSync(path, readFileSync(path, "utf8").replace("version: 1", "version: 2").replace(/(id: warm_path[\s\S]*?weight: )2/, "$15"));
     const r = await recomputeAll(ws, ICP);
-    expect(r.recomputed).toBe(20);
+    expect(r.recomputed).toBe(21); // 20 calibration files + the golden account's score
     const after = readFileSync(join(ws, `icps/${ICP}/calibration/brightline-foods.example.md`), "utf8");
     expect(after).toContain("scoring_version: 2");
     expect(after).not.toBe(before);
