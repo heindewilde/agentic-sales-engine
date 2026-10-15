@@ -7,7 +7,8 @@ import type { Op, OpInputs, ProviderName } from "./types.ts";
  *  - Exa search $5–7 / 1k requests (+$1 / 1k results beyond 10), contents/summary $1 / 1k pages,
  *    Agent flat per effort: minimal 0.012, low 0.025, medium 0.10, high 0.50, xhigh 1.00.
  *  - Firecrawl credits: scrape 1, JSON format +4, search 2 per 10 results. USD per credit depends on
- *    plan (Hobby ≈ $0.0038, Standard ≈ $0.00083); default assumes Hobby. Override with FIRECRAWL_USD_PER_CREDIT.
+ *    plan (Hobby $16/5k ≈ $0.0032, Standard $83/100k ≈ $0.00083); default 0.004 is deliberately pessimistic.
+ *    Override with FIRECRAWL_USD_PER_CREDIT. Firecrawl search results carry no publication date — prefer Exa for news.
  */
 export const EXA_AGENT_EFFORT_USD: Record<string, number> = { minimal: 0.012, low: 0.025, medium: 0.1, high: 0.5, xhigh: 1 };
 
