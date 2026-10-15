@@ -15,7 +15,8 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
    than ~6, derive more by splitting on sub-industry × country × size band. Estimate cost with the `estimate` tool
    (≈ $0.04 per 25 results). Start a run: `ase ledger run start --stage discover --icp <slug> --budget <usd>`
    (default: `budgets.per_run_usd`). Run id for grouping: `<YYYY-MM-DD>-discover`.
-2. **Query loop.** For each query: `discover_companies` with `{query, num_results: 25, country, icp: <slug>, run_id}`.
+2. **Query loop.** For each query: `discover_companies` with `{query, num_results, country, icp: <slug>, run_id}`, where
+   `num_results` = min(25, candidates still needed) — never overshoot a small target.
    With `icp` set, results are saved as accounts directly and you get a compact summary back
    (`created`, `already_known`, `new_share`).
    - Rephrase or narrow queries whose results are off-target (check a few created names against the ICP).

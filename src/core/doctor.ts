@@ -98,6 +98,12 @@ export async function health(ws: string): Promise<Health> {
       needs_review: items.filter((x) => x.urgency >= 3).length,
     };
   }
+  const { listRuns } = await import("./autopilot.ts");
+  for (const r of listRuns(ws).filter((x) => x.status === "running" || x.status === "waiting" || x.status === "failed")) {
+    if (r.status === "waiting" && r.gate) gates.unshift(`Autopilot ${r.run_id} (${r.icp}) is waiting: ${r.gate.message}`);
+    else if (r.status === "failed") problems.push(`Autopilot ${r.run_id} (${r.icp}) failed at ${r.steps.find((s) => s.status === "failed")?.id ?? "?"} — fix and run: bun <plugin>/src/cli/autopilot.ts resume ${r.run_id}`);
+    else gates.unshift(`Autopilot ${r.run_id} (${r.icp}) is running (step ${r.steps.find((s) => s.status === "running")?.id ?? "?"}).`);
+  }
   return { tier: tier(), icps, stages, staleFacts, spentToday: spentToday(ws), dayBudget, run: currentRun(ws), gates, problems, outcomes };
 }
 

@@ -65,7 +65,14 @@ Then open Claude Code in an empty folder and run:
 /agentic-sales-engine:icp-build      # reads your website, learns from your best customers, asks only what's missing
 ```
 
-From there `/agentic-sales-engine:status` always tells you the next step.
+From there `/agentic-sales-engine:status` always tells you the next step. Or let it run hands-off:
+
+```text
+/agentic-sales-engine:autopilot start --icp <your-icp> --budget 50
+```
+
+Autopilot discovers, scores, researches, finds ways in and drafts on its own. It pauses only for you to approve the
+shortlist and review the drafts, and it stays within one budget.
 
 <details>
 <summary><b>Provider keys</b> (optional, but recommended)</summary>
@@ -243,7 +250,7 @@ numbers will vary with list size, model choice and how much research an account 
 | Step | Typical cost | Of which data providers |
 |---|---|---|
 | Discovery | ~$0.002 per candidate company | Exa search |
-| Light enrichment + score (Haiku, batched) | $0.01–0.06 per account | ≈ $0–0.01 |
+| Light enrichment + score (Haiku, batched) | $0.01–0.06 per account (≈ $0.013 in a 25-account run) | ≈ $0–0.01 |
 | Deep research + full score (Sonnet) | $0.30–0.90 per account | $0.02–0.06 |
 | Ways in · outreach draft · call prep | ~$0.30 · ~$0.30 · ~$0.40 per account | ~$0.01 |
 | Monitoring (`sync`) | ~$0.02 per watched account per check | Exa + Firecrawl |
@@ -273,11 +280,12 @@ whatever you already use.
 ## All commands
 
 <details>
-<summary>23 skills, all invoked as <code>/agentic-sales-engine:&lt;name&gt;</code></summary>
+<summary>25 skills, all invoked as <code>/agentic-sales-engine:&lt;name&gt;</code></summary>
 
 | Stage | Skill | What it does |
 |---|---|---|
 | Start | `setup` | Create or check a workspace |
+|  | `autopilot` | Run the whole funnel hands-off, pausing at your gates, within one budget |
 |  | `status` | Funnel, gates, spend, outcomes and the next action |
 | Define | `icp-build` | ICP from your site, materials and best customers; market-size check; **gate 1** |
 |  | `scoring-design` | Fit × Intent × Access rubric, back-test, sensitivity, versioning |
@@ -297,6 +305,7 @@ whatever you already use.
 |  | `review-outcomes` | Weekly pass: one multiple-choice question per open account |
 |  | `win-loss` | What converts, with error bars; proposed ICP, rubric and weight changes |
 |  | `learn` | Teach a correction or preference every skill will follow |
+| Quality | `evals` | Measure the engine's own output: sourcing, claim support, handoffs, drafts, judge stability |
 | Hygiene | `lint` | Unsourced, stale, duplicate or contradictory knowledge |
 |  | `dnc` | Do-not-contact list |
 |  | `forget-person` | GDPR erasure across files, matches and snapshots |
