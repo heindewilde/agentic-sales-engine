@@ -4,12 +4,13 @@
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts start --icp <slug> --budget <usd> [--target 300] [--until drafts] [--by <member>]
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts status|resume|abort [<run-id>]
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts approve [<run-id>] --by <member> [--resume]
+ *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts extend [<run-id>] [--until <step>] [--budget <usd>] --by <member> [--resume]
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts list
  * Long-running: start/resume run until the next gate, the end, or a failure. Safe to re-run (resume).
  */
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { abortRun, advance, approveGate, findRun, listRuns, startAutopilot, STEPS, type AutopilotState, type StepId } from "../core/autopilot.ts";
+import { abortRun, advance, approveGate, extendRun, findRun, listRuns, startAutopilot, STEPS, type AutopilotState, type StepId } from "../core/autopilot.ts";
 import { loadCredentials } from "../core/credentials.ts";
 import { spentForRun } from "../core/ledger.ts";
 import { initTracing, shutdownTracing } from "../core/tracing.ts";
@@ -73,6 +74,15 @@ try {
       const s = findRun(ws, runId) ?? fail("no autopilot run found");
       const approved = await approveGate(ws, s, f.by ?? fail("--by <member> is required: approving a gate is a human decision"));
       out(f.resume ? await advance(ws, approved, deps) : approved);
+      break;
+    }
+    case "extend": {
+      const s = findRun(ws, runId) ?? fail("no autopilot run found");
+      const until = f.until as StepId | undefined;
+      if (until && !STEPS.includes(until)) fail(`--until must be one of ${STEPS.join(", ")}`);
+      if (f.budget && !f.by) fail("--by <member> is required to change the budget");
+      const e = extendRun(ws, s, { until, budgetUsd: f.budget ? Number(f.budget) : undefined, by: f.by });
+      out(f.resume ? await advance(ws, e, deps) : e);
       break;
     }
     case "abort":
