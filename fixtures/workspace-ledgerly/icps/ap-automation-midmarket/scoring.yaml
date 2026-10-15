@@ -21,6 +21,7 @@ factors:
     light: true
     question: Is the business model invoice-heavy (wholesale, distribution, manufacturing, logistics)?
     levels: { 0: "Services/software with few suppliers", 1: "Mixed", 2: "Adjacent (retail, construction)", 3: "Wholesale, distribution, manufacturing or logistics" }
+    examples: { 1: "a contractor that also runs a webshop", 2: "a retailer with its own distribution centre", 3: "a food wholesaler supplying restaurants from depots" }
   - id: erp_fit
     name: Compatible mid-market ERP
     group: fit
@@ -35,12 +36,14 @@ factors:
     knockout: { level_lte: 0 }
     question: Do they lack an AP automation tool?
     levels: { 0: "Uses a competitor, recently renewed", 1: "Uses a competitor", 2: "Some partial tooling", 3: "Clearly manual (job ads for invoice data entry)" }
+    examples: { 1: "case study on a competitor's site, two years old", 2: "e-invoicing through the ERP, approvals by email", 3: "a job ad that mentions entering invoices by hand" }
   - id: finance_change
     name: Finance leadership or system change
     group: intent
     weight: 3
     question: New CFO/finance director, ERP migration or acquisition in the last 12 months?
     levels: { 0: "None found after search", 1: "Older than 12 months", 2: "One relevant change in 12 months", 3: "Change in last 6 months" }
+    examples: { 1: "new CFO announced 14 months ago", 2: "an acquisition closed 8 months ago", 3: "a new finance director or an ERP migration announced 3 months ago" }
   - id: ap_hiring
     name: Hiring AP clerks
     group: intent
@@ -48,6 +51,7 @@ factors:
     light: true
     question: Are they hiring for invoice processing / AP roles?
     levels: { 0: "No", 1: "General finance hiring", 2: "One AP role", 3: "Multiple AP/data-entry roles" }
+    examples: { 1: "controller vacancy, nothing in accounts payable", 2: "one accounts-payable clerk vacancy", 3: "two or more AP or invoice data-entry vacancies" }
   - id: warm_path
     name: Warm path to a persona
     group: access
