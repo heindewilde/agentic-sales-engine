@@ -20,6 +20,7 @@ import { DncEntry, type Company } from "../core/schemas.ts";
 import { dncMatcher, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
 import { callProvider, estimateCall } from "../core/providers/gateway.ts";
+import { archiveScoring, rank, recomputeAll, runBacktest, runRecalibrate, runSensitivity, writeScore } from "../core/scorefile.ts";
 import { OPS, ProviderError, type Op, type ProviderName } from "../core/providers/types.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -44,6 +45,12 @@ const { values: flags, positionals } = parseArgs({
     input: { type: "string" },
     provider: { type: "string" },
     estimate: { type: "boolean" },
+    account: { type: "string" },
+    calibration: { type: "string" },
+    label: { type: "string" },
+    mode: { type: "string" },
+    judgements: { type: "string" },
+    limit: { type: "string" },
   },
 });
 
@@ -72,6 +79,15 @@ const HELP = `ase <command>
   provider <op> --input '<json>' [--provider exa|firecrawl] [--estimate]
                                           call a provider op through the gateway (keys from EXA_API_KEY /
                                           FIRECRAWL_API_KEY env; ASE_PROVIDER_MODE=record|replay for cassettes)
+  score compute --icp <s> --account <domain> --mode light|full [--judgements <file>|stdin]
+  score compute --icp <s> --calibration <domain> --label good|bad --mode full [--judgements ...]
+  score backtest --icp <s> [--mode light|full]     rank known good vs bad customers (AUC, percentile)
+  score sensitivity --icp <s> [--mode ...]        weight ±20% / drop-one stability per factor
+  score rank --icp <s> [--stage <stage>] [--limit N]
+  score recalibrate --icp <s>                      propose weights from logged outcomes (never applied)
+  score recompute --icp <s>                        re-score all files from stored judgements (after weight edits)
+  scoring archive --icp <s>                        snapshot scoring.yaml to scoring.history/ before editing
+  outcome log <domain> <meeting|opportunity|won|lost|no_response|disqualified> --icp <s> [--member m] [--note]
   contracts                               list stage contracts`;
 
 const ws = () => requireWorkspace(flags.workspace as string | undefined);
@@ -163,6 +179,56 @@ switch (cmd) {
       out({ error: (e as Error).message, code: e instanceof ProviderError ? e.code : "provider_failed" });
       process.exitCode = 3;
     }
+    break;
+  }
+  case "score": {
+    const w = ws();
+    const sub = positionals[0];
+    const icp = (flags.icp as string) ?? fail("--icp is required");
+    const mode = ((flags.mode as string) ?? "full") as "light" | "full";
+    if (mode !== "light" && mode !== "full") fail("--mode must be light or full");
+    try {
+      if (sub === "compute") {
+        const src = flags.judgements as string | undefined;
+        const text = src && src !== "-" ? readFileSync(resolve(src), "utf8") : await Bun.stdin.text();
+        const judgements = JSON.parse(text);
+        const label = flags.label as "good" | "bad" | undefined;
+        if (flags.calibration && label !== "good" && label !== "bad") fail("--label good|bad is required with --calibration");
+        const domain = (flags.calibration ?? flags.account) as string | undefined;
+        out(await writeScore({ ws: w, icp, domain: domain ?? fail("--account or --calibration is required"), mode, judgements, calibration: flags.calibration ? label : undefined }));
+      } else if (sub === "backtest") out(await runBacktest(w, icp, mode));
+      else if (sub === "sensitivity") out(await runSensitivity(w, icp, mode));
+      else if (sub === "rank") out(await rank(w, icp, { stage: flags.stage as string | undefined, limit: flags.limit ? Number(flags.limit) : undefined }));
+      else if (sub === "recalibrate") out(await runRecalibrate(w, icp));
+      else if (sub === "recompute") out(await recomputeAll(w, icp));
+      else fail("usage: score compute|backtest|sensitivity|rank|recalibrate --icp <slug>");
+    } catch (e) {
+      fail((e as Error).message, 2);
+    }
+    break;
+  }
+  case "scoring": {
+    if (positionals[0] !== "archive") fail("usage: scoring archive --icp <slug>");
+    try {
+      out(await archiveScoring(ws(), (flags.icp as string) ?? fail("--icp is required")));
+    } catch (e) {
+      fail((e as Error).message, 2);
+    }
+    break;
+  }
+  case "outcome": {
+    const w = ws();
+    const [sub, domainRaw, outcome] = positionals;
+    const allowed = ["meeting", "opportunity", "won", "lost", "no_response", "disqualified"];
+    if (sub !== "log" || !domainRaw || !outcome || !allowed.includes(outcome)) fail(`usage: outcome log <domain> <${allowed.join("|")}> --icp <slug>`);
+    const domain = normalizeDomain(domainRaw) ?? fail(`not a domain: ${domainRaw}`);
+    const icp = (flags.icp as string) ?? fail("--icp is required");
+    const f = join(w, "outcomes", "outcomes.csv");
+    mkdirSync(dirname(f), { recursive: true });
+    if (!existsSync(f)) writeFileSync(f, "date,account,icp,member,outcome,note\n");
+    const note = String(flags.note ?? "").replace(/"/g, "'");
+    writeFileSync(f, `${today()},${domain},${icp},${flags.member ?? ""},${outcome},"${note}"\n`, { flag: "a" });
+    out({ logged: { date: today(), account: domain, icp, outcome } });
     break;
   }
   case "contracts":

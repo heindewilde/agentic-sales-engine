@@ -32,8 +32,8 @@ The judge never averages or guesses.
 
 ## Designing and calibrating
 1. Draft factors from the ICP (its traits, triggers and personas).
-2. **Back-test** on known good and bad customers: good ones should rank in the top quartile (median ≥ 75th pct),
-   AUC ≥ 0.8. If not, the rubric doesn't capture what makes them good — revise anchors or add a factor.
+2. **Back-test** on known good and bad customers: the median good customer should outrank ≥ 75% of all other
+   scored accounts (bad + prospects), and AUC (good vs bad) ≥ 0.8. If not, the rubric doesn't capture what makes them good — revise anchors or add a factor.
 3. **Sensitivity**: perturb each weight ±20% and drop each factor; if the ranking barely moves (Kendall τ ≈ 1) the factor
    is dead weight; if one factor alone reorders everything it dominates — reconsider its weight.
 4. Version every change (`version`, `changelog`, `scoring.history/`).

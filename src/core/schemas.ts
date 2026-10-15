@@ -231,6 +231,8 @@ export const ScoreFile = z.object({
   needs_check: z.array(z.string()).default([]),
   scored_at: isoDate,
   factors: z.array(FactorScore),
+  /** only on calibration files (icps/<icp>/calibration/<domain>.md) */
+  label: z.enum(["good", "bad"]).optional(),
 });
 export type ScoreFile = z.infer<typeof ScoreFile>;
 
