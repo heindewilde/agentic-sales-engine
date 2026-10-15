@@ -89,7 +89,7 @@ For headless batch runs on your machine, store them once with
 A walkthrough with a fictional company: **Ledgerly**, which sells accounts-payable automation to mid-market companies in
 the Benelux and DACH. The excerpts below follow the engine's real file formats. The companies and people are invented.
 
-**1 · ICP.** `icp-build` reads ledgerly's website and its ten best (and five worst) customers, then asks three
+**1 · ICP.** `icp-build` reads Ledgerly's website and its ten best (and five worst) customers, then asks three
 questions it couldn't answer (deal size, who signs, why deals are lost). It drafts *"Mid-market companies drowning in
 supplier invoices"*: wholesale, manufacturing and logistics, 100–1,000 staff, a mid-market ERP, no AP tooling, with
 triggers like a new CFO or an acquisition. You approve it (**gate 1**).
@@ -99,8 +99,10 @@ customers you named.
 
 ```text
 # summary of `ase score backtest` + `ase score sensitivity`
-Back-test (v1): AUC 1.00 · median good customer outranks 92% of the field · verdict: pass
-Sensitivity: finance_change and industry_fit carry the ranking; warm_path is weak but kept (access)
+Back-test v1:  AUC 1.00 · median good customer outranks 92% of the field
+               verdict: pass
+Sensitivity:   finance_change and industry_fit carry the ranking;
+               warm_path is weak but kept (access)
 ```
 
 **3 · Discover and light-score.** `discover` runs the ICP's queries per country and saves 300+ deduplicated candidates
