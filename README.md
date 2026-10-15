@@ -14,8 +14,10 @@ A Claude Code plugin that takes a team from **"who should we sell to?"** to **"h
 The value is in the handoffs: every stage reads what the previous one learned (an account **brief** with open questions)
 and leaves it better. Everything lives in a git-tracked **workspace** of markdown files that your team can read, edit and review.
 
-> **Status:** early development — M0–M5 done: knowledge harness, provider gateway, ICP builder, scoring design &
-> calibration, wide funnel (import/discover → light score → shortlist, with a batch driver). Next: deep research and ways in. See [docs/architecture.md](docs/architecture.md).
+> **Status:** v1 feature set complete (M0–M6): ICP → scoring design → discover → light score → shortlist → deep research →
+> full score → ways in, with the knowledge harness, provider gateway and batch driver. Verified end-to-end in real Claude
+> sessions at tier T0; live Exa/Firecrawl calls are unit-tested but not yet exercised against the real APIs.
+> Next: freshness monitoring (M7), outreach drafts (M8), call prep (M9). See [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
@@ -33,10 +35,20 @@ Provider keys (optional, entered via `/plugin` → configure, stored in your OS 
 - **Firecrawl** — structured extraction from company websites, page monitoring. Free tier: 1,000 credits/month; self-hostable.
 
 Large lists run as batches of headless sessions:
-`bun <plugin>/src/cli/batch.ts --skill enrich-light --icp <slug> --budget 5` (resumable, budget-capped).
+`bun <plugin>/src/cli/batch.ts --skill enrich-light|research|score --icp <slug> --budget 5` (resumable, budget-capped).
 
 Without keys the engine runs on Claude Code's built-in web search and your CSV imports (slower, shallower).
 For CLI/batch runs outside Claude Code, put `EXA_API_KEY` / `FIRECRAWL_API_KEY` in a gitignored `.env` in the workspace.
+
+## How a run flows
+
+```
+icp-build ─GATE 1─▶ scoring-design ─▶ discover / import ─▶ enrich-light ─▶ shortlist ─GATE 2─▶ research ─▶ score ─▶ ways-in
+   (approve ICP)     (back-test)        (wide: 200–1000)    (cheap, batched)  (cost estimate)    (deep, cited)          (warm paths, triggers)
+```
+
+Every account carries a `brief.md` whose **Open questions** are the next stage's research agenda, and a stage only
+advances when its handoff contract holds (`ase validate --stage`).
 
 ## Principles
 
@@ -59,13 +71,17 @@ For CLI/batch runs outside Claude Code, put `EXA_API_KEY` / `FIRECRAWL_API_KEY` 
 | `/agentic-sales-engine:discover` | Find companies matching an approved ICP, deduplicated against your workspace |
 | `/agentic-sales-engine:enrich-light` | Cheap snapshot + light score per account (batches for large lists) |
 | `/agentic-sales-engine:shortlist` | Pick accounts for deep research with a cost estimate; approve (gate 2) |
+| `/agentic-sales-engine:research` | Deep research on approved accounts: triggers, buying committee, systems, risks → full score |
+| `/agentic-sales-engine:score` | Full (re)score; `--explain` tells you what drives an account's score |
+| `/agentic-sales-engine:ways-in` | Rank warm intros and trigger hooks per account, written into the brief |
+| `/agentic-sales-engine:refresh` | Re-verify facts past their TTL, catch new triggers, rescore |
 | `/agentic-sales-engine:log-outcome` | Record meetings, wins and losses so scoring can recalibrate |
 | `/agentic-sales-engine:status` | Funnel, gates, spend, next action |
 | `/agentic-sales-engine:lint` | Knowledge-base health: unsourced, stale, duplicates, contradictions |
 | `/agentic-sales-engine:dnc` | Manage the do-not-contact list |
 | `/agentic-sales-engine:forget-person` | GDPR erasure |
 | `/agentic-sales-engine:learn` | Teach the engine a correction or preference |
-| *coming:* `research`, `score`, `ways-in`, `refresh`, outreach drafts, call prep | |
+| *coming:* signal monitoring (`sync`), outreach drafts in your voice, call prep | |
 
 ## Development
 
