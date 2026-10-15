@@ -27,6 +27,8 @@ export interface CompanyHit {
   founded?: number | null;
   /** set by the gateway: already an account in this workspace */
   known?: boolean;
+  /** set by the gateway: this company's own snapshot (what the index said about it), for citing its facts */
+  raw_ref?: string;
 }
 
 export interface PersonHit {

@@ -229,8 +229,18 @@ async function callProviderInner<O extends Op>(op: O, rawInput: unknown, opts: G
         return true;
       });
       for (const h of hits) h.known = Boolean(h.domain && existsSync(paths.company(ws, h.domain)));
-      results = hits;
       rawRef = writeRaw(ws, { ...meta, query: (input as OpInputs["discover_companies"]).query }, hits.map((h) => `- ${h.name} — ${h.url}\n  ${h.description ?? ""}`).join("\n"));
+      // One snapshot per company under its own URL, so facts cited to the company stay verifiable.
+      results = hits.map((h) => ({
+        ...h,
+        raw_ref: writeRaw(ws, { ...meta, url: h.url, title: h.name }, [
+          h.name,
+          h.description ?? "",
+          h.employees != null ? `employees: ${h.employees}` : "",
+          [h.hq_city, h.hq_country].filter(Boolean).length ? `headquarters: ${[h.hq_city, h.hq_country].filter(Boolean).join(", ")}` : "",
+          h.founded != null ? `founded: ${h.founded}` : "",
+        ].filter(Boolean).join("\n")),
+      }));
       break;
     }
     case "find_people": {
