@@ -11,6 +11,7 @@ import { cassetteDir, providerMode, withCassettes, type Mode } from "./cassette.
 import { exaAdapter } from "./exa.ts";
 import { firecrawlAdapter } from "./firecrawl.ts";
 import { estimate } from "./pricing.ts";
+import { setAttrs, withSpan } from "../tracing.ts";
 import { ProviderError, type Adapter, type Op, type OpInputs, type OpResults, type ProviderName } from "./types.ts";
 
 /** Without an active run, a single call may not cost more than this (deep work must be a budgeted run). */
@@ -153,6 +154,22 @@ export function writeRaw(ws: string, meta: Record<string, unknown>, content: str
  * ledger → raw snapshots → DNC filtering. Throws ProviderError with an actionable message.
  */
 export async function callProvider<O extends Op>(op: O, rawInput: unknown, opts: GatewayOptions): Promise<GatewayResult<O>> {
+  return withSpan(`provider.${op}`, { "ase.op": op }, async (span) => {
+    try {
+      const r = await callProviderInner(op, rawInput, opts);
+      setAttrs(span, {
+        "ase.provider": r.provider, "ase.cost_usd": r.cost_usd, "ase.cost_kind": r.cost_kind, "ase.run_id": r.budget.run_id,
+        "ase.results": Array.isArray(r.results) ? r.results.length : 1, "ase.dropped_dnc": r.dropped_dnc, "ase.raw_ref": r.raw_ref,
+      });
+      return r;
+    } catch (e) {
+      if (e instanceof ProviderError) setAttrs(span, { "ase.error_code": e.code });
+      throw e;
+    }
+  });
+}
+
+async function callProviderInner<O extends Op>(op: O, rawInput: unknown, opts: GatewayOptions): Promise<GatewayResult<O>> {
   const parsed = INPUT_SCHEMAS[op].safeParse(rawInput);
   if (!parsed.success) throw new ProviderError(`invalid input for ${op}: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, "bad_input");
   // Workspace-only options (where to save results) never reach the provider or the cassette key.

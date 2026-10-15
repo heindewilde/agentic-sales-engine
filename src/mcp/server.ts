@@ -13,8 +13,12 @@ import { callProvider, estimateCall, INPUT_SCHEMAS } from "../core/providers/gat
 import { OPS, ProviderError, type CompanyHit, type Op } from "../core/providers/types.ts";
 import { persistCandidates } from "../core/accounts.ts";
 import { runSync } from "../core/watch.ts";
+import { initTracing, shutdownTracing } from "../core/tracing.ts";
 import { z } from "zod";
 import { findWorkspace, loadConfig } from "../core/workspace.ts";
+
+initTracing("mcp-gateway", { immediate: true });
+for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void shutdownTracing().finally(() => process.exit(0)));
 
 const server = new McpServer({ name: "ase", version: "0.10.0" });
 

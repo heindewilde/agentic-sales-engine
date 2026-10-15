@@ -23,6 +23,7 @@ import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
 import { accountStates, logEvent, migrateLegacy, openItems, outcomeStats, readEvents, winLossCases, type EventType, type OutcomeEvent } from "../core/outcomes.ts";
 import { runOffline } from "../evals/offline.ts";
+import { initTracing, setAttrs, shutdownTracing, withSpan } from "../core/tracing.ts";
 import { runLlm } from "../evals/llm.ts";
 import { compare, formatReport, latestResult, saveResult } from "../evals/report.ts";
 import { listDrafts, markDraft, markLearned, pendingEdits, snapshotOriginal } from "../core/drafts.ts";
@@ -152,6 +153,7 @@ const HELP = `ase <command>
   contracts                               list stage contracts`;
 
 const ws = () => requireWorkspace(flags.workspace as string | undefined);
+initTracing("cli");
 // Provider keys for CLI runs: env, workspace .env, then ~/.config/agentic-sales-engine/credentials.env.
 const keyOrigin = loadCredentials(findWorkspace(flags.workspace as string | undefined));
 
@@ -426,9 +428,13 @@ switch (cmd) {
     if (positionals[0] !== "run") fail("usage: eval run [--suite offline|llm] [--budget usd] [--sample n]");
     const suite = ((flags.suite as string) ?? "offline") as "offline" | "llm";
     if (suite !== "offline" && suite !== "llm") fail("--suite must be offline or llm");
-    const r = suite === "offline"
-      ? await runOffline(w)
-      : await runLlm(w, { budgetUsd: flags.budget ? Number(flags.budget) : 1, sample: flags.sample ? Number(flags.sample) : 3, model: (flags.model as string) ?? "sonnet" });
+    const r = await withSpan(`eval.${suite}`, { "ase.suite": suite }, async (span) => {
+      const res = suite === "offline"
+        ? await runOffline(w)
+        : await runLlm(w, { budgetUsd: flags.budget ? Number(flags.budget) : 1, sample: flags.sample ? Number(flags.sample) : 3, model: (flags.model as string) ?? "sonnet" });
+      setAttrs(span, { "ase.cost_usd": res.cost_usd, ...Object.fromEntries(Object.entries(res.summary).map(([k, v]) => [`ase.eval.${k}`, v.mean])) });
+      return res;
+    });
     const saved = flags["no-save"] ? null : saveResult(w, r);
     const cmp = compare(r, latestResult(w, suite, saved ?? undefined));
     out({ saved, ...cmp, summary: r.summary, cost_usd: r.cost_usd, results: r.results }, formatReport(r, cmp));
@@ -595,3 +601,5 @@ switch (cmd) {
   default:
     fail(`unknown command "${cmd}"\n\n${HELP}`);
 }
+
+await shutdownTracing();
