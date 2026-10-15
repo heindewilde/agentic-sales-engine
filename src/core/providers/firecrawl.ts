@@ -1,5 +1,6 @@
 import Firecrawl from "@mendable/firecrawl-js";
 import { firecrawlCreditUsd, estimate } from "./pricing.ts";
+import { limited, limiterPath } from "./ratelimit.ts";
 import type { Adapter, AdapterResult, ExtractHit, NewsHit, Op, OpInputs, PageHit } from "./types.ts";
 
 /** Run async jobs with bounded concurrency, preserving order. A failed item becomes `{ error }`. */
@@ -53,6 +54,8 @@ export function tbsRange(since: string, until?: string): string {
 export function firecrawlAdapter(apiKey: string | undefined, apiUrl?: string): Adapter {
   const fc = new Firecrawl({ apiKey: apiKey || null, apiUrl: apiUrl || null });
   const credit = firecrawlCreditUsd();
+  // Shared across parallel sessions; only paces requests after Firecrawl has answered 429 (free tier ≈ 10/min).
+  const lim = limiterPath("firecrawl", apiKey);
   return {
     name: "firecrawl",
     // No company/people index: discovery and people search go to Exa (or built-in web search at T0).
@@ -62,7 +65,7 @@ export function firecrawlAdapter(apiKey: string | undefined, apiUrl?: string): A
       switch (op) {
         case "fetch_pages": {
           const i = input as OpInputs["fetch_pages"];
-          const docs = await pool(i.urls, 4, (url) => fc.scrape(url, { formats: ["markdown"], onlyMainContent: true }));
+          const docs = await pool(i.urls, 4, (url) => limited(lim, () => fc.scrape(url, { formats: ["markdown"], onlyMainContent: true })));
           let credits = 0;
           const results: PageHit[] = [];
           const failed: { url: string; reason: string }[] = [];
@@ -78,7 +81,7 @@ export function firecrawlAdapter(apiKey: string | undefined, apiUrl?: string): A
         case "extract": {
           const i = input as OpInputs["extract"];
           const docs = await pool(i.urls, 4, (url) =>
-            fc.scrape(url, { formats: [{ type: "json", schema: i.schema, prompt: i.prompt }], onlyMainContent: true }),
+            limited(lim, () => fc.scrape(url, { formats: [{ type: "json", schema: i.schema, prompt: i.prompt }], onlyMainContent: true })),
           );
           let credits = 0;
           const results: ExtractHit[] = [];
@@ -95,7 +98,7 @@ export function firecrawlAdapter(apiKey: string | undefined, apiUrl?: string): A
         case "search_news": {
           const i = input as OpInputs["search_news"];
           // Firecrawl's date filter (tbs) applies to web results only, so search web with a date window.
-          const r = await fc.search(i.query, { limit: i.num_results ?? 10, sources: ["web"], tbs: tbsRange(i.since, i.until) });
+          const r = await limited(lim, () => fc.search(i.query, { limit: i.num_results ?? 10, sources: ["web"], tbs: tbsRange(i.since, i.until) }));
           const results: NewsHit[] = (r.web ?? []).map((w: any) => ({
             title: w.title ?? w.metadata?.title ?? w.url,
             url: w.url ?? w.metadata?.sourceURL,
