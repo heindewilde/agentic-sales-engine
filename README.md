@@ -127,8 +127,8 @@ score, in batches of headless sessions. `shortlist` proposes the top 15% with a 
 
 ```markdown
 ## Snapshot
-Maas & Verhoeven Foodservice is a family-owned B2B food wholesaler in Ghent supplying ~6,000 restaurants and
-independent retailers from three depots; ~310 employees.[^1][^2]
+Maas & Verhoeven Foodservice is a family-owned B2B food wholesaler in Ghent supplying
+~6,000 restaurants and independent retailers from three depots; ~310 employees.[^1][^2]
 
 ## Situation & triggers
 - 2026-07-01 — acquired Delcourt Traiteur (Liège), its 9th acquisition since 2015.[^3]
@@ -169,9 +169,9 @@ if research confirms it. `score --explain` turns this into plain language.
 <summary><b>LinkedIn connection note</b> — drafted, never sent</summary>
 
 ```markdown
-Hi Sofie, congrats on the Delcourt acquisition, the ninth one if I count right.[^1] Bringing another entity's suppliers
-into one AP process is usually where the fun starts. I work on that problem for wholesalers and would enjoy
-comparing notes. Happy to connect.
+Hi Sofie, congrats on the Delcourt acquisition, the ninth one if I count right.[^1]
+Bringing another entity's suppliers into one AP process is usually where the fun starts.
+I work on that problem for wholesalers and would enjoy comparing notes. Happy to connect.
 
 [^1]: Gondola Foodservice, https://news.example/maas-verhoeven-acquires-delcourt (2026-07-01)
 ```
@@ -184,10 +184,11 @@ Your edits to drafts are kept next to the originals, and `voice-profile --learn`
 
 ```markdown
 ## 4. Discovery questions (SPIN)
-Situation  1. Which ERP(s) does AP run on today — the same for Maas & Verhoeven and Delcourt?
-Problem    3. How do supplier invoices reach AP per entity (paper, PDF, EDI), and how many per month?
-Implication 6. When invoices slip, what happens to supplier terms and the month-end close?
-Need-payoff 8. If invoices were captured and routed automatically across entities, what would your team do with that time?
+Situation    1. Which ERP(s) does AP run on today — the same for both entities?
+Problem      3. How do supplier invoices reach AP per entity, and how many per month?
+Implication  6. When invoices slip, what happens to supplier terms and the close?
+Need-payoff  8. If invoices were routed automatically across entities, what would
+                your team do with that time?
 
 ## 5. Qualification gaps (MEDDICC)
 | Metrics        | unknown — no invoice volumes yet            | invoices/month per entity, AP FTEs        |
