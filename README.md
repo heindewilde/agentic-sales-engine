@@ -9,15 +9,16 @@ A Claude Code plugin that takes a team from **"who should we sell to?"** to **"h
 3. **Discover** hundreds of candidate companies in any geography (Exa + your own seed lists), deduplicated.
 4. **Score wide, then research deep** — cheap light scoring for everyone, deep research only for the shortlist you approve.
 5. **Find ways in** — warm intros from your team's LinkedIn connection exports, dated trigger events, shared context.
-6. **Prep outreach and calls** *(next milestones)* — drafts in your voice, one-page call briefs. Nothing is ever sent for you.
+6. **Prep outreach and calls** — drafts in your voice (learning from your edits), one-page call briefs. Nothing is ever sent for you.
+7. **Stay current** — watched accounts are polled for new triggers and page changes; real triggers rescore accounts.
 
 The value is in the handoffs: every stage reads what the previous one learned (an account **brief** with open questions)
 and leaves it better. Everything lives in a git-tracked **workspace** of markdown files that your team can read, edit and review.
 
-> **Status:** v1 feature set complete (M0–M6): ICP → scoring design → discover → light score → shortlist → deep research →
-> full score → ways in, with the knowledge harness, provider gateway and batch driver. Verified end-to-end in real Claude
-> sessions; Exa and Firecrawl adapters verified against the live APIs (`ASE_LIVE=1 bun test tests/live`).
-> Next: freshness monitoring (M7), outreach drafts (M8), call prep (M9). See [docs/architecture.md](docs/architecture.md).
+> **Status:** M0–M9 complete: ICP → scoring design → discover → light score → shortlist → deep research → full score →
+> ways in → outreach drafts → call prep, plus signal monitoring, the knowledge harness, provider gateway and batch driver.
+> Verified end-to-end on a real company with live Exa/Firecrawl and real Claude sessions. Next: M10 (outcome-based
+> recalibration in practice, Apollo/PDL/Crunchbase adapters). See [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
@@ -45,8 +46,10 @@ For CLI/batch runs outside Claude Code, store keys once per machine (never in a 
 ## How a run flows
 
 ```
-icp-build ─GATE 1─▶ scoring-design ─▶ discover / import ─▶ enrich-light ─▶ shortlist ─GATE 2─▶ research ─▶ score ─▶ ways-in
-   (approve ICP)     (back-test)        (wide: 200–1000)    (cheap, batched)  (cost estimate)    (deep, cited)          (warm paths, triggers)
+icp-build ─GATE 1─▶ scoring-design ─▶ discover / import ─▶ enrich-light ─▶ shortlist ─GATE 2─▶ research ─▶ score ─▶ ways-in ─▶ draft-outreach ─▶ call-prep
+   (approve ICP)     (back-test)        (wide: 200–1000)    (cheap, batched)  (cost estimate)    (deep, cited)          (warm paths,  (your voice,      (SPIN/MEDDICC)
+                                                                                                                     triggers)     never sent)
+                                         sync (scheduled) ──▶ new signals ──▶ rescore ──▶ back into ways-in / drafts
 ```
 
 Every account carries a `brief.md` whose **Open questions** are the next stage's research agenda, and a stage only
@@ -77,13 +80,17 @@ advances when its handoff contract holds (`ase validate --stage`).
 | `/agentic-sales-engine:score` | Full (re)score; `--explain` tells you what drives an account's score |
 | `/agentic-sales-engine:ways-in` | Rank warm intros and trigger hooks per account, written into the brief |
 | `/agentic-sales-engine:refresh` | Re-verify facts past their TTL, catch new triggers, rescore |
+| `/agentic-sales-engine:sync` | Watch accounts; turn new news and page changes into signals; rescore ([scheduling](docs/scheduling.md)) |
+| `/agentic-sales-engine:voice-profile` | Learn your writing voice from sample emails and from how you edit drafts |
+| `/agentic-sales-engine:draft-outreach` | Email, LinkedIn or warm-intro drafts grounded in the brief — never sent |
+| `/agentic-sales-engine:call-prep` | One-page call brief: why now, attendees, SPIN questions, MEDDICC gaps, objections |
 | `/agentic-sales-engine:log-outcome` | Record meetings, wins and losses so scoring can recalibrate |
 | `/agentic-sales-engine:status` | Funnel, gates, spend, next action |
 | `/agentic-sales-engine:lint` | Knowledge-base health: unsourced, stale, duplicates, contradictions |
 | `/agentic-sales-engine:dnc` | Manage the do-not-contact list |
 | `/agentic-sales-engine:forget-person` | GDPR erasure |
 | `/agentic-sales-engine:learn` | Teach the engine a correction or preference |
-| *coming:* signal monitoring (`sync`), outreach drafts in your voice, call prep | |
+| *coming (M10):* Apollo / People Data Labs / Crunchbase adapters | |
 
 ## Development
 

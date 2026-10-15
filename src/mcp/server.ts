@@ -12,10 +12,11 @@ import { currentRun, spentForRun, spentToday } from "../core/ledger.ts";
 import { callProvider, estimateCall, INPUT_SCHEMAS } from "../core/providers/gateway.ts";
 import { OPS, ProviderError, type CompanyHit, type Op } from "../core/providers/types.ts";
 import { persistCandidates } from "../core/accounts.ts";
+import { runSync } from "../core/watch.ts";
 import { z } from "zod";
 import { findWorkspace, loadConfig } from "../core/workspace.ts";
 
-const server = new McpServer({ name: "ase", version: "0.6.0" });
+const server = new McpServer({ name: "ase", version: "0.9.0" });
 
 const text = (data: unknown, isError = false) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], isError });
 
@@ -108,6 +109,24 @@ server.registerTool(
     } catch (e) {
       return text({ error: (e as Error).message }, true);
     }
+  },
+);
+
+server.registerTool(
+  "sync_watchlist",
+  {
+    title: "Sync watched accounts",
+    description:
+      "Poll every account in watchlist.yaml (or one ICP/account): dated news since the last check and content changes on watched pages. " +
+      "Writes candidate items to sync/<date>.md for review and marks expired signals stale. Costs ≈ $0.01–0.02 per watched account; " +
+      "check with `ase sync --estimate` first. Budgets apply." + UNTRUSTED,
+    inputSchema: { icp: z.string().optional(), account: z.string().optional() },
+  },
+  async ({ icp, account }) => {
+    const ws = findWorkspace();
+    if (!ws) return text({ error: "No sales-engine workspace found." }, true);
+    const r = await runSync(ws, { icp, account });
+    return text({ ...r, items: r.items.map((i) => ({ kind: i.kind, account: i.account, title: i.title, url: i.url, published: i.published ?? null })) });
   },
 );
 

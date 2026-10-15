@@ -24,4 +24,4 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/rules.md`. CLI: `bun ${CLAUDE_PLUGIN_ROOT
    `ase score compute --icp <slug> --account <d> --mode full --judgements <file>`.
 5. **Ways in:** continue with `/agentic-sales-engine:ways-in` for accounts scoring tier A/B.
 6. **Report:** per account one line (score light → full, tier, top trigger, best way in or "none yet"); accounts whose
-   full score dropped a tier and why; total spend vs budget. `ase ledger run end` when done.
+   full score dropped a tier and why; total spend vs budget. `ase ledger run end` when done (interactive only — in `--unattended` runs the batch driver owns the run).

@@ -58,6 +58,7 @@ export const UNATTENDED_NOTE = (root: string) =>
     `Permissions: Read, Write, Edit, Glob, Grep, WebFetch/WebSearch, the ase MCP tools, and Bash ONLY for \`bun ${root}/src/cli/ase.ts <command>\` (one command per call, no pipes, no cd, no &&).`,
     "Use Glob/Read/Grep to explore files (not ls/find/cat). Write judgement JSON with the Write tool to .ase/tmp/<domain>-<mode>.json (never inside accounts/), then pass it with --judgements <file>.",
     "If one command is denied, the rest of the toolset still works — adjust and continue.",
+    "The batch driver owns the ledger run and its budget: never run `ase ledger run start|end|extend` in this session.",
   ].join("\n");
 
 const MODEL_ALIASES: Record<string, string> = { haiku: "haiku", sonnet: "sonnet", opus: "opus" };
