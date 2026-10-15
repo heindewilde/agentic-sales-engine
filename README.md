@@ -132,13 +132,16 @@ independent retailers from three depots; ~310 employees.[^1][^2]
 
 ## Situation & triggers
 - 2026-07-01 — acquired Delcourt Traiteur (Liège), its 9th acquisition since 2015.[^3]
-- 2026-09-10 — launched "Buurtmarkt", a convenience format for independent shops, with a national retailer (10 → 100 stores).[^4]
+- 2026-09-10 — launched "Buurtmarkt", a convenience format for independent shops, with a
+  national retailer (10 → 100 stores).[^4]
 - Careers page: 14 open roles in logistics and sales, none in finance or AP.[^5]
 
 ## Open questions
-- [x] Is supplier invoice volume high? → ~1,200 active suppliers per the 2025 annual report.[^6]
-- [ ] Which ERP runs AP after the Delcourt acquisition? (unknown after research; owner: call-prep)
-- [ ] Is there already an OCR/AP tool in use? (unknown after research; owner: call-prep)
+- [x] Is supplier invoice volume high? → ~1,200 active suppliers (2025 annual report).[^6]
+- [ ] Which ERP runs AP after the Delcourt acquisition?
+      (unknown after research; owner: call-prep)
+- [ ] Is there already an OCR/AP tool in use?
+      (unknown after research; owner: call-prep)
 
 [^3]: Gondola Foodservice, https://news.example/maas-verhoeven-acquires-delcourt (2026-07-01)
 ```
