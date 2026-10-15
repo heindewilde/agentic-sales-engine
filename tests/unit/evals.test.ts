@@ -140,3 +140,26 @@ test("compare flags regressions beyond tolerance", () => {
   expect(compare(mk(0.97), mk(1)).regressions).toEqual([]);
   expect(compare(mk(0.9), null).regressions).toEqual([]);
 });
+
+test("light judgements survive the full score; agreement names the light factor that runs high", async () => {
+  const { writeScore } = await import("../../src/core/scorefile.ts");
+  const { persistCandidates } = await import("../../src/core/accounts.ts");
+  const { parseDoc } = await import("../../src/core/frontmatter.ts");
+  const ws = golden();
+  const ICP = "ap-automation-midmarket";
+  const domains = ["l1.example", "l2.example", "l3.example", "l4.example", "l5.example"];
+  await persistCandidates(ws, ICP, "t", "test", domains.map((d) => ({ name: d, domain: d, source_url: `https://${d}` })));
+  const ev = (d: string) => [{ quote: "q", source_url: `https://${d}` }];
+  for (const [i, d] of domains.entries()) {
+    // light pass always says industry_fit 3; research finds 1 or 2
+    await writeScore({ ws, icp: ICP, domain: d, mode: "light", judgements: [{ id: "industry_fit", level: 3, confidence: 0.9, evidence: ev(d) }, { id: "company_size", level: 3, confidence: 0.9, evidence: ev(d) }] });
+    await writeScore({ ws, icp: ICP, domain: d, mode: "full", judgements: [{ id: "industry_fit", level: 1 + (i % 2), confidence: 0.9, evidence: ev(d) }, { id: "company_size", level: 3 - (i % 3), confidence: 0.9, evidence: ev(d) }] });
+  }
+  const file = parseDoc<{ mode: string; light?: { levels: Record<string, number> } }>(readFileSync(join(ws, `accounts/l1.example/scores/${ICP}.md`), "utf8")).data;
+  expect(file.mode).toBe("full");
+  expect(file.light?.levels.industry_fit).toBe(3);
+  const r = await runOffline(ws);
+  const agree = r.results.find((x) => x.key === "light_full_agreement")!;
+  expect(agree.failures!.join()).toContain("judges industry_fit");
+  expect(agree.failures!.join()).toContain("too high");
+});

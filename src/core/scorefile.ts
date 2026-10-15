@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { dirname, join } from "node:path";
 import { parse as parseCsv } from "csv-parse/sync";
 import { canTransition } from "./contracts.ts";
-import { parseYaml, readDoc, stringifyDoc } from "./frontmatter.ts";
+import { parseDoc, parseYaml, readDoc, stringifyDoc } from "./frontmatter.ts";
 import { normalizeDomain } from "./normalize.ts";
 import { FactorScore, Scoring, type Company, type ScoreFile } from "./schemas.ts";
 import { backtest, computeScore, recalibrate, sanitizeJudgements, sensitivity, type LabeledAccount, type Mode } from "./score.ts";
@@ -61,6 +61,13 @@ export async function writeScore(a: WriteScoreArgs) {
   });
 }
 
+/** The light pass's result, kept inside the full score file. */
+export interface LightRecord {
+  total: number;
+  scored_at: string;
+  levels: Record<string, number | null>;
+}
+
 async function writeScoreInner(a: WriteScoreArgs) {
   const scoring = await loadScoring(a.ws, a.icp);
   const domain = normalizeDomain(a.domain) ?? a.domain;
@@ -106,6 +113,13 @@ async function writeScoreInner(a: WriteScoreArgs) {
   };
   if (a.calibration) file.label = a.calibration;
   const target = a.calibration ? calibrationPath(a.ws, a.icp, domain) : paths.score(a.ws, domain, a.icp);
+  // Keep what the light pass said, so light-vs-full agreement can be measured per factor later.
+  if (a.mode === "full" && existsSync(target)) {
+    const prev = parseDoc<ScoreFile & { light?: LightRecord }>(readFileSync(target, "utf8")).data;
+    const light: LightRecord | undefined =
+      prev.mode === "light" ? { total: prev.total, scored_at: prev.scored_at, levels: Object.fromEntries(prev.factors.map((f) => [f.id, f.level ?? null])) } : prev.light;
+    if (light) (file as ScoreFile & { light?: LightRecord }).light = light;
+  }
   const rel = target.slice(a.ws.length + 1);
   const content = stringifyDoc(file, renderBody(scoring, file, a.calibration));
   const cfg = await loadConfig(a.ws).catch(() => null);

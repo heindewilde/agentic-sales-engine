@@ -250,17 +250,18 @@ export function researchTrajectory(ws: string): EvalResult[] {
  * Failures name accounts the light pass put in its top third that full research put in the bottom third.
  */
 export function lightFullAgreement(ws: string): EvalResult[] {
-  const byIcp = new Map<string, { d: string; light: number; full: number }[]>();
+  const byIcp = new Map<string, { d: string; light: number; full: number; levels?: Record<string, number | null>; fullLevels: Record<string, number | null> }[]>();
   for (const d of accountDirs(ws)) {
     const cp = paths.company(ws, d);
     const sdir = join(ws, "accounts", d, "scores");
     if (!existsSync(cp) || !existsSync(sdir)) continue;
     const status = (parseDoc<Company>(readFileSync(cp, "utf8")).data.icp_status ?? {}) as Record<string, { light_score?: number }>;
     for (const f of readdirSync(sdir).filter((x) => x.endsWith(".md"))) {
-      const s = parseDoc<ScoreFile>(readFileSync(join(sdir, f), "utf8")).data;
-      const light = status[s.icp]?.light_score;
+      const s = parseDoc<ScoreFile & { light?: { total: number; levels: Record<string, number | null> } }>(readFileSync(join(sdir, f), "utf8")).data;
+      const light = s.light?.total ?? status[s.icp]?.light_score;
       if (s.mode !== "full" || typeof light !== "number") continue;
-      (byIcp.get(s.icp) ?? byIcp.set(s.icp, []).get(s.icp)!).push({ d, light, full: s.total });
+      const fullLevels = Object.fromEntries(s.factors.map((x) => [x.id, x.level ?? null]));
+      (byIcp.get(s.icp) ?? byIcp.set(s.icp, []).get(s.icp)!).push({ d, light, full: s.total, levels: s.light?.levels, fullLevels });
     }
   }
   const out: EvalResult[] = [];
@@ -274,6 +275,22 @@ export function lightFullAgreement(ws: string): EvalResult[] {
     const lightTop = new Set([...rows].sort((a, b) => b.light - a.light).slice(0, third).map((r) => r.d));
     const fullBottom = new Set([...rows].sort((a, b) => a.full - b.full).slice(0, third).map((r) => r.d));
     const failures = rows.filter((r) => lightTop.has(r.d) && fullBottom.has(r.d)).map((r) => `${r.d}: light ${r.light} → full ${r.full}`);
+    // Which light factors are judged differently once research is in: the anchors to sharpen.
+    const bias = new Map<string, { sum: number; n: number }>();
+    for (const r of rows) {
+      for (const [id, l] of Object.entries(r.levels ?? {})) {
+        const f = r.fullLevels[id];
+        if (l === null || f === null || f === undefined) continue;
+        const b = bias.get(id) ?? { sum: 0, n: 0 };
+        b.sum += l - f;
+        b.n++;
+        bias.set(id, b);
+      }
+    }
+    for (const [id, b] of bias) {
+      const m = b.sum / b.n;
+      if (b.n >= 3 && Math.abs(m) >= 0.5) failures.push(`light pass judges ${id} ${Math.abs(m).toFixed(1)} level(s) too ${m > 0 ? "high" : "low"} on average (n=${b.n}): sharpen its anchors for what a homepage shows, or make it a full-only factor`);
+    }
     const avg = (xs: number[]) => Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10;
     out.push({
       key: "light_full_agreement",
