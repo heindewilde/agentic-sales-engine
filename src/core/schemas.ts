@@ -168,8 +168,17 @@ export const Factor = z.object({
   question: z.string(),
   levels: z.object({ 0: z.string(), 1: z.string(), 2: z.string(), 3: z.string() }),
   evidence_hint: z.string().optional(),
-  /** rule-based judging from a numeric fact — see autojudge.ts */
-  auto: z.object({ fact: z.string(), levels: z.object({ 0: z.string().optional(), 1: z.string().optional(), 2: z.string().optional(), 3: z.string().optional() }) }).optional(),
+  /** optional worked example per level, shown to every judge: sharper anchors give more consistent levels */
+  examples: z.object({ 0: z.string().optional(), 1: z.string().optional(), 2: z.string().optional(), 3: z.string().optional() }).optional(),
+  /** rule-based judging from a numeric fact or a count of recent signals — see autojudge.ts */
+  auto: z
+    .object({
+      fact: z.string().optional(),
+      signals: z.object({ types: z.array(z.enum(SIGNAL_TYPES)).min(1), within_days: z.number().int().positive() }).optional(),
+      levels: z.object({ 0: z.string().optional(), 1: z.string().optional(), 2: z.string().optional(), 3: z.string().optional() }),
+    })
+    .refine((a) => Boolean(a.fact) !== Boolean(a.signals), { message: "auto needs exactly one of fact or signals" })
+    .optional(),
 });
 export type Factor = z.infer<typeof Factor>;
 

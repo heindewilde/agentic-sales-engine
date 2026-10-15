@@ -88,8 +88,13 @@ export async function buildContext(ws: string, icpSlug: string, domains: string[
       personas: (icp.personas ?? []).map((p) => ({ name: p.name, titles: p.titles, role_in_deal: p.role_in_deal })),
     },
     mode,
-    factors: inScope.filter((f) => !f.auto).map((f) => ({ id: f.id, group: f.group, q: f.question, levels: f.levels, hint: f.evidence_hint, knockout: f.knockout?.level_lte })),
-    auto_factors: inScope.filter((f) => f.auto).map((f) => ({ id: f.id, computed_from_fact: (f.auto as { fact: string }).fact, note: "scored by the engine from this fact — provide the fact, don't judge the factor" })),
+    factors: inScope.filter((f) => !f.auto).map((f) => ({ id: f.id, group: f.group, q: f.question, levels: f.levels, ...(f.examples ? { examples: f.examples } : {}), hint: f.evidence_hint, knockout: f.knockout?.level_lte })),
+    auto_factors: inScope.filter((f) => f.auto).map((f) => {
+      const a = f.auto as { fact?: string; signals?: { types: string[]; within_days: number } };
+      return a.signals
+        ? { id: f.id, computed_from_signals: a.signals, note: "scored by the engine by counting dated signals of these types in this window — record every such event as a signal (type, date, source), don't judge the factor" }
+        : { id: f.id, computed_from_fact: a.fact, note: "scored by the engine from this fact — provide the fact, don't judge the factor" };
+    }),
     rules: RULES_DIGEST,
     learnings: learningLines(ws),
     accounts,

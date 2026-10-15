@@ -172,3 +172,21 @@ test("fetch_pages with focus: model gets the relevant excerpt, the snapshot keep
   expect(page.text).toContain("accounts payable clerk");
   expect(readFileSync(join(ws, page.raw_ref), "utf8")).toContain("Product line 59");
 });
+
+test("signal-count rules: dated signals in the window set the level; no signals is 0 only after research", async () => {
+  const { autoJudge } = await import("../../src/core/autojudge.ts");
+  const { Factor } = await import("../../src/core/schemas.ts");
+  const f = Factor.parse({
+    id: "growth_move", name: "Growth move", group: "intent", weight: 3, question: "Expansion in the last 12 months?",
+    levels: { 0: "none", 1: "older", 2: "one", 3: "two or more" },
+    auto: { signals: { types: ["expansion", "mna"], within_days: 365 }, levels: { 0: "0", 2: "1", 3: ">=2" } },
+  });
+  const sig = (date: string, type: string, title: string) => ({ date, type, title, source_url: `https://news.example/${title}`, raw_ref: `raw/2026-10/${title}.md`, status: "new" }) as never;
+  const today = "2026-10-15";
+  const two = autoJudge(f, { facts: {} }, { today, researched: true, signals: [sig("2026-07-01", "mna", "acq"), sig("2026-03-01", "expansion", "store"), sig("2026-05-01", "hiring", "cfo")] });
+  expect(two).toMatchObject({ level: 3, evidence: [{ quote: "2026-07-01: acq" }, { quote: "2026-03-01: store" }] });
+  const old = autoJudge(f, { facts: {} }, { today, researched: true, signals: [sig("2025-01-01", "expansion", "old")] });
+  expect(old).toMatchObject({ level: 0, evidence: [{ checked: true }] });
+  expect(autoJudge(f, { facts: {} }, { today, researched: false, signals: [] })).toBeNull(); // nobody looked yet
+  expect(() => Factor.parse({ ...f, auto: { fact: "employees", signals: { types: ["mna"], within_days: 30 }, levels: {} } })).toThrow();
+});

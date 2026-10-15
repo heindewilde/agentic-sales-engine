@@ -173,7 +173,7 @@ export async function judgeStability(ws: string, o: Required<Pick<LlmOptions, "j
         'Answer with JSON only: [{"id":"<factor id>","level":0|1|2|3|null}]',
         "",
         "RUBRIC:",
-        ...scoring.factors.map((fa) => `- ${fa.id}: ${fa.question} | 0: ${fa.levels[0]} | 1: ${fa.levels[1]} | 2: ${fa.levels[2]} | 3: ${fa.levels[3]}`),
+        ...scoring.factors.filter((fa) => !fa.auto).map((fa) => `- ${fa.id}: ${fa.question} | 0: ${fa.levels[0]} | 1: ${fa.levels[1]} | 2: ${fa.levels[2]} | 3: ${fa.levels[3]}${fa.examples ? ` | examples: ${JSON.stringify(fa.examples)}` : ""}`),
         "",
         "EVIDENCE:",
         evidence,
