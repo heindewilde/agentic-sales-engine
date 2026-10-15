@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { persistCandidates } from "../../src/core/accounts.ts";
@@ -18,6 +18,7 @@ const ICP = "ap-automation-midmarket";
 const fixture = () => {
   const ws = join(mkdtempSync(join(tmpdir(), "ase-fn-")), "ws");
   cpSync(join(PLUGIN_ROOT, "fixtures/workspace-ledgerly"), ws, { recursive: true });
+  mkdirSync(join(ws, "imports/seeds"), { recursive: true }); // empty dirs don't survive git
   return ws;
 };
 const company = async (ws: string, d: string) => (await readDoc<Company>(join(ws, "accounts", d, "company.md"))).data;
