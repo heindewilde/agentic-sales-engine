@@ -37,6 +37,9 @@ agents write to it over months, and so that one stage can rely on what another l
 - Work autonomously **within** a stage. Stop at the gates and ask a human:
   - **GATE 1** — ICP approval (`status: approved` + `approved_by`).
   - **GATE 2** — shortlist approval before deep research, with a cost estimate (`approved_by` on each account).
+  - **GATE 3** — score review before ways in and outreach: the team checks the full scores (rank, `--explain`) and
+    decides which tier A/B accounts go on to engagement.
+  - **Draft review** — drafts are read, edited and sent by a person; nothing moves on until they're reviewed.
 - Nothing is ever sent to a prospect. Outreach is drafted only.
 - In unattended runs (batch/scheduled), never pass a gate: write proposals and stop. Batch sessions may only run
   `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts …` via Bash (one command per call); explore with Glob/Read/Grep.

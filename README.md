@@ -20,10 +20,9 @@
 
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
-  <a href="#see-it-work">See it work</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#autopilot">Autopilot</a> ·
-  <a href="#quality-you-can-measure">Quality</a> ·
+  <a href="#quality-and-observability">Quality & observability</a> ·
   <a href="#what-it-costs">What it costs</a> ·
   <a href="#how-it-compares">How it compares</a> ·
   <a href="#faq">FAQ</a>
@@ -48,8 +47,8 @@ autonomously and hands each step's findings to the next one:
 - **Research-first.** It reads company sites, job ads, news and registries, maps the buying committee to your personas, and keeps a running brief per account with the questions still open.
 - **Evidence or nothing.** Every fact has a source, date and confidence. A write hook *rejects* unsourced claims. Unknowns stay unknown instead of being guessed.
 - **Explainable scores.** Your own Fit × Intent × Access rubric, back-tested against customers you already know. Every point in a score links to a quote.
-- **You stay in charge.** You approve the ICP and the shortlist (with a cost estimate) before money is spent on deep research. Nothing is ever sent for you.
-- **It checks its own work.** A built-in eval suite measures whether claims match their sources, handoffs are complete and drafts follow the rules. Every step can be traced with OpenTelemetry.
+- **You stay in charge.** You approve the ICP, the shortlist before deep research, and the scores before any outreach work. Nothing is ever sent for you.
+- **It checks its own work.** Built-in evals measure whether claims match their sources, handoffs are complete and drafts follow the rules. Connect Langfuse or LangSmith to see every step, score and dataset.
 - **It learns.** Outcomes flow back into win-loss reviews and score recalibration.
 - **Your data stays yours.** Everything lives in a git repository of plain markdown that your team can read, edit, review and diff. No SaaS database.
 
@@ -71,11 +70,12 @@ Then open Claude Code in an empty folder and run:
 From there `/agentic-sales-engine:status` always tells you the next step. Or let it run hands-off:
 
 ```text
-/agentic-sales-engine:autopilot start --icp <your-icp> --budget 50
+/agentic-sales-engine:autopilot start --icp <your-icp>
 ```
 
-Autopilot discovers, scores, researches, finds ways in and drafts on its own. It pauses only for you to approve the
-shortlist and review the drafts, and it stays within one budget.
+Autopilot discovers, scores, researches, finds ways in and drafts on its own. It pauses only for your decisions:
+approving the shortlist, reviewing the scores and reviewing the drafts. On a Claude subscription that's all; with an
+API key, add `--budget <usd>` to cap what it spends.
 
 <details>
 <summary><b>Provider keys</b> (optional, but recommended)</summary>
@@ -94,114 +94,6 @@ For headless batch runs on your machine, store them once with
 `npx firecrawl-cli login --browser` followed by `ase keys pull-firecrawl`.
 </details>
 
-## See it work
-
-A walkthrough with a fictional company: **Ledgerly**, which sells accounts-payable automation to mid-market companies in
-the Benelux and DACH. The excerpts below follow the engine's real file formats. The companies and people are invented.
-
-**1 · ICP.** `icp-build` reads Ledgerly's website and its ten best (and five worst) customers, then asks three
-questions it couldn't answer (deal size, who signs, why deals are lost). It drafts *"Mid-market companies drowning in
-supplier invoices"*: wholesale, manufacturing and logistics, 100–1,000 staff, a mid-market ERP, no AP tooling, with
-triggers like a new CFO or an acquisition. You approve it (**gate 1**).
-
-**2 · Scoring model.** `scoring-design` proposes eight factors with anchored 0–3 levels and back-tests them on the
-customers you named.
-
-```text
-# summary of `ase score backtest` + `ase score sensitivity`
-Back-test v1:  AUC 1.00 · median good customer outranks 92% of the field
-               verdict: pass
-Sensitivity:   finance_change and industry_fit carry the ranking;
-               warm_path is weak but kept (access)
-```
-
-**3 · Discover and light-score.** `discover` runs the ICP's queries per country and saves 300+ deduplicated candidates
-(your customers and competitors are excluded automatically). `enrich-light` gives each a cited snapshot and a cheap
-score, in batches of headless sessions. `shortlist` proposes the top 15% with a cost estimate, and you approve it
-(**gate 2**).
-
-**4 · Deep research.** For each shortlisted account a research agent works through the brief's open questions:
-
-<details>
-<summary><b>Account brief</b> — <code>accounts/maasverhoeven.example/brief.md</code> (excerpt)</summary>
-
-```markdown
-## Snapshot
-Maas & Verhoeven Foodservice is a family-owned B2B food wholesaler in Ghent supplying
-~6,000 restaurants and independent retailers from three depots; ~310 employees.[^1][^2]
-
-## Situation & triggers
-- 2026-07-01 — acquired Delcourt Traiteur (Liège), its 9th acquisition since 2015.[^3]
-- 2026-09-10 — launched "Buurtmarkt", a convenience format for independent shops, with a
-  national retailer (10 → 100 stores).[^4]
-- Careers page: 14 open roles in logistics and sales, none in finance or AP.[^5]
-
-## Open questions
-- [x] Is supplier invoice volume high? → ~1,200 active suppliers (2025 annual report).[^6]
-- [ ] Which ERP runs AP after the Delcourt acquisition?
-      (unknown after research; owner: call-prep)
-- [ ] Is there already an OCR/AP tool in use?
-      (unknown after research; owner: call-prep)
-
-[^3]: Gondola Foodservice, https://news.example/maas-verhoeven-acquires-delcourt (2026-07-01)
-```
-</details>
-
-<details>
-<summary><b>Score breakdown</b> — light 75 (A) → full 62 (B), upside 86</summary>
-
-| Factor | Group | Level | Evidence |
-|---|---|---|---|
-| Headcount in range | fit | 3 — 150–700 | "approximately 310 employees" (registry.example) |
-| Invoice-heavy industry | fit | 3 — wholesale / distribution | "B2B food wholesaler" (maasverhoeven.example/about) |
-| Compatible mid-market ERP | fit | unknown | — no source found (caps the score; listed as open question) |
-| Finance or system change | intent | 3 — change in last 6 months | "acquired Delcourt Traiteur" (news.example, 2026-07-01) |
-| Hiring AP clerks | intent | 0 — no | "14 open roles … logistics and sales" (careers page) |
-| Warm path to a persona | access | 0 — no connections | team warm-matches.yaml |
-
-*Unknown is not zero:* the ERP factor uses a conservative prior, and the **upside** shows what the account could score
-if research confirms it. `score --explain` turns this into plain language.
-</details>
-
-**5 · Ways in, outreach, call prep.**
-
-<details>
-<summary><b>LinkedIn connection note</b> — drafted, never sent</summary>
-
-```markdown
-Hi Sofie, congrats on the Delcourt acquisition, the ninth one if I count right.[^1]
-Bringing another entity's suppliers into one AP process is usually where the fun starts.
-I work on that problem for wholesalers and would enjoy comparing notes. Happy to connect.
-
-[^1]: Gondola Foodservice, https://news.example/maas-verhoeven-acquires-delcourt (2026-07-01)
-```
-
-Your edits to drafts are kept next to the originals, and `voice-profile --learn` turns them into style rules.
-</details>
-
-<details>
-<summary><b>Call prep</b> — <code>callprep/2026-10-22.md</code> (excerpt)</summary>
-
-```markdown
-## 4. Discovery questions (SPIN)
-Situation    1. Which ERP(s) does AP run on today — the same for both entities?
-Problem      3. How do supplier invoices reach AP per entity, and how many per month?
-Implication  6. When invoices slip, what happens to supplier terms and the close?
-Need-payoff  8. If invoices were routed automatically across entities, what would
-                your team do with that time?
-
-## 5. Qualification gaps (MEDDICC)
-| Metrics        | unknown — no invoice volumes   | invoices/month per entity, AP FTEs |
-| Economic buyer | Sofie Claes, Finance Director  | who signs a €18–40k contract       |
-| Champion       | supplier-accounting lead (?)   | will they sponsor a pilot?         |
-```
-</details>
-
-**6 · Learn.** You mark drafts as sent. Silence counts as *no response* after 21 days, and a weekly
-`review-outcomes` asks one multiple-choice question per open account. Once enough outcomes exist, `win-loss` shows
-which tiers, triggers and channels actually convert, with honest error bars, and proposes rubric and weight changes for
-you to approve.
-
 ## How it works
 
 <p align="center">
@@ -211,7 +103,8 @@ you to approve.
   </picture>
 </p>
 
-**Wide, then deep.** Cheap passes over hundreds of companies; expensive research only on the shortlist you approve.
+**Wide, then deep.** Quick passes over hundreds of companies; deep research only on the shortlist you approve, and
+outreach work only on the accounts whose scores you've reviewed.
 
 **Handoffs, not prompts.** Every account has a `brief.md` with fixed sections. Its **Open questions** are the next
 stage's research agenda, and each stage leaves the brief better than it found it. A stage can only mark an account as
@@ -222,7 +115,7 @@ stored as `{value, source_url, retrieved_at, confidence}`. Claude Code hooks gua
 do-not-contact entities, non-business personal data and edits to source snapshots are rejected before they land.
 A SQLite index is rebuilt from the files for fast queries. Facts expire, and `refresh` and `sync` keep them current.
 
-**Deterministic where it matters.** Anything that must be exactly right is code with tests (≈130), not prompt
+**Deterministic where it matters.** Anything that must be exactly right is code with tests (160+), not prompt
 instructions: score maths, back-tests, budgets, deduplication, privacy rules and stage contracts. The LLM does what it's
 good at: reading, judging against a rubric, and writing.
 
@@ -246,33 +139,33 @@ my-sales-workspace/
 
 ## Autopilot
 
-Run the whole funnel for an ICP with one command. It works through every step on its own, stops only where a human
-should decide, and stays within the budget you give it.
+Run the whole funnel for an ICP with one command. It works through every step on its own and stops only where a
+human should decide.
 
 ```text
-/agentic-sales-engine:autopilot start --icp ap-automation-midmarket --budget 50
+/agentic-sales-engine:autopilot start --icp ap-automation-midmarket
 ```
 
-This is the actual status from a live run on real Benelux wholesalers (started with `--until shortlist`, so the later
-steps were skipped):
+A run waiting at its first gate, on a Claude subscription:
 
 ```text
-autopilot 20261015-145833-autopilot · ap-automation-midmarket · waiting · spent $0.59 of $2
-  ✓ discover      25 new candidates  ($0.26)
-  ✓ enrich_light  25/25 light-scored  ($0.33)
-  ⏸ shortlist     proposed 6 of 25 (≈ $3–6)
-  – research
-  – score
-  – ways_in
-  – drafts
+autopilot 20261015-145833-autopilot · ap-automation-midmarket · waiting
+          providers $0.09 of $5 · Claude on your subscription (≈ $0.50 API-equivalent)
+  ✓ discover      25 new candidates
+  ✓ enrich_light  25/25 light-scored
+  ⏸ shortlist     proposed 6 of 25
+  · research
+  · score
+  · ways_in
+  · drafts
 
 GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist.md
-        (6 accounts, ≈ $0.24–0.48 Exa/Firecrawl) and approve: ase autopilot approve --by <member>
+        (6 accounts) and approve: ase autopilot approve --by <member>
 ```
 
-- **Three gates, never skipped.** It waits for you to approve the shortlist (with its cost estimate) before deep
-  research, to review the full scores before any ways-in work or drafting, and to review the drafts at the end. Untick
-  accounts in the shortlist file to leave them out.
+- **Your decisions, never skipped.** It waits for you at the shortlist (gate 2: which accounts get deep research,
+  with a cost estimate), at the scores (gate 3: which accounts are worth approaching) and at the drafts (you edit and
+  send). Untick accounts in the shortlist file to leave them out.
 - **Resumable.** Progress is checkpointed after every step; the account files remain the source of truth. After a crash, a
   gate or a budget stop, `resume` continues where it left off without repeating finished work.
 - **One budget, only where money is spent.** With an API key, every model and data call counts against it. On a
@@ -286,88 +179,85 @@ GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist
 
 `/agentic-sales-engine:status` shows a waiting or failed run at the top, and the skill walks you through each gate.
 
-## Quality you can measure
+## Quality and observability
 
-AI research is only useful if you can trust it, so the engine checks its own output. Results come back as
-`{ key, score, comment }` (the OpenEvals convention), are saved per run in your workspace, and are compared with the
-previous run. A drop of more than 0.05 is flagged as a regression.
-
-| Evaluator | What it catches | Cost |
-|---|---|---|
-| `citation_faithfulness` | a scored quote that isn't actually in the source it cites | free |
-| `brief_grounding` | statements in a brief without a source (reported absences are fine) | free |
-| `snapshot_coverage` | cited pages that were never saved, so nobody can verify them later | free |
-| `handoff_completeness` | a stage marked done while the next stage lacks what it needs | free |
-| `draft_rules` | drafts that are too long, uncited, clichéd, or contain numbers not in the sources | free |
-| `research_trajectory` | the expensive research agent used before cheap lookups | free |
-| `claim_support` | Claude judges each statement against all of its cited sources | ~$0.05 per account |
-| `judge_stability` | re-scoring the same evidence gives different factor levels | ~$0.05 per account |
-| `draft_quality` | drafts that aren't specific, relevant, grounded or clear in their ask | ~$0.03 per draft |
+Two questions matter once the engine runs on its own: **is the output any good, and what exactly did it do?** Connect
+[Langfuse](https://langfuse.com) or [LangSmith](https://smith.langchain.com), or both side by side to compare them,
+and the engine answers both there. You choose the tool; connecting it is one command.
 
 ```text
-ase eval run --text                                    # free checks, seconds
-ase eval run --suite llm --budget 1 --sample 3 --text  # Claude as judge, on your Claude login
+pbpaste | ase observability connect langfuse      # clipboard: pk-lf-…:sk-lf-…  (cloud or self-hosted, --host)
+pbpaste | ase observability connect langsmith     # clipboard: your API key    (--project, --endpoint)
+ase observability status                          # what's connected, checked live
 ```
 
-The free checks also run in CI on a fully researched fictional account, so a change to the engine that weakens sourcing
-or draft hygiene fails the build. On a real research run, the paid suite found facts cited to pages that didn't contain
-them, two rubric factors whose wording gets re-judged differently, and a draft with an unbacked claim and a vague ask.
-Each came with the fix to make. Details in [docs/evals.md](docs/evals.md).
+Keys are read from stdin and stored in your private credentials file, never in a repository. From then on:
 
-## See every step
+| You get | How | In the tool |
+|---|---|---|
+| **A trace of every run** | automatic: autopilot, batches, headless sessions, provider calls, scoring | one connected trace per run, with tool calls, costs, durations and outcomes |
+| **Quality scores** | `ase eval run --push [--experiment <label>]` | scores attached to the run, comparable across experiments |
+| **Datasets** | `ase dataset push --icp <slug>` | accounts as input → expected output pairs to test prompt or rubric changes against |
 
-Connect a tool with one command (`pbpaste | ase observability connect langfuse`, or `langsmith`, or both side by side)
-and every run becomes a trace there. Eval scores (`ase eval run --push`) and datasets (`ase dataset push`) follow. Any
-other OpenTelemetry backend (Phoenix, Jaeger, Grafana…) works through the standard OTLP variables:
+A trace follows one run across every process involved (the labels in brackets), so "why did this account score low?"
+and "where did the time go?" are one click each:
 
 ```text
-autopilot.run                        [autopilot]  budget · status · spent
+autopilot.run                        [autopilot]  status · providers spent
 └─ autopilot.step.enrich_light
    └─ batch.run                      [batch]      skill · accounts · advanced
-      └─ batch.chunk                              model · tokens · cost
+      └─ batch.chunk                              model · tokens · usage
          ├─ tool.fetch_pages  2.8s   [session]
-         ├─ provider.fetch_pages     [gateway]    firecrawl · $0.004
+         ├─ provider.fetch_pages     [gateway]    firecrawl · cost
          ├─ tool.Edit  error         [session]    rejected or failed edit
          └─ score.compute            [cli]        53.6 · tier B
 ```
 
-The labels in brackets are separate processes (the autopilot, batch driver, headless Claude session, provider gateway and
-CLI), yet they show up as one connected trace. That makes "why did this account score low?" and "where did the money go?" one click each. Spans
-carry metadata only (operations, domains, costs, durations, outcomes) unless you explicitly turn on content capture.
-Setup in [docs/observability.md](docs/observability.md) and [docs/tracing.md](docs/tracing.md).
+**What the quality scores measure.** Free checks run in seconds and also in CI: are scored quotes really in the
+sources they cite, is every statement in a brief sourced, was every cited page saved, is each handoff complete, and do
+drafts follow the rules. Claude-as-judge checks go further: is each statement supported by what it cites, does
+re-scoring the same evidence give the same levels, and are drafts specific, grounded and clear in their ask. Each
+finding comes with the fix to make. Details in [docs/evals.md](docs/evals.md).
+
+**Compare changes.** `bun bench/run.ts --label <change> --push` runs a fixed workload and sends its scores as an
+experiment, so a new prompt, model or rubric is judged on the same data as the last one.
+
+Traces carry metadata only (operations, domains, costs, durations, outcomes) unless you turn on content capture.
+Phoenix, Jaeger, Grafana and any other OpenTelemetry backend work too, through the standard OTLP variables. Setup:
+[docs/observability.md](docs/observability.md) · [docs/tracing.md](docs/tracing.md).
 
 ## What it costs
 
-**On a Claude subscription (Pro, Max, Team), Claude itself costs you nothing extra.** Every session, including batch
-and autopilot runs, runs through Claude Code on your login, so it uses your plan's usage instead of API credits. The
-only money you spend goes to Exa and Firecrawl, about **$0.04 per deep-researched account**. With an API key (or
-Bedrock or Vertex), Claude is billed per token. The figures below are those API prices, which on a subscription show
-how much plan usage a run takes.
+Two things can cost money: **Claude** and the **data providers**. Both are small per account, and the engine shows
+you what a run will cost before it spends anything that matters.
 
-Measured on real runs with live Exa and Firecrawl calls and real Claude sessions (API-equivalent model cost). Your
-numbers will vary with list size, model choice and how much research an account needs.
+| | What you pay |
+|---|---|
+| **Claude, on a subscription** (Pro, Max, Team) | Nothing extra. Every session, including batch and autopilot runs, runs through Claude Code on your login. Big runs count toward your plan's usage limits. |
+| **Claude, with an API key** (or Bedrock, Vertex) | Per token. This is most of the cost of a run, mainly deep research. |
+| **Data providers** (Exa, Firecrawl) | Cents per account. Both have free tiers, and both are optional. |
+| **Observability** (Langfuse, LangSmith) | Optional. Both have free tiers, and Langfuse can be self-hosted. |
 
-The engine is built to be cheap per account. Each stage session gets one compact `ase context` instead of reading
-files one by one. It writes everything in one validated `ase apply` instead of re-typing markdown files. Page fetches
-return only the paragraphs relevant to the open questions, while the full page is still saved for citation. Numeric
-factors like headcount are scored by code, and each stage runs on the cheapest model that holds its quality bar.
+**Rough orders of magnitude per account**, measured on real runs. These are indicative: they depend on the providers
+and models you pick and how much there is to find, and they keep going down as the engine is optimised.
 
-| Step | Typical cost | Of which data providers |
+| Stage | Data providers | Claude (API-equivalent) |
 |---|---|---|
-| Discovery (Haiku) | ~$0.003 per candidate company | Exa search |
-| Light enrichment + score (Haiku, 10 per session) | **~$0.002 per account** | ≈ $0.001 |
-| Deep research + full score (Sonnet, 2 per session) | **~$0.23 per account** | ~$0.04 |
-| Ways in · outreach draft · call prep | ~$0.30 · ~$0.30 · ~$0.40 per account | ~$0.01 |
-| Monitoring (`sync`) | ~$0.02 per watched account per check | Exa + Firecrawl |
-| Quality evals | free offline · ~$0.05 per account with Claude as judge | — |
-| **Real example:** autopilot, 25 companies discovered and light-scored, shortlist proposed | **$0.59 in total** | $0.09 |
+| Discover + light score | well under a cent | well under a cent |
+| Deep research + full score | a few cents | tens of cents |
+| Ways in + outreach draft | about a cent | a few cents to tens of cents |
 
-**A full cycle of 300 discovered and 45 deep-researched accounts comes to roughly $10–20, most of it deep research.**
-That's about 70% less than the first version of the engine on the same benchmark, with quality scores up rather than down:
-see [bench/](bench/) for the fixed workload, and run it yourself to compare changes. Every run has a budget:
-the engine estimates the cost before deep research, enforces per-run and per-day caps before each paid call, and logs
-every dollar to `ledger/costs.jsonl`. On a subscription, budgets only cap Exa/Firecrawl and the engine won't ask you for
-one. Claude usage is logged as an API-equivalent figure that isn't counted as spend.
+**Example:** one real first cycle, with about 150 companies discovered, 26 researched and 16 accounts drafted, cost
+**under $1.50 in data providers**. Claude came out of the subscription; on an API key it would have added about $8.
+
+**You stay in control:**
+- Before deep research, the shortlist shows a cost estimate for the accounts you tick.
+- Budgets per run and per day are checked before every paid call. On a subscription they cap the data providers only,
+  and the engine doesn't ask you for one. With an API key they cover Claude too.
+- Every paid call is logged in `ledger/costs.jsonl` (`ase ledger report`), and Claude usage on a subscription is
+  logged as an API-equivalent figure, so you can see what a run takes.
+- [bench/](bench/) runs a fixed workload to measure cost and quality together, so optimisations never trade one for
+  the other unseen.
 
 ## How it compares
 
@@ -379,13 +269,13 @@ one. Claude usage is logged as an API-equivalent figure that isn't counted as sp
 | Memory across steps and runs | ✅ briefs + open questions | ◐ the table | ✅ records | ✗ |
 | Learns from outcomes | ✅ win-loss + recalibration | ✗ | ◐ | ✗ |
 | Checks its own output quality | ✅ eval suite, in CI and on real output | ✗ | ✗ | ✗ |
-| Step-by-step traces of what it did | ✅ OpenTelemetry, any backend | ◐ run history | ✗ | ✗ |
+| Step-by-step traces of what it did | ✅ Langfuse, LangSmith or any OpenTelemetry backend | ◐ run history | ✗ | ✗ |
 | Runs end to end on its own | ✅ autopilot, pauses at your gates | ◐ table automations | ◐ sequences | ✗ |
 | Contact data (emails, phones) at scale | ◐ people search; bring your own | ✅ waterfall enrichment | ✅ large database | ✗ |
 | Sends sequences | ✗ by design: drafts only | ✅ via integrations | ✅ | ✗ |
 | Your data | ✅ plain files in your git repo | their platform | their platform | chat history |
 | Customizable | ✅ MIT; methodology is markdown, scoring is YAML | ◐ workflows | ◐ settings | ◐ prompts |
-| Pricing | pay per use (see above) | subscription + credits | per seat | subscription |
+| Pricing | your Claude plan + cents per account | subscription + credits | per seat | subscription |
 
 It's not a contact database or a sending tool. It pairs well with one: import their lists as seeds, and send from
 whatever you already use.
@@ -398,7 +288,7 @@ whatever you already use.
 | Stage | Skill | What it does |
 |---|---|---|
 | Start | `setup` | Create or check a workspace |
-|  | `autopilot` | Run the whole funnel hands-off, pausing at your gates, within one budget |
+|  | `autopilot` | Run the whole funnel hands-off, pausing at your three gates and the draft review |
 |  | `status` | Funnel, gates, spend, outcomes and the next action |
 | Define | `icp-build` | ICP from your site, materials and best customers; market-size check; **gate 1** |
 |  | `scoring-design` | Fit × Intent × Access rubric, back-test, sensitivity, versioning |
@@ -407,7 +297,7 @@ whatever you already use.
 |  | `enrich-light` | Cited snapshot + light score per account (batched) |
 |  | `shortlist` | Proposal with cost estimate; **gate 2** |
 |  | `research` | Deep research: triggers, buying committee, systems, risks → full score |
-|  | `score` | Re-score; `--explain` says what drives a score |
+|  | `score` | Re-score; `--explain` says what drives a score; **gate 3** (review before engaging) |
 | Engage | `ways-in` | Rank warm intros and trigger hooks |
 |  | `voice-profile` | Learn your writing voice from samples and from your edits |
 |  | `draft-outreach` | Email, LinkedIn or intro-request drafts, grounded and cited, never sent |
@@ -451,8 +341,9 @@ workspace. This isn't legal advice: have your DPO look at it.
 <details>
 <summary><b>Do I need API keys?</b></summary>
 
-No. Without keys it uses Claude Code's built-in web search and the lists you import. With Exa (and ideally Firecrawl)
-discovery, people search and site extraction are much better, and both have free tiers.
+No. Claude runs on your Claude Code login, so no Anthropic API key is needed. Without data-provider keys it uses
+Claude Code's built-in web search and the lists you import. With Exa (and ideally Firecrawl), discovery, people search
+and site extraction are much better, and both have free tiers.
 </details>
 
 <details>
@@ -484,16 +375,16 @@ rubric or a skill.
 <details>
 <summary><b>Can I see exactly what it did, and what each step cost?</b></summary>
 
-Yes, in two ways. Every paid call is logged in `ledger/costs.jsonl` (`ase ledger report`). With OpenTelemetry enabled,
-each run is a trace you can open in Langfuse, LangSmith, Phoenix or Jaeger, showing every tool call, provider call, cost
-and score ([docs/tracing.md](docs/tracing.md)).
+Yes. Every paid call is logged in `ledger/costs.jsonl` (`ase ledger report`). Connect Langfuse or LangSmith
+(`ase observability connect …`) and each run is a trace showing every tool call, provider call, cost and score
+([docs/observability.md](docs/observability.md)).
 </details>
 
 <details>
 <summary><b>How is this different from asking Claude to research a company?</b></summary>
 
 That's one good answer that's gone tomorrow. Here, research is persistent (briefs, sourced facts, open questions),
-comparable (one rubric across hundreds of accounts), gated (you approve what gets researched and what it costs),
+comparable (one rubric across hundreds of accounts), gated (you approve what gets researched and who gets approached),
 repeatable (autopilot, batches, monitoring), measurable (evals, traces) and self-improving (outcomes feed back into
 the ICP and the scoring).
 </details>
@@ -516,7 +407,7 @@ your scoring rubric is a YAML file you own, and every stage is a skill file you 
 
 ```bash
 bun install
-bun test                         # ~130 offline tests, incl. a simulated learning loop
+bun test                         # 160+ offline tests, incl. a simulated learning loop
 bun src/cli/ase.ts eval run --workspace fixtures/workspace-ledgerly --min 1  # CI gate
 ASE_LIVE=1 bun test tests/live   # real Exa/Firecrawl calls (~$0.05)
 bun run typecheck

@@ -35,4 +35,5 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
    Quote evidence exactly from the pages/snapshots you read and pass their `raw_ref`.
 4. `ase apply <file>` → each account ends at `scored` (or lists errors to fix and re-apply).
 5. Interactive: one line per account (light → full score, tier, top trigger, best way in or "none yet") and spend.
-   Unattended: ≤ 3 lines. Then `/agentic-sales-engine:ways-in` for tier A/B.
+   Unattended: ≤ 3 lines. Then GATE 3: the user reviews the scores; `/agentic-sales-engine:ways-in` follows for the
+   tier A/B accounts they confirm.
