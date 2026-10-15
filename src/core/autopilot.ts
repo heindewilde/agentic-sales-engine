@@ -76,8 +76,9 @@ function save(ws: string, s: AutopilotState): void {
 export function listRuns(ws: string): AutopilotState[] {
   const out: AutopilotState[] = [];
   const lists = join(ws, "lists");
-  for (const icp of existsSync(lists) ? readdirSync(lists) : []) {
-    for (const run of existsSync(join(lists, icp)) ? readdirSync(join(lists, icp)) : []) {
+  const dirs = (p: string) => (existsSync(p) ? readdirSync(p, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".")).map((d) => d.name) : []);
+  for (const icp of dirs(lists)) {
+    for (const run of dirs(join(lists, icp))) {
       const p = statePath(ws, icp, run);
       if (existsSync(p)) out.push(JSON.parse(readFileSync(p, "utf8")) as AutopilotState);
     }
