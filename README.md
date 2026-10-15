@@ -11,14 +11,15 @@ A Claude Code plugin that takes a team from **"who should we sell to?"** to **"h
 5. **Find ways in** — warm intros from your team's LinkedIn connection exports, dated trigger events, shared context.
 6. **Prep outreach and calls** — drafts in your voice (learning from your edits), one-page call briefs. Nothing is ever sent for you.
 7. **Stay current** — watched accounts are polled for new triggers and page changes; real triggers rescore accounts.
+8. **Learn from outcomes** — log meetings, wins and losses; win-loss reviews and recalibration tune the ICP and scoring.
 
 The value is in the handoffs: every stage reads what the previous one learned (an account **brief** with open questions)
 and leaves it better. Everything lives in a git-tracked **workspace** of markdown files that your team can read, edit and review.
 
-> **Status:** M0–M9 complete: ICP → scoring design → discover → light score → shortlist → deep research → full score →
-> ways in → outreach drafts → call prep, plus signal monitoring, the knowledge harness, provider gateway and batch driver.
-> Verified end-to-end on a real company with live Exa/Firecrawl and real Claude sessions. Next: M10 (outcome-based
-> recalibration in practice, Apollo/PDL/Crunchbase adapters). See [docs/architecture.md](docs/architecture.md).
+> **Status:** M0–M10 complete: ICP → scoring design → discover → light score → shortlist → deep research → full score →
+> ways in → outreach drafts → call prep, plus signal monitoring and learning from outcomes (win-loss review,
+> recalibration). Verified end-to-end on a real company with live Exa/Firecrawl and real Claude sessions.
+> Deferred: Apollo / People Data Labs / Crunchbase connectors. See [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
@@ -85,12 +86,13 @@ advances when its handoff contract holds (`ase validate --stage`).
 | `/agentic-sales-engine:draft-outreach` | Email, LinkedIn or warm-intro drafts grounded in the brief — never sent |
 | `/agentic-sales-engine:call-prep` | One-page call brief: why now, attendees, SPIN questions, MEDDICC gaps, objections |
 | `/agentic-sales-engine:log-outcome` | Record meetings, wins and losses so scoring can recalibrate |
+| `/agentic-sales-engine:win-loss` | Engagement by tier/trigger with honest error bars; patterns in wins and losses; proposed ICP, rubric and weight changes |
 | `/agentic-sales-engine:status` | Funnel, gates, spend, next action |
 | `/agentic-sales-engine:lint` | Knowledge-base health: unsourced, stale, duplicates, contradictions |
 | `/agentic-sales-engine:dnc` | Manage the do-not-contact list |
 | `/agentic-sales-engine:forget-person` | GDPR erasure |
 | `/agentic-sales-engine:learn` | Teach the engine a correction or preference |
-| *coming (M10):* Apollo / People Data Labs / Crunchbase adapters | |
+| *deferred:* Apollo / People Data Labs / Crunchbase connectors | |
 
 ## Development
 

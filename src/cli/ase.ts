@@ -21,6 +21,7 @@ import { DncEntry, Stage, type Company } from "../core/schemas.ts";
 import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, saveCredential } from "../core/credentials.ts";
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
+import { outcomeStats, winLossCases } from "../core/outcomes.ts";
 import { listDrafts, markDraft, markLearned, pendingEdits, snapshotOriginal } from "../core/drafts.ts";
 import { dncMatcher, findWorkspace, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
@@ -68,6 +69,7 @@ const { values: flags, positionals } = parseArgs({
     page: { type: "string", multiple: true },
     query: { type: "string" },
     status: { type: "string" },
+    since: { type: "string" },
   },
 });
 
@@ -104,6 +106,8 @@ const HELP = `ase <command>
   score recalibrate --icp <s>                      propose weights from logged outcomes (never applied)
   score recompute --icp <s>                        re-score all files from stored judgements (after weight edits)
   scoring archive --icp <s>                        snapshot scoring.yaml to scoring.history/ before editing
+  outcomes stats --icp <s>                engagement by tier and trigger (with 95% intervals), recalibration readiness
+  outcomes cases --icp <s> [--since YYYY-MM-DD]   outcomes joined to scores, notes and briefs (win-loss input)
   outcome log <domain> <meeting|opportunity|won|lost|no_response|disqualified> --icp <s> [--member m] [--note]
   import seeds <file.csv> --icp <s> [--map field=Column ...] [--run <id>]   add a seed list as candidates
   import connections <Connections.csv> --member <id>   LinkedIn export → local copy + warm-matches.yaml
@@ -251,6 +255,13 @@ switch (cmd) {
     } catch (e) {
       fail((e as Error).message, 2);
     }
+    break;
+  }
+  case "outcomes": {
+    const w = ws();
+    const icp = (flags.icp as string) ?? fail("--icp is required");
+    if (positionals[0] === "cases") out(await winLossCases(w, icp, flags.since as string | undefined));
+    else out(await outcomeStats(w, icp));
     break;
   }
   case "outcome": {

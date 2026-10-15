@@ -37,5 +37,8 @@ The judge never averages or guesses.
 3. **Sensitivity**: perturb each weight ±20% and drop each factor; if the ranking barely moves (Kendall τ ≈ 1) the factor
    is dead weight; if one factor alone reorders everything it dominates — reconsider its weight.
 4. Version every change (`version`, `changelog`, `scoring.history/`).
-5. Once outcomes accumulate (≥30 logged), `score recalibrate` proposes weights from what actually converted.
-   Proposals are reviewed by a human, never applied automatically.
+5. Once outcomes accumulate (≥30 logged), `score recalibrate` proposes factor and group weights from what actually
+   engaged (L2 logistic regression on factor levels; engaged = meeting, opportunity or won). Group weights matter: a
+   decisive factor in a low-weight group can't move the ranking on its own. Proposals are reviewed by a human, never
+   applied automatically. Before that threshold, `ase outcomes stats` gives an early read with 95% intervals
+   (does tier A engage more than B?), and the win-loss review looks for qualitative patterns.

@@ -16,7 +16,7 @@ import { runSync } from "../core/watch.ts";
 import { z } from "zod";
 import { findWorkspace, loadConfig } from "../core/workspace.ts";
 
-const server = new McpServer({ name: "ase", version: "0.9.0" });
+const server = new McpServer({ name: "ase", version: "0.10.0" });
 
 const text = (data: unknown, isError = false) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], isError });
 

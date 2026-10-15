@@ -138,8 +138,11 @@ describe("calibration", () => {
       return { judged: [{ id: "size", level: (i % 2 ? 2 : 3) as 2 | 3 }, { id: "industry", level: 2 as const }, { id: "trigger", level: trig as 0 | 1 | 2 | 3 }, { id: "warm", level: 1 as const }], positive: trig >= 2 };
     });
     const p = recalibrate(model, rows);
-    const trig = p.find((x) => x.factor === "trigger")!;
+    const trig = p.factors.find((x) => x.factor === "trigger")!;
     expect(trig.proposed_weight).toBe(5);
-    expect(trig.coefficient).toBeGreaterThan(p.find((x) => x.factor === "industry")!.coefficient);
+    expect(trig.coefficient).toBeGreaterThan(p.factors.find((x) => x.factor === "industry")!.coefficient);
+    // intent carries the signal → its group weight should rise; groups still sum to 1
+    expect(p.groups.proposed.intent).toBeGreaterThan(model.groups.intent);
+    expect(p.groups.proposed.fit + p.groups.proposed.intent + p.groups.proposed.access).toBeCloseTo(1);
   });
 });

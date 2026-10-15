@@ -13,5 +13,7 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read
    - Pending gates (these come first — they block progress).
    - Spend: today vs daily cap, last 30 days by provider, active run.
    - Knowledge health: stale facts, problems.
+   - Outcomes per ICP (if any): `ase outcomes stats --icp <slug>` → engaged rate by tier with intervals, and the tier signal.
 3. End with **one** recommended next action and the command for it. Priority: problems → pending gates →
-   missing scoring model → stale facts on shortlisted accounts → next funnel stage.
+   missing scoring model → stale facts on shortlisted accounts → win-loss review when ≥ 10 new outcomes since the last
+   review (or tier B outconverts A) → next funnel stage.

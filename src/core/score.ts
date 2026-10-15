@@ -208,11 +208,23 @@ export function recalibrate(scoring: Scoring, rows: { judged: Pick<FactorScore, 
   const y = rows.map((r) => (r.positive ? 1 : 0));
   const { coef } = logisticRegression(X, y, { l2: 0.05, iterations: 4000 });
   const maxPos = Math.max(...coef.map((c) => Math.max(c, 0)), 1e-9);
-  return factors.map((f, i) => {
+  const factorsOut = factors.map((f, i) => {
     const c = coef[i]!;
     const proposed = c <= 0 ? 0.5 : Math.max(0.5, Math.round((c / maxPos) * 5 * 2) / 2);
-    return { factor: f.id, current_weight: f.weight, coefficient: Math.round(c * 1000) / 1000, proposed_weight: proposed };
+    return { factor: f.id, group: f.group, current_weight: f.weight, coefficient: Math.round(c * 1000) / 1000, proposed_weight: proposed };
   });
+  // Group weights cap how much any factor can matter, so propose them too: share of positive predictive
+  // weight per group, floored at 0.1 so no dimension disappears, rounded to 0.05 and summing to 1.
+  const groups = ["fit", "intent", "access"] as const;
+  const mass = Object.fromEntries(groups.map((g) => [g, factors.reduce((a, f, i) => a + (f.group === g ? Math.max(coef[i]!, 0) : 0), 0)])) as Record<(typeof groups)[number], number>;
+  const total = groups.reduce((a, g) => a + mass[g], 0);
+  let proposedGroups = Object.fromEntries(groups.map((g) => [g, total > 0 ? Math.max(0.1, mass[g] / total) : scoring.groups[g]])) as Record<(typeof groups)[number], number>;
+  const norm = groups.reduce((a, g) => a + proposedGroups[g], 0);
+  proposedGroups = Object.fromEntries(groups.map((g) => [g, Math.round((proposedGroups[g] / norm) * 20) / 20])) as typeof proposedGroups;
+  const drift = 1 - groups.reduce((a, g) => a + proposedGroups[g], 0);
+  const biggest = groups.reduce((a, g) => (proposedGroups[g] > proposedGroups[a] ? g : a), "fit" as (typeof groups)[number]);
+  proposedGroups[biggest] = Math.round((proposedGroups[biggest] + drift) * 100) / 100;
+  return { factors: factorsOut, groups: { current: scoring.groups, proposed: proposedGroups } };
 }
 
 export type { Level };

@@ -51,5 +51,7 @@ Write `icps/<slug>/calibration.md`: date, version, back-test numbers, sensitivit
 changes made per round, known limitations. Add the `calibration` summary (auc, good_median_percentile, verdict,
 run_at) to `scoring.yaml`. Suggest `/agentic-sales-engine:discover` next.
 
-Later, when ≥ 30 outcomes are logged: `ase score recalibrate --icp <slug>` proposes weights from what actually converted.
-Show the proposal next to the current weights; apply only what the user approves (archive + bump version + recompute).
+Later, when ≥ 30 outcomes are logged (usually via `/agentic-sales-engine:win-loss`): `ase score recalibrate --icp <slug>`
+proposes factor weights **and group weights** (fit/intent/access) from what actually engaged. Show both next to the
+current values with the coefficients; apply only what the user approves (archive + bump version + edit scoring.yaml +
+`ase score recompute`), then re-run the back-test to confirm known customers still rank well.

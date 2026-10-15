@@ -227,19 +227,14 @@ export async function rank(ws: string, icp: string, opts: { stage?: string; limi
   return opts.limit ? rows.slice(0, opts.limit) : rows;
 }
 
-const POSITIVE = new Set(["meeting", "opportunity", "won"]);
-
 export async function runRecalibrate(ws: string, icp: string) {
   const scoring = await loadScoring(ws, icp);
-  const p = join(ws, "outcomes", "outcomes.csv");
-  const rows = existsSync(p) ? (parseCsv(readFileSync(p, "utf8"), { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[]) : [];
-  // Latest outcome per account for this ICP.
-  const latest = new Map<string, string>();
-  for (const r of rows.filter((r) => r.icp === icp).sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))) latest.set(r.account ?? "", r.outcome ?? "");
+  // Same outcome semantics as the dashboard: latest per account, a trailing no_response never hides engagement.
+  const { latestOutcomes, readOutcomes, POSITIVE } = await import("./outcomes.ts");
   const data: { judged: { id: string; level: 0 | 1 | 2 | 3 | null }[]; positive: boolean }[] = [];
-  for (const [domain, outcome] of latest) {
-    const s = readScoreDoc(paths.score(ws, domain, icp));
-    if (s?.mode === "full") data.push({ judged: s.factors, positive: POSITIVE.has(outcome) });
+  for (const r of latestOutcomes(readOutcomes(ws, icp)).values()) {
+    const s = readScoreDoc(paths.score(ws, r.account, icp));
+    if (s?.mode === "full") data.push({ judged: s.factors, positive: POSITIVE.has(r.outcome) });
   }
   const positives = data.filter((d) => d.positive).length;
   if (data.length < 30 || positives < 5 || data.length - positives < 5) {
