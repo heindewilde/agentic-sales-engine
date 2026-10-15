@@ -21,7 +21,7 @@ import { DncEntry, Stage, type Company } from "../core/schemas.ts";
 import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, saveCredential } from "../core/credentials.ts";
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
-import { outcomeStats, winLossCases } from "../core/outcomes.ts";
+import { accountStates, logEvent, migrateLegacy, openItems, outcomeStats, readEvents, winLossCases, type EventType, type OutcomeEvent } from "../core/outcomes.ts";
 import { listDrafts, markDraft, markLearned, pendingEdits, snapshotOriginal } from "../core/drafts.ts";
 import { dncMatcher, findWorkspace, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
@@ -70,6 +70,10 @@ const { values: flags, positionals } = parseArgs({
     query: { type: "string" },
     status: { type: "string" },
     since: { type: "string" },
+    person: { type: "string" },
+    channel: { type: "string" },
+    value: { type: "string" },
+    date: { type: "string" },
   },
 });
 
@@ -106,9 +110,15 @@ const HELP = `ase <command>
   score recalibrate --icp <s>                      propose weights from logged outcomes (never applied)
   score recompute --icp <s>                        re-score all files from stored judgements (after weight edits)
   scoring archive --icp <s>                        snapshot scoring.yaml to scoring.history/ before editing
-  outcomes stats --icp <s>                engagement by tier and trigger (with 95% intervals), recalibration readiness
-  outcomes cases --icp <s> [--since YYYY-MM-DD]   outcomes joined to scores, notes and briefs (win-loss input)
-  outcome log <domain> <meeting|opportunity|won|lost|no_response|disqualified> --icp <s> [--member m] [--note]
+  outcome log <domain> <event> --icp <s> [--person id] [--channel c] [--reason r] [--value eur] [--member m] [--note "…"] [--date YYYY-MM-DD]
+        events: sent replied_positive replied_neutral replied_negative unsubscribed meeting_booked meeting_held
+                opportunity won lost disqualified no_response   (reason required for replied_negative|lost|disqualified)
+        reasons: timing no_budget competitor no_pain wrong_person not_icp internal_build status_quo opted_out other
+  outcomes open [--icp <s>]               accounts needing a status update (weekly review input), most urgent first
+  outcomes state <domain> [--icp <s>]     derived state + event history for one account
+  outcomes stats --icp <s>                engagement by tier, trigger and channel (95% intervals), loss reasons, readiness
+  outcomes cases --icp <s> [--since YYYY-MM-DD]   resolved accounts joined to scores, notes and briefs (win-loss input)
+  outcomes migrate                        convert a legacy outcomes.csv into the event log
   import seeds <file.csv> --icp <s> [--map field=Column ...] [--run <id>]   add a seed list as candidates
   import connections <Connections.csv> --member <id>   LinkedIn export → local copy + warm-matches.yaml
   connections match                       recompute every member's warm matches (after discovery)
@@ -257,28 +267,6 @@ switch (cmd) {
     }
     break;
   }
-  case "outcomes": {
-    const w = ws();
-    const icp = (flags.icp as string) ?? fail("--icp is required");
-    if (positionals[0] === "cases") out(await winLossCases(w, icp, flags.since as string | undefined));
-    else out(await outcomeStats(w, icp));
-    break;
-  }
-  case "outcome": {
-    const w = ws();
-    const [sub, domainRaw, outcome] = positionals;
-    const allowed = ["meeting", "opportunity", "won", "lost", "no_response", "disqualified"];
-    if (sub !== "log" || !domainRaw || !outcome || !allowed.includes(outcome)) fail(`usage: outcome log <domain> <${allowed.join("|")}> --icp <slug>`);
-    const domain = normalizeDomain(domainRaw) ?? fail(`not a domain: ${domainRaw}`);
-    const icp = (flags.icp as string) ?? fail("--icp is required");
-    const f = join(w, "outcomes", "outcomes.csv");
-    mkdirSync(dirname(f), { recursive: true });
-    if (!existsSync(f)) writeFileSync(f, "date,account,icp,member,outcome,note\n");
-    const note = String(flags.note ?? "").replace(/"/g, "'");
-    writeFileSync(f, `${today()},${domain},${icp},${flags.member ?? ""},${outcome},"${note}"\n`, { flag: "a" });
-    out({ logged: { date: today(), account: domain, icp, outcome } });
-    break;
-  }
   case "import": {
     const w = ws();
     const kind = positionals[0];
@@ -412,7 +400,7 @@ switch (cmd) {
       else if (sub === "mark") {
         const status = positionals[2] as "draft" | "edited" | "sent" | "discarded";
         if (!["draft", "edited", "sent", "discarded"].includes(status)) fail("usage: drafts mark <file> <draft|edited|sent|discarded>");
-        out(await markDraft(w, relPath(w, positionals[1] ?? "") ?? fail("file outside workspace"), status));
+        out(await markDraft(w, relPath(w, positionals[1] ?? "") ?? fail("file outside workspace"), status, { member: (flags.member as string[] | undefined)?.[0], date: flags.date as string | undefined }));
       } else if (sub === "edits") out(await pendingEdits(w));
       else if (sub === "learned") out(await markLearned(w, positionals.slice(1).map((p) => relPath(w, p) ?? fail(`${p} outside workspace`))));
       else fail("usage: drafts list|snapshot|mark|edits|learned");
@@ -443,6 +431,47 @@ switch (cmd) {
         keys: Object.fromEntries(KEYS.map((k) => [k, { set: Boolean(process.env[k]), value: mask(process.env[k]), from: keyOrigin[k] ?? null }])),
         tier: tier(),
       });
+    }
+    break;
+  }
+  case "outcomes": {
+    const w = ws();
+    const sub = positionals[0] ?? "stats";
+    const icp = flags.icp as string | undefined;
+    if (sub === "migrate") out(migrateLegacy(w));
+    else if (sub === "open") {
+      const items = openItems(accountStates(readEvents(w, icp)));
+      out(items.map((i) => ({ account: i.account, icp: i.icp, status: i.status, prompt: i.prompt, days_since_touch: i.days_since_touch, people: i.people, channels: i.channels, urgency: i.urgency })));
+    } else if (sub === "state") {
+      const d = normalizeDomain(positionals[1] ?? "") ?? fail("usage: outcomes state <domain>");
+      out([...accountStates(readEvents(w, icp)).values()].filter((x) => x.account === d));
+    } else if (sub === "cases") out(await winLossCases(w, icp ?? fail("--icp is required"), flags.since as string | undefined));
+    else out(await outcomeStats(w, icp ?? fail("--icp is required")));
+    break;
+  }
+  case "outcome": {
+    const w = ws();
+    const [sub, domainRaw, type] = positionals;
+    if (sub !== "log" || !domainRaw || !type) fail("usage: outcome log <domain> <event> --icp <slug> [...]  (see `ase help`)");
+    const legacy: Record<string, string> = { meeting: "meeting_held" };
+    try {
+      const e = logEvent(w, {
+        account: normalizeDomain(domainRaw!) ?? domainRaw!,
+        icp: (flags.icp as string) ?? fail("--icp is required"),
+        type: (legacy[type!] ?? type) as EventType,
+        person: flags.person as string | undefined,
+        member: (flags.member as string[] | undefined)?.[0],
+        channel: flags.channel as OutcomeEvent["channel"],
+        reason: flags.reason as OutcomeEvent["reason"],
+        value_eur: flags.value !== undefined ? Number(flags.value) : undefined,
+        note: flags.note as string | undefined,
+        date: flags.date as string | undefined,
+      });
+      const state = accountStates(readEvents(w, e.icp)).get(`${e.account}|${e.icp}`);
+      out({ logged: e, state: state ? { status: state.status, engaged: state.engaged } : null, ...(e.type === "unsubscribed" ? { reminder: "add the person to the do-not-contact list: ase dnc add linkedin|email <value> --reason opted_out" } : {}) });
+    } catch (err) {
+      const msg = err instanceof Error && "issues" in err ? (err as { issues: { message: string; path: (string | number)[] }[] }).issues.map((i) => `${i.path.join(".") || "event"}: ${i.message}`).join("; ") : (err as Error).message;
+      fail(msg, 2);
     }
     break;
   }

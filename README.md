@@ -11,7 +11,8 @@ A Claude Code plugin that takes a team from **"who should we sell to?"** to **"h
 5. **Find ways in** — warm intros from your team's LinkedIn connection exports, dated trigger events, shared context.
 6. **Prep outreach and calls** — drafts in your voice (learning from your edits), one-page call briefs. Nothing is ever sent for you.
 7. **Stay current** — watched accounts are polled for new triggers and page changes; real triggers rescore accounts.
-8. **Learn from outcomes** — log meetings, wins and losses; win-loss reviews and recalibration tune the ICP and scoring.
+8. **Learn from outcomes** — an event log (sent → reply → meeting → deal) fed by sent drafts, a weekly review and quick
+   logging; silence counts as no response after 21 days. Win-loss reviews and recalibration tune the ICP and scoring.
 
 The value is in the handoffs: every stage reads what the previous one learned (an account **brief** with open questions)
 and leaves it better. Everything lives in a git-tracked **workspace** of markdown files that your team can read, edit and review.
@@ -85,7 +86,8 @@ advances when its handoff contract holds (`ase validate --stage`).
 | `/agentic-sales-engine:voice-profile` | Learn your writing voice from sample emails and from how you edit drafts |
 | `/agentic-sales-engine:draft-outreach` | Email, LinkedIn or warm-intro drafts grounded in the brief — never sent |
 | `/agentic-sales-engine:call-prep` | One-page call brief: why now, attendees, SPIN questions, MEDDICC gaps, objections |
-| `/agentic-sales-engine:log-outcome` | Record meetings, wins and losses so scoring can recalibrate |
+| `/agentic-sales-engine:log-outcome` | Record replies, meetings, deals, wins and losses (with reason codes) |
+| `/agentic-sales-engine:review-outcomes` | Weekly pass over everything in flight: one multiple-choice question per account |
 | `/agentic-sales-engine:win-loss` | Engagement by tier/trigger with honest error bars; patterns in wins and losses; proposed ICP, rubric and weight changes |
 | `/agentic-sales-engine:status` | Funnel, gates, spend, next action |
 | `/agentic-sales-engine:lint` | Knowledge-base health: unsourced, stale, duplicates, contradictions |

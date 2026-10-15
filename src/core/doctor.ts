@@ -38,7 +38,7 @@ export interface Health {
   run: ReturnType<typeof currentRun>;
   gates: string[];
   problems: string[];
-  outcomes: Record<string, { accounts: number; engaged: number }>;
+  outcomes: Record<string, { accounts: number; resolved: number; engaged: number; needs_review: number }>;
 }
 
 export async function health(ws: string): Promise<Health> {
@@ -84,11 +84,19 @@ export async function health(ws: string): Promise<Health> {
   for (const [icp, s] of Object.entries(stages)) {
     if ((s.light_scored ?? 0) > 0) gates.push(`GATE 2 pending: ${s.light_scored} light-scored accounts for "${icp}" await shortlist approval (/agentic-sales-engine:shortlist)`);
   }
-  const { readOutcomes, latestOutcomes, POSITIVE } = await import("./outcomes.ts");
+  const { accountStates, openItems, readEvents } = await import("./outcomes.ts");
   const outcomes: Health["outcomes"] = {};
   for (const i of icps) {
-    const latest = [...latestOutcomes(readOutcomes(ws, i.slug)).values()];
-    if (latest.length) outcomes[i.slug] = { accounts: latest.length, engaged: latest.filter((r) => POSITIVE.has(r.outcome)).length };
+    const states = accountStates(readEvents(ws, i.slug));
+    if (!states.size) continue;
+    const all = [...states.values()];
+    const items = openItems(states);
+    outcomes[i.slug] = {
+      accounts: all.length,
+      resolved: all.filter((x) => !x.pending).length,
+      engaged: all.filter((x) => x.engaged).length,
+      needs_review: items.filter((x) => x.urgency >= 3).length,
+    };
   }
   return { tier: tier(), icps, stages, staleFacts, spentToday: spentToday(ws), dayBudget, run: currentRun(ws), gates, problems, outcomes };
 }
@@ -102,7 +110,11 @@ export function formatBrief(h: Health): string {
     lines.push(`Funnel ${icp}: ${Object.entries(s).map(([k, v]) => `${k} ${v}`).join(", ")}.`);
   }
   for (const [icp, o] of Object.entries(h.outcomes)) {
-    lines.push(`Outcomes ${icp}: ${o.accounts} accounts, ${o.engaged} engaged (meeting+)${o.accounts >= 30 ? " — enough for recalibration; consider /agentic-sales-engine:win-loss" : ""}.`);
+    lines.push(
+      `Outcomes ${icp}: ${o.accounts} ${o.accounts === 1 ? "account" : "accounts"} in outreach, ${o.resolved} resolved, ${o.engaged} engaged.` +
+        (o.needs_review ? ` ${o.needs_review} ${o.needs_review === 1 ? "needs" : "need"} a status update — run /agentic-sales-engine:review-outcomes.` : "") +
+        (o.resolved >= 30 ? " Enough for recalibration; consider /agentic-sales-engine:win-loss." : ""),
+    );
   }
   if (h.staleFacts) lines.push(`${h.staleFacts} facts are past their TTL (/agentic-sales-engine:refresh).`);
   for (const g of h.gates) lines.push(g);
