@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parseDoc } from "../core/frontmatter.ts";
+import { askOnce, askOnceSdk } from "../core/headless.ts";
 import { appendLedger } from "../core/ledger.ts";
 import type { Draft, Scoring, ScoreFile } from "../core/schemas.ts";
 import { loadScoring } from "../core/scorefile.ts";
@@ -8,27 +9,18 @@ import { paths } from "../core/workspace.ts";
 import { summarize, type EvalResult, type SuiteResult } from "./types.ts";
 
 /**
- * LLM-as-judge evaluators. The judge runs through the Claude Agent SDK (your normal Claude login), with no
- * tools: everything it needs is in the prompt. Pluggable for tests. Results use the OpenEvals contract.
+ * LLM-as-judge evaluators. The judge runs on your Claude Code login (`claude -p` on a subscription, the Agent SDK
+ * with an API key), with no tools: everything it needs is in the prompt. Pluggable for tests. Results use the OpenEvals contract.
  */
 
 export interface Judge {
   (prompt: string, opts: { model: string }): Promise<{ text: string; cost_usd: number }>;
 }
 
-export const sdkJudge: Judge = async (prompt, { model }) => {
-  const { query } = await import("@anthropic-ai/claude-agent-sdk");
-  let text = "";
-  let cost = 0;
-  for await (const m of query({ prompt, options: { model, allowedTools: [], settingSources: [], maxTurns: 1, permissionMode: "dontAsk" } })) {
-    if (m.type === "result") {
-      const r = m as { result?: string; total_cost_usd?: number };
-      text = r.result ?? "";
-      cost = r.total_cost_usd ?? 0;
-    }
-  }
-  return { text, cost_usd: cost };
-};
+/** Default judge: `claude -p` on a subscription, the Agent SDK with an API key (see headless.ts). */
+export const defaultJudge: Judge = (prompt, opts) => askOnce()(prompt, opts);
+/** @deprecated use defaultJudge */
+export const sdkJudge: Judge = askOnceSdk;
 
 /** Pull the first JSON object/array out of a model reply. */
 export function extractJson<T>(text: string): T | null {
@@ -237,7 +229,7 @@ export async function draftQuality(ws: string, o: Required<Pick<LlmOptions, "jud
 }
 
 export async function runLlm(ws: string, opts: LlmOptions = {}): Promise<SuiteResult> {
-  const o = { judge: opts.judge ?? sdkJudge, model: opts.model ?? "sonnet", sample: opts.sample ?? 3 };
+  const o = { judge: opts.judge ?? defaultJudge, model: opts.model ?? "sonnet", sample: opts.sample ?? 3 };
   const budget = new Budget(opts.budgetUsd ?? 1);
   const results = [...(await claimSupport(ws, o, budget)), ...(await judgeStability(ws, o, budget)), ...(await draftQuality(ws, o, budget))];
   if (budget.spent > 0) appendLedger(ws, { run_id: null, provider: "anthropic", op: "eval:llm", usd: Math.round(budget.spent * 10000) / 10000, kind: "actual" });

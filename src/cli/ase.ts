@@ -129,6 +129,7 @@ const HELP = `ase <command>
   score rank --icp <s> [--stage <stage>] [--limit N]
   score recalibrate --icp <s>                      propose weights from logged outcomes (never applied)
   score recompute --icp <s>                        re-score all files from stored judgements (after weight edits)
+  score reconcile --icp <s> [--account d | --stage s] [--limit N]   second opinion on full scores (judge twice, a third settles)
   scoring archive --icp <s>                        snapshot scoring.yaml to scoring.history/ before editing
   outcome log <domain> <event> --icp <s> [--person id] [--channel c] [--reason r] [--value eur] [--member m] [--note "…"] [--date YYYY-MM-DD]
         events: sent replied_positive replied_neutral replied_negative unsubscribed meeting_booked meeting_held
@@ -285,7 +286,22 @@ switch (cmd) {
       else if (sub === "rank") out(await rank(w, icp, { stage: flags.stage as string | undefined, limit: flags.limit ? Number(flags.limit) : undefined }));
       else if (sub === "recalibrate") out(await runRecalibrate(w, icp));
       else if (sub === "recompute") out(await recomputeAll(w, icp));
-      else fail("usage: score compute|backtest|sensitivity|rank|recalibrate --icp <slug>");
+      else if (sub === "reconcile") {
+        // second opinion on full scores: --account <d> or --stage <s> (default scored), --limit N
+        const { reconcileAccount } = await import("../core/reconcile.ts");
+        const { askOnce } = await import("../core/headless.ts");
+        const cfg = await loadConfig(w);
+        const billing = claudeBilling(cfg.claude_billing);
+        const domains = flags.account ? [flags.account as string] : (await rank(w, icp, { stage: (flags.stage as string) ?? "scored" })).map((r) => r.domain).slice(0, flags.limit ? Number(flags.limit) : undefined);
+        const results = [];
+        for (const d of domains) {
+          const r = await reconcileAccount(w, icp, d, { ask: askOnce(billing), model: cfg.judging.model });
+          if (!r.skipped) appendLedger(w, { run_id: currentRun(w)?.run_id ?? null, provider: "anthropic", op: "reconcile", usd: r.cost_usd, kind: "actual", note: d, ...(billing === "api" ? {} : { billed: false }) });
+          results.push(r);
+        }
+        out({ accounts: results.length, changed: results.reduce((n, r) => n + r.changed.length, 0), disputed: results.reduce((n, r) => n + r.disputed.length, 0), results });
+      }
+      else fail("usage: score compute|backtest|sensitivity|rank|recalibrate|recompute|reconcile --icp <slug>");
     } catch (e) {
       fail((e as Error).message, 2);
     }

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { reindexAll } from "./db.ts";
 import { readDoc } from "./frontmatter.ts";
 import { claudeBilling, modelSpendIsBilled, type ClaudeBilling } from "./billing.ts";
-import { allowedTools, cliRunner, MODEL_ALIASES, sessionEnv, streamCollector } from "./headless.ts";
+import { allowedTools, askOnce, cliRunner, MODEL_ALIASES, sessionEnv, streamCollector } from "./headless.ts";
 import { waitMs, type LimitState } from "./limits.ts";
 import { appendLedger, currentRun, newRunId, spentForRun, type CurrentRun } from "./ledger.ts";
 import type { Company } from "./schemas.ts";
@@ -56,6 +56,9 @@ export interface BatchOptions {
   runner?: ChunkRunner;
   /** injectable for tests (usage-limit waits) */
   sleep?: (ms: number) => Promise<void>;
+  /** one-shot judge for the second opinion (tests); default: claude -p / Agent SDK by billing */
+  ask?: (prompt: string, opts: { model: string }) => Promise<{ text: string; cost_usd: number }>;
+  skipReconcile?: boolean;
   log?: (line: string) => void;
 }
 
@@ -156,7 +159,7 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
   }
   const plan = { run_id: run.run_id, skill: o.skill, icp: o.icp, model, accounts: domains.length, chunks: chunks.length, chunk_size: chunkSize, budget_usd: run.budget_usd, claude_billing: billing };
   type ChunkResult = { chunk: number; domains: string[]; ok: boolean; cost_usd: number; advanced: string[] };
-  const empty = { processed: 0, advanced: 0, not_advanced: [] as string[], spent_usd: 0, stopped: null as string | null, usage_limit: null as { resets_at: string | null; overage: boolean } | null, log: null as string | null, results: [] as ChunkResult[] };
+  const empty = { processed: 0, advanced: 0, not_advanced: [] as string[], spent_usd: 0, stopped: null as string | null, second_opinion: null as { accounts: number; changed: number; disputed: number } | null, usage_limit: null as { resets_at: string | null; overage: boolean } | null, log: null as string | null, results: [] as ChunkResult[] };
   if (o.dryRun || chunks.length === 0) return { ...plan, dry_run: Boolean(o.dryRun), ...empty };
 
   const logFile = join(o.ws, "lists", o.icp, run.run_id, `batch-${o.skill}.md`);
@@ -229,6 +232,26 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
     const deniedNote = r.denied?.length ? `- denied tool calls:\n${r.denied.map((d) => `  - \`${d}\``).join("\n")}\n` : "";
     appendFileSync(logFile, `## Chunk ${i + 1}: ${chunk.join(", ")}\n- ok: ${r.ok}, cost $${r.cost_usd.toFixed(3)}, advanced ${advanced.length}/${chunk.length}\n${deniedNote}\n${r.summary}\n\n`);
   });
+  // Second opinion on fresh full scores (research and score batches), unless stopped or switched off.
+  const reconciled: { domain: string; changed: number; disputed: number }[] = [];
+  // With an injected session runner (tests, dry harnesses) it only runs when a judge is injected too.
+  if ((o.skill === "research" || o.skill === "score") && cfg.judging.second_opinion && !stopped && !o.skipReconcile && (!o.runner || o.ask)) {
+    const { reconcileAccount } = await import("./reconcile.ts");
+    const ask = o.ask ?? askOnce(billing);
+    const todo = results.flatMap((r) => r.domains);
+    await pool(todo, o.concurrency ?? 3, async (d) => {
+      try {
+        const rr = await reconcileAccount(o.ws, o.icp, d, { ask, model: cfg.judging.model });
+        if (rr.skipped) return;
+        appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: "reconcile", usd: rr.cost_usd, kind: "actual", note: d, ...(modelSpendIsBilled(billing) ? {} : { billed: false }) });
+        reconciled.push({ domain: d, changed: rr.changed.length, disputed: rr.disputed.length });
+        if (rr.changed.length || rr.disputed.length) log(`second opinion ${d}: ${rr.changed.map((c) => `${c.id} ${c.from}→${c.to}`).join(", ") || "no changes"}${rr.disputed.length ? `; disputed ${rr.disputed.join(", ")}` : ""} (${rr.before} → ${rr.after})`);
+      } catch (e) {
+        log(`second opinion ${d} failed: ${(e as Error).message}`);
+      }
+    });
+    if (reconciled.length) appendFileSync(logFile, `## Second opinion\n${reconciled.map((r) => `- ${r.domain}: ${r.changed} changed, ${r.disputed} disputed`).join("\n")}\n\n`);
+  }
   await reindexAll(o.ws);
   const advanced = results.flatMap((r) => r.advanced);
   const summary = {
@@ -239,6 +262,7 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
     not_advanced: domains.filter((d) => results.some((r) => r.domains.includes(d)) && !advanced.includes(d)),
     spent_usd: spentForRun(o.ws, run.run_id),
     stopped: stopped as string | null,
+    second_opinion: reconciled.length ? { accounts: reconciled.length, changed: reconciled.reduce((n, r) => n + r.changed, 0), disputed: reconciled.reduce((n, r) => n + r.disputed, 0) } : null,
     usage_limit: usageLimit ? { resets_at: (usageLimit as LimitState).resetsAt ? new Date((usageLimit as LimitState).resetsAt!).toISOString() : null, overage: (usageLimit as LimitState).overage } : null,
     log: logFile.slice(o.ws.length + 1) as string | null,
     results,

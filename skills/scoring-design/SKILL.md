@@ -20,6 +20,12 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (below: `ase`).
   firmographics, and `knockout: {level_lte: 0}` only for hard exclusions.
 - Numeric factors (headcount, revenue, number of sites…) get an `auto` rule so the engine scores them from the fact
   itself — cheaper and perfectly consistent: `auto: { fact: employees, levels: { 0: "<50 | >5000", 1: "50-99", 2: "100-149", 3: "150-700" } }`.
+- Time-window intent factors ("a new store/market/investment in the last 12 months") count dated signals instead
+  of being re-judged: `auto: { signals: { types: [expansion, funding, mna], within_days: 365 }, levels: { 0: "0", 2: "1", 3: ">=2" } }`.
+  Signal types: funding, hiring, exec_change, expansion, mna, launch, partnership, tech_change, news, other.
+- Give judged factors one short `examples` line per level where the anchor leaves room for interpretation
+  (`examples: { 2: "one new store announced in March", 3: "two stores plus a new country this year" }`). The judge
+  and the stability eval both see them; sharper examples are the cheapest way to more consistent scores.
 - Present as a table (factor, group, weight, anchors in short, light?, knockout?) and let the user adjust.
 - Revision: run `ase score backtest` and `ase score sensitivity` first and start from what they show.
 

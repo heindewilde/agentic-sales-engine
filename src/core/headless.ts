@@ -126,3 +126,40 @@ export const cliRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, 
   if (code !== 0 && !r.ok && !r.summary) r.summary = `claude -p exited ${code}: ${(await new Response(proc.stderr).text()).slice(0, 500)}`;
   return r;
 };
+
+/** One question, one answer, no tools: `claude -p` on the user's Claude Code login. */
+export async function askOnceCli(prompt: string, opts: { model: string }): Promise<{ text: string; cost_usd: number }> {
+  const args = [process.env.ASE_CLAUDE_BIN || "claude", "-p", "--output-format", "json", "--model", MODEL_ALIASES[opts.model] ?? opts.model, "--tools", "", "--setting-sources", ""];
+  const proc = Bun.spawn(args, { env: sessionEnv(), stdin: new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
+  const out = await new Response(proc.stdout).text();
+  await proc.exited;
+  try {
+    const r = JSON.parse(out) as { result?: string; total_cost_usd?: number };
+    return { text: r.result ?? "", cost_usd: r.total_cost_usd ?? 0 };
+  } catch {
+    return { text: out, cost_usd: 0 };
+  }
+}
+
+/** One question via the Agent SDK (API-key setups). */
+export async function askOnceSdk(prompt: string, opts: { model: string }): Promise<{ text: string; cost_usd: number }> {
+  const { query } = await import("@anthropic-ai/claude-agent-sdk");
+  let text = "";
+  let cost = 0;
+  for await (const m of query({ prompt, options: { model: MODEL_ALIASES[opts.model] ?? opts.model, allowedTools: [], settingSources: [], maxTurns: 1, permissionMode: "dontAsk" } })) {
+    if (m.type === "result") {
+      const r = m as { result?: string; total_cost_usd?: number };
+      text = r.result ?? "";
+      cost = r.total_cost_usd ?? 0;
+    }
+  }
+  return { text, cost_usd: cost };
+}
+
+/** The right one-shot transport for this billing mode (ASE_HEADLESS=cli|sdk overrides). */
+export function askOnce(billing = claudeBilling()) {
+  const forced = process.env.ASE_HEADLESS;
+  if (forced === "sdk") return askOnceSdk;
+  if (forced === "cli") return askOnceCli;
+  return billing === "api" ? askOnceSdk : askOnceCli;
+}

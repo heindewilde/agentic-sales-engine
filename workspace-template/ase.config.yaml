@@ -22,6 +22,11 @@ budgets:
   deep_research_per_account_usd: 0.3   # measured ≈ $0.23 per account (bench/)
   research_providers_per_account_usd: 0.04   # Exa/Firecrawl share — all you pay on a subscription
 
+# Second opinion on full scores: an independent judge re-scores, a third settles disagreements.
+judging:
+  second_opinion: true
+  model: sonnet
+
 # Who pays for Claude: auto (API key / Bedrock / Vertex → api, else your Claude subscription), subscription or api.
 # On a subscription, budgets only cap Exa/Firecrawl and Claude usage counts toward the plan's limits instead.
 claude_billing: auto
