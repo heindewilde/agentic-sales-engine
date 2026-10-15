@@ -3,9 +3,9 @@
   <rect width="1070" height="450" rx="16" fill="#ffffff"/>
   <text x="40" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#59636e">A bought list gives you</text>
   <rect x="40" y="58" width="300" height="120" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25" stroke-dasharray="5 4"/>
-  <text x="58" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="650" fill="#1f2328">Maas &amp; Verhoeven Foodservice</text>
-  <text x="58" y="110" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">Wholesale · Belgium · 201–500 employees</text>
-  <text x="58" y="130" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">info@maasverhoeven.example</text>
+  <text x="58" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="650" fill="#1f2328">Company name</text>
+  <text x="58" y="110" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">Industry · Country · 201–500 employees</text>
+  <text x="58" y="130" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">info@company.com</text>
   <text x="58" y="158" font-style="italic" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8c959f">…and 4,999 more rows like it</text>
   <circle cx="52" cy="210" r="8" fill="none" stroke="#cf222e" stroke-width="1.5"/>
   <path d="M48.5 206.5l7 7M55.5 206.5l-7 7" stroke="#cf222e" stroke-width="1.5"/>
@@ -22,16 +22,16 @@
   <path d="M352 118 H384" fill="none" stroke="#0969da" stroke-width="2" marker-end="url(#ah)"/>
   <text x="396" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="650" fill="#0969da">agentic-sales-engine hands you</text>
   <rect x="396" y="58" width="634" height="372" rx="12" fill="#ddf4ff" stroke="#54aeff" stroke-width="1.25"/>
-  <text x="416" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="650" fill="#1f2328">Maas &amp; Verhoeven Foodservice</text>
-  <text x="416" y="108" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">Family-owned food wholesaler, Ghent · 3 depots · ~310 staff<tspan fill="#0969da" font-size="10" dy="-5">[1]</tspan><tspan dy="5"> </tspan></text>
+  <text x="416" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="650" fill="#1f2328">The same company</text>
+  <text x="416" y="108" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">Family-owned wholesaler · 3 sites · ~310 staff · fits your ICP<tspan fill="#0969da" font-size="10" dy="-5">[1]</tspan><tspan dy="5"> </tspan></text>
   <rect x="912" y="72" width="98" height="42" rx="10" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
   <text x="961" y="92" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#1f2328">57 · B</text>
   <text x="961" y="108" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" fill="#59636e">your rubric</text>
   <text x="416" y="146" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#59636e">WHY NOW</text>
-  <text x="516" y="146" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">Acquired Delcourt Traiteur on 1 Jul 2026, its 9th acquisition since 2015;<tspan fill="#0969da" font-size="10" dy="-5">[2]</tspan><tspan dy="5"> </tspan></text>
-  <text x="516" y="165" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">purchasing and administration are being integrated this year</text>
+  <text x="516" y="146" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">Acquired a competitor three months ago, its ninth acquisition;<tspan fill="#0969da" font-size="10" dy="-5">[2]</tspan><tspan dy="5"> </tspan></text>
+  <text x="516" y="165" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">purchasing and administration are being merged this year</text>
   <text x="416" y="206" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#59636e">WHO</text>
-  <text x="516" y="206" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">Sofie Claes, Finance Director, quoted on the integration<tspan fill="#0969da" font-size="10" dy="-5">[2]</tspan><tspan dy="5"> </tspan></text>
+  <text x="516" y="206" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">The Finance Director, quoted on the integration<tspan fill="#0969da" font-size="10" dy="-5">[2]</tspan><tspan dy="5"> </tspan></text>
   <text x="516" y="225" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">matches your “finance leader” persona</text>
   <text x="416" y="266" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#59636e">SCORE</text>
   <rect x="516" y="251" width="131.60000000000002" height="22" rx="11" fill="#dafbe1" stroke="#1a7f37" stroke-width="1.25"/>
@@ -45,8 +45,8 @@
   <text x="516" y="292" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" fill="#59636e">every level links to a quote · unknowns stay unknown and are researched, not guessed</text>
   <text x="416" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#59636e">FIRST LINE</text>
   <rect x="508" y="312" width="502" height="82" rx="10" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
-  <text x="524" y="334" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">“Hi Sofie, congrats on the Delcourt acquisition, the ninth since 2015.<tspan fill="#0969da" font-size="10" dy="-5">[2]</tspan><tspan dy="5"> </tspan></text>
-  <text x="524" y="354" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">Bringing another entity’s suppliers into one AP process is usually</text>
-  <text x="524" y="374" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">where the work starts…”</text>
-  <text x="416" y="416" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" fill="#59636e">[1] company site · [2] news, 1 Jul 2026, saved as a snapshot   ·   drafted for you, never sent</text>
+  <text x="524" y="334" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">“Congrats on the acquisition, your ninth.<tspan fill="#0969da" font-size="10" dy="-5">[2]</tspan><tspan dy="5"> </tspan></text>
+  <text x="524" y="354" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">Bringing a second company’s suppliers into one invoice process</text>
+  <text x="524" y="374" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#1f2328">is usually where the work starts…”</text>
+  <text x="416" y="416" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" fill="#59636e">[1] company website · [2] news article, saved as a snapshot   ·   drafted for you, never sent</text>
 </svg>
