@@ -22,6 +22,8 @@
   <a href="#quickstart">Quickstart</a> ·
   <a href="#see-it-work">See it work</a> ·
   <a href="#how-it-works">How it works</a> ·
+  <a href="#autopilot">Autopilot</a> ·
+  <a href="#quality-you-can-measure">Quality</a> ·
   <a href="#what-it-costs">What it costs</a> ·
   <a href="#how-it-compares">How it compares</a> ·
   <a href="#faq">FAQ</a>
@@ -47,6 +49,7 @@ autonomously and hands each step's findings to the next one:
 - **Evidence or nothing.** Every fact has a source, date and confidence. A write hook *rejects* unsourced claims. Unknowns stay unknown instead of being guessed.
 - **Explainable scores.** Your own Fit × Intent × Access rubric, back-tested against customers you already know. Every point in a score links to a quote.
 - **You stay in charge.** You approve the ICP and the shortlist (with a cost estimate) before money is spent on deep research. Nothing is ever sent for you.
+- **It checks its own work.** A built-in eval suite measures whether claims match their sources, handoffs are complete and drafts follow the rules. Every step can be traced with OpenTelemetry.
 - **It learns.** Outcomes flow back into win-loss reviews and score recalibration.
 - **Your data stays yours.** Everything lives in a git repository of plain markdown that your team can read, edit, review and diff. No SaaS database.
 
@@ -215,12 +218,7 @@ stored as `{value, source_url, retrieved_at, confidence}`. Claude Code hooks gua
 do-not-contact entities, non-business personal data and edits to source snapshots are rejected before they land.
 A SQLite index is rebuilt from the files for fast queries. Facts expire, and `refresh` and `sync` keep them current.
 
-**Measured, not assumed.** A built-in eval suite checks the engine's own work: quotes present in their sources, claims
-supported, handoffs complete, drafts within the rules, and the scoring judge stable. It runs offline in CI and with Claude as
-judge on real output. Optional OpenTelemetry tracing shows every step, tool call and dollar in Langfuse, LangSmith,
-Phoenix or any OTLP backend.
-
-**Deterministic where it matters.** Anything that must be exactly right is code with tests (≈120), not prompt
+**Deterministic where it matters.** Anything that must be exactly right is code with tests (≈130), not prompt
 instructions: score maths, back-tests, budgets, deduplication, privacy rules and stage contracts. The LLM does what it's
 good at: reading, judging against a rubric, and writing.
 
@@ -242,6 +240,92 @@ my-sales-workspace/
 ```
 </details>
 
+## Autopilot
+
+Run the whole funnel for an ICP with one command. It works through every step on its own, stops only where a human
+should decide, and stays within the budget you give it.
+
+```text
+/agentic-sales-engine:autopilot start --icp ap-automation-midmarket --budget 50
+```
+
+This is the actual status from a live run on real Benelux wholesalers (started with `--until shortlist`, so the later
+steps were skipped):
+
+```text
+autopilot 20261015-145833-autopilot · ap-automation-midmarket · waiting · spent $0.59 of $2
+  ✓ discover      25 new candidates  ($0.26)
+  ✓ enrich_light  25/25 light-scored  ($0.33)
+  ⏸ shortlist     proposed 6 of 25 (≈ $3–6)
+  – research
+  – score
+  – ways_in
+  – drafts
+
+GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist.md (6 accounts, ≈ $3–6)
+        and approve: ase autopilot approve --by <member>
+```
+
+- **Two gates, never skipped.** It waits for you to approve the shortlist (with its cost estimate) before deep research,
+  and to review the drafts at the end. Untick accounts in the shortlist file to leave them out.
+- **Resumable.** Progress is checkpointed after every step; the account files remain the source of truth. After a crash, a
+  gate or a budget stop, `resume` continues where it left off without repeating finished work.
+- **One budget.** Every model and data call counts against it. When it runs out, the run waits for you to raise it
+  instead of failing.
+- **Retries, not surprises.** A step whose sessions crash is retried with backoff and only re-processes the accounts
+  that didn't advance. Accounts a session couldn't move forward are listed, not hidden.
+
+`/agentic-sales-engine:status` shows a waiting or failed run at the top, and the skill walks you through each gate.
+
+## Quality you can measure
+
+AI research is only useful if you can trust it, so the engine checks its own output. Results come back as
+`{ key, score, comment }` (the OpenEvals convention), are saved per run in your workspace, and are compared with the
+previous run. A drop of more than 0.05 is flagged as a regression.
+
+| Evaluator | What it catches | Cost |
+|---|---|---|
+| `citation_faithfulness` | a scored quote that isn't actually in the source it cites | free |
+| `brief_grounding` | statements in a brief without a source (reported absences are fine) | free |
+| `snapshot_coverage` | cited pages that were never saved, so nobody can verify them later | free |
+| `handoff_completeness` | a stage marked done while the next stage lacks what it needs | free |
+| `draft_rules` | drafts that are too long, uncited, clichéd, or contain numbers not in the sources | free |
+| `research_trajectory` | the expensive research agent used before cheap lookups | free |
+| `claim_support` | Claude judges each statement against all of its cited sources | ~$0.05 per account |
+| `judge_stability` | re-scoring the same evidence gives different factor levels | ~$0.05 per account |
+| `draft_quality` | drafts that aren't specific, relevant, grounded or clear in their ask | ~$0.03 per draft |
+
+```text
+ase eval run --text                                    # free checks, seconds
+ase eval run --suite llm --budget 1 --sample 3 --text  # Claude as judge, on your Claude login
+```
+
+The free checks also run in CI on a fully researched fictional account, so a change to the engine that weakens sourcing
+or draft hygiene fails the build. On a real research run, the paid suite found facts cited to pages that didn't contain
+them, two rubric factors whose wording gets re-judged differently, and a draft with an unbacked claim and a vague ask.
+Each came with the fix to make. Details in [docs/evals.md](docs/evals.md).
+
+## See every step
+
+Set one environment variable and every run becomes a trace you can open in Langfuse, LangSmith, Phoenix, Jaeger or any
+OpenTelemetry backend:
+
+```text
+autopilot.run                                  [autopilot]   budget, status, spent
+└─ autopilot.step.enrich_light
+   └─ batch.run                                [batch]       skill, accounts, advanced
+      └─ batch.chunk                                         model, tokens, cost, denied tool calls
+         ├─ tool.mcp__…__fetch_pages   2.8s    [session]
+         ├─ provider.fetch_pages       2.8s    [gateway]     firecrawl · $0.004 · raw snapshot saved
+         ├─ tool.Edit                  error   [session]     a rejected or failed edit, visible instead of silent
+         └─ score.compute                      [cli]         total 53.6 · tier B · light_scored
+```
+
+The labels in brackets are separate processes (the autopilot, batch driver, headless Claude session, provider gateway and
+CLI), yet they show up as one connected trace. That makes "why did this account score low?" and "where did the money go?" one click each. Spans
+carry metadata only (operations, domains, costs, durations, outcomes) unless you explicitly turn on content capture.
+Setup per backend in [docs/tracing.md](docs/tracing.md).
+
 ## What it costs
 
 Measured on real runs with live Exa and Firecrawl calls and real Claude sessions (API-equivalent model cost). Your
@@ -254,6 +338,8 @@ numbers will vary with list size, model choice and how much research an account 
 | Deep research + full score (Sonnet) | $0.30–0.90 per account | $0.02–0.06 |
 | Ways in · outreach draft · call prep | ~$0.30 · ~$0.30 · ~$0.40 per account | ~$0.01 |
 | Monitoring (`sync`) | ~$0.02 per watched account per check | Exa + Firecrawl |
+| Quality evals | free offline · ~$0.05 per account with Claude as judge | — |
+| **Real example:** autopilot, 25 companies discovered and light-scored, shortlist proposed | **$0.59 in total** | $0.09 |
 
 **A full cycle of 300 discovered and 45 deep-researched accounts comes to roughly $20–60, most of it deep research.** Every run has a budget:
 the engine estimates the cost before deep research, enforces per-run and per-day caps before each paid call, and logs
@@ -268,6 +354,9 @@ every dollar to `ledger/costs.jsonl`.
 | Explainable, back-tested scoring | ✅ your rubric, evidence per point | ◐ formula columns | ◐ score fields | ✗ |
 | Memory across steps and runs | ✅ briefs + open questions | ◐ the table | ✅ records | ✗ |
 | Learns from outcomes | ✅ win-loss + recalibration | ✗ | ◐ | ✗ |
+| Checks its own output quality | ✅ eval suite, in CI and on real output | ✗ | ✗ | ✗ |
+| Step-by-step traces of what it did | ✅ OpenTelemetry, any backend | ◐ run history | ✗ | ✗ |
+| Runs end to end on its own | ✅ autopilot, pauses at your gates | ◐ table automations | ◐ sequences | ✗ |
 | Contact data (emails, phones) at scale | ◐ people search; bring your own | ✅ waterfall enrichment | ✅ large database | ✗ |
 | Sends sequences | ✗ by design: drafts only | ✅ via integrations | ✅ | ✗ |
 | Your data | ✅ plain files in your git repo | their platform | their platform | chat history |
@@ -350,11 +439,37 @@ Claude. By default Haiku for wide, cheap passes and Sonnet for research and judg
 </details>
 
 <details>
+<summary><b>Can it run unattended?</b></summary>
+
+Yes. `autopilot` runs the whole funnel, and `batch.ts` and scheduled `sync` runs work headless too (see
+[docs/scheduling.md](docs/scheduling.md)). Unattended runs never pass a human gate, never send anything, and stop at
+their budget.
+</details>
+
+<details>
+<summary><b>How do I know the research is any good?</b></summary>
+
+Measure it: `ase eval run`. The free checks verify that scored quotes are really in their sources, brief statements are
+sourced and handoffs are complete. The Claude-as-judge checks verify that statements are supported by what they cite and
+that scoring is stable. Results are saved per run, so you can see whether quality goes up or down when you change a
+rubric or a skill.
+</details>
+
+<details>
+<summary><b>Can I see exactly what it did, and what each step cost?</b></summary>
+
+Yes, in two ways. Every paid call is logged in `ledger/costs.jsonl` (`ase ledger report`). With OpenTelemetry enabled,
+each run is a trace you can open in Langfuse, LangSmith, Phoenix or Jaeger, showing every tool call, provider call, cost
+and score ([docs/tracing.md](docs/tracing.md)).
+</details>
+
+<details>
 <summary><b>How is this different from asking Claude to research a company?</b></summary>
 
 That's one good answer that's gone tomorrow. Here, research is persistent (briefs, sourced facts, open questions),
 comparable (one rubric across hundreds of accounts), gated (you approve what gets researched and what it costs),
-repeatable (batches, monitoring) and self-improving (outcomes feed back into the ICP and the scoring).
+repeatable (autopilot, batches, monitoring), measurable (evals, traces) and self-improving (outcomes feed back into
+the ICP and the scoring).
 </details>
 
 <details>
@@ -375,7 +490,8 @@ your scoring rubric is a YAML file you own, and every stage is a skill file you 
 
 ```bash
 bun install
-bun test                         # ~120 offline tests (unit, hooks, CLI, simulated learning loop)
+bun test                         # ~130 offline tests (unit, hooks, CLI, autopilot, evals, simulated learning loop)
+bun src/cli/ase.ts eval run --workspace fixtures/workspace-ledgerly --min 1   # the CI quality gate
 ASE_LIVE=1 bun test tests/live   # real Exa/Firecrawl calls (~$0.05)
 bun run typecheck
 claude plugin validate .
