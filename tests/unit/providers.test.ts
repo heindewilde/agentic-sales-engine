@@ -48,6 +48,12 @@ describe("gateway", () => {
     expect(r.results.find((c) => c.domain === "kessler-armaturen.example")?.known).toBe(true);
     expect(r.raw_ref).toMatch(/^raw\/\d{4}-\d{2}\/[0-9a-f]{12}\.md$/);
     expect(readFileSync(join(ws, r.raw_ref!), "utf8")).toContain("Brightline Foods");
+    // each company also gets its own snapshot under its own URL, so its facts can cite it
+    const bl = r.results.find((c) => c.domain === "brightline-foods.example")!;
+    expect(bl.raw_ref).not.toBe(r.raw_ref);
+    const own = readFileSync(join(ws, bl.raw_ref!), "utf8");
+    expect(own).toContain(`url: ${bl.url}`);
+    expect(own).toContain("Brightline Foods");
     const ledger = readLedger(ws);
     expect(ledger).toHaveLength(1);
     expect(ledger[0]).toMatchObject({ provider: "exa", op: "discover_companies", usd: 0.023, kind: "actual" });

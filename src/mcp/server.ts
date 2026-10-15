@@ -80,7 +80,7 @@ for (const op of Object.keys(TOOLS) as Op[]) {
         const saved = await persistCandidates(ws, args.icp, runId, `exa: "${String(args.query)}"`, hits.map((h) => ({
           name: h.name, domain: h.domain, url: h.url, description: h.description, employees: h.employees ?? null,
           hq_country: h.hq_country, hq_city: h.hq_city, founded: h.founded ?? null,
-          source_url: h.url, confidence: 0.6, method: "exa" as const, raw_ref: res.raw_ref,
+          source_url: h.url, confidence: 0.6, method: "exa" as const, raw_ref: h.raw_ref ?? res.raw_ref,
         })));
         return text({
           provider: res.provider, cost_usd: res.cost_usd, budget: res.budget, raw_ref: res.raw_ref, dropped_dnc: res.dropped_dnc,
