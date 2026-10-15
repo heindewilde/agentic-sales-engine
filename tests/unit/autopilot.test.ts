@@ -65,6 +65,14 @@ function world(ws: string, opts: { failResearch?: number; costPerChunk?: number 
 }
 
 describe("autopilot", () => {
+  test("listing runs ignores placeholder files (template workspaces have lists/.gitkeep)", async () => {
+    const ws = fixture();
+    mkdirSync(join(ws, "lists"), { recursive: true });
+    writeFileSync(join(ws, "lists/.gitkeep"), "");
+    const s = await startAutopilot(ws, { icp: ICP, budgetUsd: 1 });
+    expect(findRun(ws)!.run_id).toBe(s.run_id);
+  });
+
   test("refuses an unapproved ICP or a non-member", async () => {
     const ws = fixture();
     await expect(startAutopilot(ws, { icp: "nope", budgetUsd: 5 })).rejects.toThrow(/does not exist/);
