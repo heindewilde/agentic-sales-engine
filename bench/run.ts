@@ -18,7 +18,8 @@ import { stringifyDoc } from "../src/core/frontmatter.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const ICP = "ap-automation-midmarket";
-const RESEARCH = ["boma.eu", "vanegmond.nl"];
+// 5 researched accounts: enough to measure light-vs-full agreement (needs ≥ 5)
+const RESEARCH = ["boma.eu", "vanegmond.nl", "hanos.nl", "edco.nl", "foox.nl"];
 const { values: f } = parseArgs({ args: process.argv.slice(2), options: { label: { type: "string" }, compare: { type: "string" }, push: { type: "boolean" } } });
 
 if (f.compare) {
