@@ -4,21 +4,23 @@
  *   bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts <command> [args]
  * Every command prints JSON (or --text for humans) so skills can parse results reliably.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import { parseArgs } from "node:util";
 import { CONTRACTS, checkAccount } from "../core/contracts.ts";
 import { reindexAll } from "../core/db.ts";
-import { formatBrief, health } from "../core/doctor.ts";
+import { formatBrief, health, tier } from "../core/doctor.ts";
 import { forgetPerson } from "../core/forget.ts";
 import { parseYaml, readDoc, stringifyYaml } from "../core/frontmatter.ts";
 import { appendLedger, currentRun, newRunId, readLedger, spentForRun, spentToday, sumSpend } from "../core/ledger.ts";
 import { lint } from "../core/lint.ts";
 import { normalizeDomain, normalizeLinkedIn } from "../core/normalize.ts";
 import { DncEntry, Stage, type Company } from "../core/schemas.ts";
+import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, saveCredential } from "../core/credentials.ts";
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
-import { dncMatcher, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
+import { dncMatcher, findWorkspace, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
 import { callProvider, estimateCall } from "../core/providers/gateway.ts";
 import { persistCandidates } from "../core/accounts.ts";
@@ -107,9 +109,14 @@ const HELP = `ase <command>
   stage advance <domain> --icp <s> --to <stage> [--reason ...]   move forward only if the contract holds
   ways-in <domain> --icp <s>              warm paths, recent signals, people/personas for an account
   ttl [--icp <s>] [--limit N]             facts past their TTL, most advanced accounts first
+  keys status                             which provider keys the CLI/batch will use (masked) and from where
+  keys set <EXA_API_KEY|FIRECRAWL_API_KEY|FIRECRAWL_BASE_URL>   read the value from stdin (e.g. pbpaste | …)
+  keys pull-firecrawl                     import the key from the official Firecrawl CLI login
   contracts                               list stage contracts`;
 
 const ws = () => requireWorkspace(flags.workspace as string | undefined);
+// Provider keys for CLI runs: env, workspace .env, then ~/.config/agentic-sales-engine/credentials.env.
+const keyOrigin = loadCredentials(findWorkspace(flags.workspace as string | undefined));
 
 switch (cmd) {
   case "init": {
@@ -344,6 +351,31 @@ switch (cmd) {
     const w = ws();
     await reindexAll(w);
     out(await staleFacts(w, { icp: flags.icp as string | undefined, limit: flags.limit ? Number(flags.limit) : undefined }));
+    break;
+  }
+  case "keys": {
+    const sub = positionals[0];
+    if (sub === "set") {
+      const key = positionals[1] as (typeof KEYS)[number];
+      if (!KEYS.includes(key)) fail(`usage: keys set <${KEYS.join("|")}>  (value on stdin)`);
+      const value = (await Bun.stdin.text()).trim();
+      if (!value || /\s/.test(value)) fail("no value on stdin (pipe it in, e.g. `pbpaste | bun ase.ts keys set EXA_API_KEY`)");
+      out({ saved: key, value: mask(value), file: saveCredential(key, value) });
+    } else if (sub === "pull-firecrawl") {
+      const tmp = join(mkdtempSync(join(tmpdir(), "ase-fc-")), "fc.env");
+      const p = Bun.spawnSync(["npx", "-y", "firecrawl-cli@1.26.5", "env", "-f", tmp, "--overwrite"], { stdout: "pipe", stderr: "pipe" });
+      const val = existsSync(tmp) ? parseEnv(readFileSync(tmp, "utf8")).FIRECRAWL_API_KEY : undefined;
+      rmSync(dirname(tmp), { recursive: true, force: true });
+      if (p.exitCode !== 0 || !val) fail(`could not read a key from the Firecrawl CLI — log in first: npx -y firecrawl-cli@1.26.5 login --browser\n${p.stderr.toString().slice(0, 300)}`);
+      out({ saved: "FIRECRAWL_API_KEY", value: mask(val), file: saveCredential("FIRECRAWL_API_KEY", val!) });
+    } else {
+      out({
+        file: credentialsPath(),
+        file_mode: credentialsFileMode(),
+        keys: Object.fromEntries(KEYS.map((k) => [k, { set: Boolean(process.env[k]), value: mask(process.env[k]), from: keyOrigin[k] ?? null }])),
+        tier: tier(),
+      });
+    }
     break;
   }
   case "contracts":
