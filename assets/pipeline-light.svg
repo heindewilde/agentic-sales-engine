@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1070" height="520" viewBox="0 0 1070 520" role="img" aria-label="Pipeline: define the ICP and scoring model, run the wide-then-deep funnel, engage, and learn from outcomes">
+  <defs>
+    <marker id="ah-0969da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#0969da"/></marker>
+    <marker id="ah-8250df" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8250df"/></marker>
+    <marker id="ah-8c959f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker>
+  </defs>
+  <rect width="1070" height="520" rx="16" fill="#ffffff"/>
+  <g>
+    <rect x="40" y="52" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="56" y="79" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">1</tspan>  ICP</text>
+    <text x="56" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">site · best customers · gaps</text>
+  </g>
+  <g>
+    <rect x="246" y="52" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="262" y="79" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">2</tspan>  Scoring model</text>
+    <text x="262" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">Fit × Intent × Access</text>
+  </g>
+  <g>
+    <rect x="864" y="52" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="880" y="79" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">↻</tspan>  Sync</text>
+    <text x="880" y="100" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">new triggers · page changes</text>
+  </g>
+  <path d="M226 83.0 H242" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <g>
+    <rect x="131.0" y="18" width="210.0" height="24" rx="12" fill="#fff8c5" stroke="#9a6700" stroke-width="1.25"/>
+    <text x="236.0" y="34.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#9a6700">gate 1 · you approve</text>
+  </g>
+  <text x="450" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">back-tested on customers</text>
+  <text x="450" y="98" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">you already know</text>
+  <g>
+    <rect x="40" y="196" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="56" y="223" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">3</tspan>  Discover</text>
+    <text x="56" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">200–1000 candidates</text>
+  </g>
+  <g>
+    <rect x="246" y="196" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="262" y="223" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">4</tspan>  Light score</text>
+    <text x="262" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">~$0.01–0.06 / account</text>
+  </g>
+  <g>
+    <rect x="452" y="196" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="468" y="223" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">5</tspan>  Shortlist</text>
+    <text x="468" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">top ~15% + cost estimate</text>
+  </g>
+  <g>
+    <rect x="658" y="196" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#0969da" stroke-width="2"/>
+    <text x="674" y="223" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">6</tspan>  Deep research</text>
+    <text x="674" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">triggers · people · systems</text>
+  </g>
+  <g>
+    <rect x="864" y="196" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="880" y="223" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">7</tspan>  Full score</text>
+    <text x="880" y="244" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">cited, explainable</text>
+  </g>
+  <path d="M339.0 114 V144 H133.0 V192" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M226 227.0 H242" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M432 227.0 H448" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M638 227.0 H654" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M844 227.0 H860" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <g>
+    <rect x="520.0" y="162" width="255.99999999999997" height="24" rx="12" fill="#fff8c5" stroke="#9a6700" stroke-width="1.25"/>
+    <text x="648.0" y="178.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#9a6700">gate 2 · approve + budget</text>
+  </g>
+  <path d="M957.0 114 V192" fill="none" stroke="#8250df" stroke-width="1.75" stroke-dasharray="5 5" marker-end="url(#ah-8250df)"/>
+  <text x="965.0" y="164" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8250df">rescore</text>
+  <g>
+    <rect x="864" y="340" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="880" y="367" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">8</tspan>  Ways in</text>
+    <text x="880" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">warm intros · trigger hooks</text>
+  </g>
+  <g>
+    <rect x="658" y="340" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="674" y="367" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">9</tspan>  Outreach drafts</text>
+    <text x="674" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">your voice · never sent</text>
+  </g>
+  <g>
+    <rect x="452" y="340" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="468" y="367" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">10</tspan>  Call prep</text>
+    <text x="468" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">SPIN · MEDDICC · objections</text>
+  </g>
+  <g>
+    <rect x="246" y="340" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="262" y="367" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">11</tspan>  Outcomes</text>
+    <text x="262" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">reply → meeting → deal</text>
+  </g>
+  <g>
+    <rect x="40" y="340" width="186" height="62" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
+    <text x="56" y="367" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328"><tspan fill="#0969da">12</tspan>  Win-loss</text>
+    <text x="56" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#59636e">recalibrate ICP + weights</text>
+  </g>
+  <path d="M957.0 258 V336" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M864 371.0 H848" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M658 371.0 H642" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M452 371.0 H436" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M246 371.0 H230" fill="none" stroke="#8c959f" stroke-width="1.75" marker-end="url(#ah-8c959f)"/>
+  <path d="M64 340 V288 H16 V83.0 H36" fill="none" stroke="#8250df" stroke-width="1.75" stroke-dasharray="5 5" marker-end="url(#ah-8250df)"/>
+  <text x="22" y="282" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#8250df">learns</text>
+  <rect x="32" y="434" width="1006" height="62" rx="12" fill="#ddf4ff" stroke="#54aeff" stroke-width="1.25"/>
+  <text x="535.0" y="460" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="650" fill="#1f2328">Your git workspace — the shared memory every step reads and improves</text>
+  <text x="535.0" y="481" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12.5" fill="#59636e">account briefs + open questions · facts with sources · scores · signals · learnings</text>
+</svg>
