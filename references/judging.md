@@ -15,8 +15,8 @@ For each factor in scope (`light` mode: only factors with `light: true`; `full`:
    describes an absence ("careers page checked, no such roles", "no link to a current client") **and you actually read
    the page that would show it**, judge level 0 with a checked-absence item:
    `{"quote":"careers page lists no e-commerce, marketing or content roles","source_url":"https://…/careers","raw_ref":"raw/…","checked":true}`.
-   A checked absence only backs level 0, and only with the page you checked (its `raw_ref` when saved). If nobody
-   looked, it stays `null`.
+   A checked absence only backs level 0, and only with the page you checked, saved by `fetch_pages` (its `raw_ref`;
+   a WebFetch summary doesn't count). If nobody looked, it stays `null`.
 5. Confidence = evidence strength: first-party explicit 0.9 · reputable third party 0.7 · directory 0.5 · inferred 0.4.
 6. Re-read: the level must be the one the rationale argues for.
 

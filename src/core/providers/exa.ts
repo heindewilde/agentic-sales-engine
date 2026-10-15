@@ -88,8 +88,17 @@ export function exaAdapter(apiKey: string): Adapter {
         case "fetch_pages": {
           const i = input as OpInputs["fetch_pages"];
           const r = await exa.getContents(i.urls, { text: { maxCharacters: i.max_chars ?? 8000 } } as any);
-          const results: PageHit[] = (r.results as AnyResult[]).map((x) => ({ url: x.url, title: x.title ?? null, text: x.text ?? "" }));
-          return { results, ...cost(r, est) } as AdapterResult<O>;
+          const got = (r.results as AnyResult[]).filter((x) => (x.text ?? "").trim());
+          const results: PageHit[] = got.map((x) => ({ url: x.url, title: x.title ?? null, text: x.text ?? "" }));
+          // Exa omits pages it can't read; name them (with its status reason when given) instead of dropping them silently.
+          const norm = (u: string) => u.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+          const have = new Set(got.map((x) => norm(x.url)));
+          const statuses = ((r as unknown as { statuses?: { id: string; status: string; error?: { tag?: string; httpStatusCode?: number } }[] }).statuses ?? []);
+          const failed = i.urls.filter((u) => !have.has(norm(u))).map((u) => {
+            const st = statuses.find((x) => norm(x.id) === norm(u));
+            return { url: u, reason: st?.error ? `${st.error.tag ?? "error"}${st.error.httpStatusCode ? ` (HTTP ${st.error.httpStatusCode})` : ""}` : "not returned (unreachable or empty)" };
+          });
+          return { results, failed, ...cost(r, est) } as AdapterResult<O>;
         }
         case "extract": {
           const i = input as OpInputs["extract"];
