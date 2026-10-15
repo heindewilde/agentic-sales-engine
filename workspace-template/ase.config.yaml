@@ -18,7 +18,7 @@ privacy_mode: true
 budgets:
   per_run_usd: 5
   per_day_usd: 20
-  deep_research_per_account_usd: 0.6
+  deep_research_per_account_usd: 0.3   # measured ≈ $0.23 per account (bench/)
 
 # Models per stage: cheap for wide discovery, stronger for research and judging.
 models:

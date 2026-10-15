@@ -19,7 +19,7 @@ import { stringifyDoc } from "../src/core/frontmatter.ts";
 const ROOT = join(import.meta.dir, "..");
 const ICP = "ap-automation-midmarket";
 const RESEARCH = ["boma.eu", "vanegmond.nl"];
-const { values: f } = parseArgs({ args: process.argv.slice(2), options: { label: { type: "string" }, compare: { type: "string" } } });
+const { values: f } = parseArgs({ args: process.argv.slice(2), options: { label: { type: "string" }, compare: { type: "string" }, push: { type: "boolean" } } });
 
 if (f.compare) {
   const [a, b] = f.compare.split(",").map((l) => JSON.parse(readFileSync(join(ROOT, "bench/results", `${l}.json`), "utf8")));
@@ -92,6 +92,13 @@ const result = {
   advanced: { light: light.advanced, research: research.advanced },
   quality: Object.fromEntries([...Object.entries(offline.summary), ...Object.entries(llm.summary)].map(([k, v]) => [k, v.mean])),
 };
+// --push: send both suites to every connected observability backend as experiment "<label>"
+if (f.push) {
+  const { connectedBackends } = await import("../src/observability/backends.ts");
+  for (const b of connectedBackends()) {
+    for (const s of [offline, llm]) log(`${b.id}: ${JSON.stringify(await b.pushScores(process.env, s, { experiment: label }).catch((e) => ({ error: (e as Error).message })))}`);
+  }
+}
 mkdirSync(join(ROOT, "bench/results"), { recursive: true });
 writeFileSync(join(ROOT, "bench/results", `${label}.json`), `${JSON.stringify(result, null, 2)}\n`);
 console.log(JSON.stringify(result, null, 2));

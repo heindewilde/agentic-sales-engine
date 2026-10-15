@@ -25,6 +25,13 @@ export interface Candidate {
   raw_ref?: string | null;
 }
 
+/** Platforms, social networks and aggregators that discovery or imports sometimes return instead of the company itself. */
+export const NOT_A_COMPANY = new Set([
+  "linkedin.com", "facebook.com", "instagram.com", "x.com", "twitter.com", "youtube.com", "tiktok.com", "pinterest.com",
+  "wikipedia.org", "google.com", "crunchbase.com", "bloomberg.com", "dnb.com", "zoominfo.com", "apollo.io", "glassdoor.com",
+  "indeed.com", "kvk.nl", "companyweb.be", "trendstop.be", "medium.com", "substack.com", "shopify.com", "wix.com",
+]);
+
 export interface PersistResult {
   run_id: string;
   created: string[];
@@ -74,7 +81,7 @@ export async function persistCandidates(ws: string, icp: string, runId: string, 
 
   for (const c of candidates) {
     const domain = normalizeDomain(c.domain ?? c.url ?? "");
-    if (!domain) {
+    if (!domain || NOT_A_COMPANY.has(domain)) {
       res.skipped_no_domain.push(c.name);
       continue;
     }
