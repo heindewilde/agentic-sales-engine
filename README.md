@@ -180,54 +180,29 @@ clipboard and stored privately. Setup and details: [docs/observability.md](docs/
 
 ## What it costs
 
-Two things can cost money: **Claude** and the **data providers**. Both are small per account, and the engine shows
-you what a run will cost before it spends anything that matters.
+On a Claude subscription the AI part costs nothing extra: every session, including batch and autopilot runs, runs
+through Claude Code on your login and counts toward your plan's usage. What you pay for is data, at cents per account.
 
-| | What you pay |
-|---|---|
-| **Claude, on a subscription** (Pro, Max, Team) | Nothing extra. Every session, including batch and autopilot runs, runs through Claude Code on your login. Big runs count toward your plan's usage limits. |
-| **Claude, with an API key** (or Bedrock, Vertex) | Per token. This is most of the cost of a run, mainly deep research. |
-| **Data providers** (Exa, Firecrawl) | Cents per account. Both have free tiers, and both are optional. |
-| **Observability** (Langfuse, LangSmith) | Optional. Both have free tiers, and Langfuse can be self-hosted. |
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/costs-dark.svg">
+    <img alt="Claude: $0 extra on a subscription, billed per token with an API key. Data providers: cents per account. Observability: optional. Per account roughly: discovery and light score well under a cent, deep research a few cents, ways in and drafts about a cent in data providers. A real first cycle of ~150 companies, 26 researched and 16 drafted cost under $1.50 in data providers." src="assets/costs-light.svg" width="900">
+  </picture>
+</p>
 
-**Rough orders of magnitude per account**, measured on real runs. These are indicative: they depend on the providers
-and models you pick and how much there is to find, and they keep going down as the engine is optimised.
-
-| Stage | Data providers | Claude (API-equivalent) |
-|---|---|---|
-| Discover + light score | well under a cent | well under a cent |
-| Deep research + full score | a few cents | tens of cents |
-| Ways in + outreach draft | about a cent | a few cents to tens of cents |
-
-**Example:** one real first cycle, with about 150 companies discovered, 26 researched and 16 accounts drafted, cost
-**under $1.50 in data providers**. Claude came out of the subscription; on an API key it would have added about $8.
-
-**You stay in control:**
-- Before deep research, the shortlist shows a cost estimate for the accounts you tick.
-- Budgets per run and per day are checked before every paid call. On a subscription they cap the data providers only,
-  and the engine doesn't ask you for one. With an API key they cover Claude too.
-- Every paid call is logged in `ledger/costs.jsonl` (`ase ledger report`), and Claude usage on a subscription is
-  logged as an API-equivalent figure, so you can see what a run takes.
-- [bench/](bench/) runs a fixed workload to measure cost and quality together, so optimisations never trade one for
-  the other unseen.
+Figures are indicative and measured on real runs; they depend on the providers and models you choose. With an API
+key, Claude is billed per token and becomes most of the cost, mainly deep research. Budgets per run and per day then
+cover Claude too; on a subscription they only cap the data providers and the engine won't ask for one.
+`ase ledger report` shows what every run cost, and [bench/](bench/) measures cost and quality together.
 
 ## How it compares
 
-|  | agentic-sales-engine | Data-platform tools<br><sub>(e.g. Clay)</sub> | Contact databases<br><sub>(e.g. Apollo)</sub> | Chatting with an AI<br><sub>(one-off research)</sub> |
-|---|---|---|---|---|
-| Deep research per account | ✅ agent works the open questions | ◐ AI columns per field | ◐ firmographic data | ✅ but one account at a time |
-| Every fact cited and dated | ✅ enforced on write | ◐ depends on the column | ✗ | ◐ in the answer |
-| Explainable, back-tested scoring | ✅ your rubric, evidence per point | ◐ formula columns | ◐ score fields | ✗ |
-| Memory across steps and runs | ✅ briefs + open questions | ◐ the table | ✅ records | ✗ |
-| Learns from outcomes | ✅ win-loss + recalibration | ✗ | ◐ | ✗ |
-| Checks its own output quality | ✅ eval suite, in CI and on real output | ✗ | ✗ | ✗ |
-| Step-by-step traces of what it did | ✅ Langfuse, LangSmith or any OpenTelemetry backend | ◐ run history | ✗ | ✗ |
-| Runs end to end on its own | ✅ autopilot, pauses at your gates | ◐ table automations | ◐ sequences | ✗ |
-| Contact data (emails, phones) at scale | ◐ people search; bring your own | ✅ waterfall enrichment | ✅ large database | ✗ |
-| Sends sequences | ✗ by design: drafts only | ✅ via integrations | ✅ | ✗ |
-| Your data | ✅ plain files in your git repo | their platform | their platform | chat history |
-| Customizable | ✅ MIT; methodology is markdown, scoring is YAML | ◐ workflows | ◐ settings | ◐ prompts |
-| Pricing | your Claude plan + cents per account | subscription + credits | per seat | subscription |
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/compare-dark.svg">
+    <img alt="Comparison of agentic-sales-engine with data platforms (e.g. Clay), contact databases (e.g. Apollo) and one-off AI chat across research, citations, scoring, memory, learning, quality checks, traces, autonomy, contact data, sending, data ownership, customisation and pricing" src="assets/compare-light.svg" width="900">
+  </picture>
+</p>
 
 It's not a contact database or a sending tool. It pairs well with one: import their lists as seeds, and send from
 whatever you already use.

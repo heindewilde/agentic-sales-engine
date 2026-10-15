@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1070" height="596" viewBox="0 0 1070 596" role="img" aria-label="How agentic-sales-engine compares with data-platform tools, contact databases and one-off AI chats">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker></defs>
+  <rect width="1070" height="596" rx="16" fill="#ffffff"/>
+  <rect x="320" y="24" width="330" height="520" rx="12" fill="#ddf4ff" stroke="#54aeff" stroke-width="1.25"/>
+  <text x="338" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#0969da">agentic-sales-engine</text>
+  <text x="338" y="74" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" fill="#59636e">research, scoring, ways in, drafts</text>
+  <text x="735.0" y="56" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="650" fill="#1f2328">Data platforms</text>
+  <text x="735.0" y="74" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" fill="#59636e">e.g. Clay</text>
+  <text x="865.0" y="56" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="650" fill="#1f2328">Contact databases</text>
+  <text x="865.0" y="74" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" fill="#59636e">e.g. Apollo</text>
+  <text x="995.0" y="56" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="650" fill="#1f2328">AI chat</text>
+  <text x="995.0" y="74" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" fill="#59636e">one-off research</text>
+  <text x="40" y="104" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Deep research per account</text>
+  <circle cx="345" cy="100" r="7" fill="#1a7f37"/>
+  <text x="362" y="104.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">works each account's open questions</text>
+  <circle cx="735.0" cy="100" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M735.0 93.6 A6.4 6.4 0 0 1 735.0 106.4 Z" fill="#1a7f37"/>
+  <circle cx="865.0" cy="100" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M865.0 93.6 A6.4 6.4 0 0 1 865.0 106.4 Z" fill="#1a7f37"/>
+  <circle cx="995.0" cy="100" r="7" fill="#1a7f37"/>
+  <line x1="40" y1="117.0" x2="1030" y2="117.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="138" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Every fact cited and dated</text>
+  <circle cx="345" cy="134" r="7" fill="#1a7f37"/>
+  <text x="362" y="138.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">enforced on every write</text>
+  <circle cx="735.0" cy="134" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M735.0 127.6 A6.4 6.4 0 0 1 735.0 140.4 Z" fill="#1a7f37"/>
+  <circle cx="865.0" cy="134" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <circle cx="995.0" cy="134" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M995.0 127.6 A6.4 6.4 0 0 1 995.0 140.4 Z" fill="#1a7f37"/>
+  <line x1="40" y1="151.0" x2="1030" y2="151.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="172" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Explainable, back-tested scoring</text>
+  <circle cx="345" cy="168" r="7" fill="#1a7f37"/>
+  <text x="362" y="172.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">your rubric, evidence per point</text>
+  <circle cx="735.0" cy="168" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M735.0 161.6 A6.4 6.4 0 0 1 735.0 174.4 Z" fill="#1a7f37"/>
+  <circle cx="865.0" cy="168" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M865.0 161.6 A6.4 6.4 0 0 1 865.0 174.4 Z" fill="#1a7f37"/>
+  <circle cx="995.0" cy="168" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="185.0" x2="1030" y2="185.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="206" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Memory across steps and runs</text>
+  <circle cx="345" cy="202" r="7" fill="#1a7f37"/>
+  <text x="362" y="206.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">briefs with open questions</text>
+  <circle cx="735.0" cy="202" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M735.0 195.6 A6.4 6.4 0 0 1 735.0 208.4 Z" fill="#1a7f37"/>
+  <circle cx="865.0" cy="202" r="7" fill="#1a7f37"/>
+  <circle cx="995.0" cy="202" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="219.0" x2="1030" y2="219.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Learns from outcomes</text>
+  <circle cx="345" cy="236" r="7" fill="#1a7f37"/>
+  <text x="362" y="240.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">win-loss and recalibration</text>
+  <circle cx="735.0" cy="236" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <circle cx="865.0" cy="236" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M865.0 229.6 A6.4 6.4 0 0 1 865.0 242.4 Z" fill="#1a7f37"/>
+  <circle cx="995.0" cy="236" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="253.0" x2="1030" y2="253.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="274" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Checks its own output quality</text>
+  <circle cx="345" cy="270" r="7" fill="#1a7f37"/>
+  <text x="362" y="274.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">evals in CI and on real runs</text>
+  <circle cx="735.0" cy="270" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <circle cx="865.0" cy="270" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <circle cx="995.0" cy="270" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="287.0" x2="1030" y2="287.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="308" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Traces of every step</text>
+  <circle cx="345" cy="304" r="7" fill="#1a7f37"/>
+  <text x="362" y="308.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">Langfuse, LangSmith, OpenTelemetry</text>
+  <circle cx="735.0" cy="304" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M735.0 297.6 A6.4 6.4 0 0 1 735.0 310.4 Z" fill="#1a7f37"/>
+  <circle cx="865.0" cy="304" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <circle cx="995.0" cy="304" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="321.0" x2="1030" y2="321.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="342" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Runs end to end on its own</text>
+  <circle cx="345" cy="338" r="7" fill="#1a7f37"/>
+  <text x="362" y="342.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">autopilot, pauses at your gates</text>
+  <circle cx="735.0" cy="338" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M735.0 331.6 A6.4 6.4 0 0 1 735.0 344.4 Z" fill="#1a7f37"/>
+  <circle cx="865.0" cy="338" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M865.0 331.6 A6.4 6.4 0 0 1 865.0 344.4 Z" fill="#1a7f37"/>
+  <circle cx="995.0" cy="338" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="355.0" x2="1030" y2="355.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="376" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Contact data at scale</text>
+  <circle cx="345" cy="372" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M345 365.6 A6.4 6.4 0 0 1 345 378.4 Z" fill="#1a7f37"/>
+  <text x="362" y="376.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">people search; bring your own</text>
+  <circle cx="735.0" cy="372" r="7" fill="#1a7f37"/>
+  <circle cx="865.0" cy="372" r="7" fill="#1a7f37"/>
+  <circle cx="995.0" cy="372" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="389.0" x2="1030" y2="389.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="410" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Sends sequences</text>
+  <circle cx="345" cy="406" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="362" y="410.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">by design: drafts only, you send</text>
+  <circle cx="735.0" cy="406" r="7" fill="#1a7f37"/>
+  <circle cx="865.0" cy="406" r="7" fill="#1a7f37"/>
+  <circle cx="995.0" cy="406" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="423.0" x2="1030" y2="423.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="444" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Your data stays yours</text>
+  <circle cx="345" cy="440" r="7" fill="#1a7f37"/>
+  <text x="362" y="444.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">plain files in your git repo</text>
+  <circle cx="735.0" cy="440" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <circle cx="865.0" cy="440" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <circle cx="995.0" cy="440" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <line x1="40" y1="457.0" x2="1030" y2="457.0" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="478" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Customisable</text>
+  <circle cx="345" cy="474" r="7" fill="#1a7f37"/>
+  <text x="362" y="478.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#1f2328">MIT; methodology and rubric are files</text>
+  <circle cx="735.0" cy="474" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M735.0 467.6 A6.4 6.4 0 0 1 735.0 480.4 Z" fill="#1a7f37"/>
+  <circle cx="865.0" cy="474" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M865.0 467.6 A6.4 6.4 0 0 1 865.0 480.4 Z" fill="#1a7f37"/>
+  <circle cx="995.0" cy="474" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M995.0 467.6 A6.4 6.4 0 0 1 995.0 480.4 Z" fill="#1a7f37"/>
+  <line x1="40" y1="498" x2="1030" y2="498" stroke="#d0d7de" stroke-width="0.75"/>
+  <text x="40" y="518" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Pricing</text>
+  <text x="338" y="518" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1f2328">your Claude plan + cents per account</text>
+  <text x="735.0" y="518" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#59636e">subscription + credits</text>
+  <text x="865.0" y="518" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#59636e">per seat</text>
+  <text x="995.0" y="518" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#59636e">subscription</text>
+  <circle cx="47" cy="570" r="7" fill="#1a7f37"/>
+  <text x="60" y="574" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#59636e">yes</text>
+  <circle cx="102" cy="570" r="6.4" fill="none" stroke="#1a7f37" stroke-width="1.5"/><path d="M102 563.6 A6.4 6.4 0 0 1 102 576.4 Z" fill="#1a7f37"/>
+  <text x="115" y="574" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#59636e">partly</text>
+  <circle cx="170" cy="570" r="6.4" fill="none" stroke="#d0d7de" stroke-width="1.5"/>
+  <text x="183" y="574" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#59636e">no</text>
+</svg>
