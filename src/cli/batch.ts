@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { BATCH_SKILLS, runBatch, type BatchSkill } from "../core/batch.ts";
 import { requireWorkspace } from "../core/workspace.ts";
+import { loadCredentials } from "../core/credentials.ts";
 
 const { values: f } = parseArgs({
   args: process.argv.slice(2),
@@ -33,9 +34,11 @@ if (!skill || !(skill in BATCH_SKILLS) || !f.icp) {
   process.stderr.write(`usage: batch.ts --skill <${Object.keys(BATCH_SKILLS).join("|")}> --icp <slug> [options]\n`);
   process.exit(1);
 }
+const ws = requireWorkspace(f.workspace);
+loadCredentials(ws);
 const num = (v: string | undefined) => (v === undefined ? undefined : Number(v));
 const res = await runBatch({
-  ws: requireWorkspace(f.workspace),
+  ws,
   skill,
   icp: f.icp,
   pluginRoot: process.env.CLAUDE_PLUGIN_ROOT ?? join(import.meta.dir, "..", ".."),
