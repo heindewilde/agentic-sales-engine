@@ -286,3 +286,55 @@ export function formatIssues(err: z.ZodError): string {
     .map((i) => `- ${i.path.length ? i.path.join(".") : "(root)"}: ${i.message}`)
     .join("\n");
 }
+
+// ---------- M7: watchlist (signal monitoring by polling) ----------
+
+export const WatchEntry = z.object({
+  account: z.string().min(1),
+  icp: z.string(),
+  news: z.boolean().default(true),
+  /** extra words to make the news query specific (e.g. "Ghent wholesaler"); defaults to the company name only */
+  news_query: z.string().optional(),
+  pages: z.array(z.string().url()).default([]),
+  added_by: z.string().optional(),
+  added: z.string().optional(),
+  last_news_check: z.string().optional(),
+  /** url -> sha of normalized page text at the last check */
+  page_hashes: z.record(z.string(), z.string()).default({}),
+  /** short hashes of news URLs already reported, newest last (capped) */
+  seen: z.array(z.string()).default([]),
+});
+export type WatchEntry = z.infer<typeof WatchEntry>;
+export const Watchlist = z.object({ entries: z.array(WatchEntry).default([]) });
+export type Watchlist = z.infer<typeof Watchlist>;
+
+// ---------- M8: outreach drafts ----------
+
+export const Draft = z.object({
+  account: z.string().min(1),
+  icp: z.string(),
+  person: z.string().optional(),
+  person_linkedin: z.string().optional(),
+  channel: z.enum(["email", "linkedin_connect", "linkedin_dm", "intro_request"]),
+  step: z.number().int().min(1).default(1),
+  status: z.enum(["draft", "edited", "sent", "discarded"]).default("draft"),
+  way_in: z.string().optional(),
+  based_on: z.array(z.string()).min(1, "list the brief sections / signals / people files this draft relies on"),
+  created: isoDate,
+  sent_at: isoDate.optional(),
+  learned: z.boolean().default(false),
+});
+export type Draft = z.infer<typeof Draft>;
+
+// ---------- M9: call prep ----------
+
+export const CallPrep = z.object({
+  account: z.string().min(1),
+  icp: z.string(),
+  meeting_date: isoDate.optional(),
+  attendees: z.array(z.object({ name: z.string(), person: z.string().optional(), role: z.string().optional() })).default([]),
+  objective: z.string().optional(),
+  created: isoDate,
+  sources_checked_at: isoDate,
+});
+export type CallPrep = z.infer<typeof CallPrep>;

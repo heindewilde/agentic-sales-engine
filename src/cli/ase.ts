@@ -20,6 +20,8 @@ import { normalizeDomain, normalizeLinkedIn } from "../core/normalize.ts";
 import { DncEntry, Stage, type Company } from "../core/schemas.ts";
 import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, saveCredential } from "../core/credentials.ts";
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
+import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
+import { listDrafts, markDraft, markLearned, pendingEdits, snapshotOriginal } from "../core/drafts.ts";
 import { dncMatcher, findWorkspace, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
 import { callProvider, estimateCall } from "../core/providers/gateway.ts";
@@ -63,6 +65,9 @@ const { values: flags, positionals } = parseArgs({
     max: { type: "string" },
     file: { type: "string" },
     to: { type: "string" },
+    page: { type: "string", multiple: true },
+    query: { type: "string" },
+    status: { type: "string" },
   },
 });
 
@@ -109,6 +114,12 @@ const HELP = `ase <command>
   stage advance <domain> --icp <s> --to <stage> [--reason ...]   move forward only if the contract holds
   ways-in <domain> --icp <s>              warm paths, recent signals, people/personas for an account
   ttl [--icp <s>] [--limit N]             facts past their TTL, most advanced accounts first
+  watch add <domain> --icp <s> [--page <url> ...] [--query "<extra words>"]   monitor an account
+  watch list | watch remove <domain> [--icp <s>]
+  sync [--icp <s>] [--account <d>] [--estimate]   poll news + watched pages → sync/<date>.md for review
+  drafts list [--status s] [--account d] | snapshot <file> | mark <file> <draft|edited|sent|discarded>
+  drafts edits                            original vs human-final pairs not yet learned from
+  drafts learned <file> [...]             mark edit pairs as absorbed into the voice profile
   keys status                             which provider keys the CLI/batch will use (masked) and from where
   keys set <EXA_API_KEY|FIRECRAWL_API_KEY|FIRECRAWL_BASE_URL>   read the value from stdin (e.g. pbpaste | …)
   keys pull-firecrawl                     import the key from the official Firecrawl CLI login
@@ -351,6 +362,52 @@ switch (cmd) {
     const w = ws();
     await reindexAll(w);
     out(await staleFacts(w, { icp: flags.icp as string | undefined, limit: flags.limit ? Number(flags.limit) : undefined }));
+    break;
+  }
+  case "watch": {
+    const w = ws();
+    const [sub, d] = positionals;
+    try {
+      if (sub === "add") {
+        const icp = (flags.icp as string) ?? fail("--icp is required");
+        out(await addWatch(w, d ?? fail("usage: watch add <domain> --icp <slug>"), icp, { pages: flags.page as string[] | undefined, news_query: flags.query as string | undefined, by: (flags.member as string[] | undefined)?.[0] }));
+      } else if (sub === "remove") out(removeWatch(w, normalizeDomain(d ?? "") ?? d ?? fail("usage: watch remove <domain>"), flags.icp as string | undefined));
+      else {
+        const wl = loadWatchlist(w);
+        out({ entries: wl.entries.length, est_cost_per_sync_usd: estimateSync(wl), watchlist: wl.entries.map((e) => ({ account: e.account, icp: e.icp, news: e.news, pages: e.pages, last_news_check: e.last_news_check ?? null })) });
+      }
+    } catch (e) {
+      fail((e as Error).message, 2);
+    }
+    break;
+  }
+  case "sync": {
+    const w = ws();
+    if (flags.estimate) {
+      out({ est_usd: estimateSync(loadWatchlist(w), flags.icp as string | undefined) });
+      break;
+    }
+    const r = await runSync(w, { icp: flags.icp as string | undefined, account: flags.account as string | undefined });
+    await reindexAll(w);
+    out({ ...r, items: r.items.map((i) => ({ kind: i.kind, account: i.account, title: i.title, url: i.url, published: i.published ?? null })) });
+    break;
+  }
+  case "drafts": {
+    const w = ws();
+    const sub = positionals[0] ?? "list";
+    try {
+      if (sub === "list") out(await listDrafts(w, { status: flags.status as string | undefined, account: flags.account as string | undefined }));
+      else if (sub === "snapshot") out(snapshotOriginal(w, relPath(w, positionals[1] ?? fail("usage: drafts snapshot <file>")) ?? fail("file outside workspace")));
+      else if (sub === "mark") {
+        const status = positionals[2] as "draft" | "edited" | "sent" | "discarded";
+        if (!["draft", "edited", "sent", "discarded"].includes(status)) fail("usage: drafts mark <file> <draft|edited|sent|discarded>");
+        out(await markDraft(w, relPath(w, positionals[1] ?? "") ?? fail("file outside workspace"), status));
+      } else if (sub === "edits") out(await pendingEdits(w));
+      else if (sub === "learned") out(await markLearned(w, positionals.slice(1).map((p) => relPath(w, p) ?? fail(`${p} outside workspace`))));
+      else fail("usage: drafts list|snapshot|mark|edits|learned");
+    } catch (e) {
+      fail((e as Error).message, 2);
+    }
     break;
   }
   case "keys": {

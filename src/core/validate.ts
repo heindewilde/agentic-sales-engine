@@ -2,12 +2,13 @@ import { z } from "zod";
 import { parseDoc, parseYaml } from "./frontmatter.ts";
 import { isPersonalEmail, normalizeDomain, normalizeLinkedIn } from "./normalize.ts";
 import {
-  BRIEF_SECTIONS, Brief, Company, Config, Dnc, Icp, Person, ScoreFile, Scoring, Signal, formatIssues,
+  BRIEF_SECTIONS, Brief, CallPrep, Company, Config, Dnc, Draft, Icp, Person, ScoreFile, Scoring, Signal, Watchlist, formatIssues,
 } from "./schemas.ts";
 import type { DncMatcher } from "./workspace.ts";
 
 export type EntityKind =
-  | "company" | "brief" | "score" | "calibration" | "signal" | "person" | "icp" | "scoring" | "config" | "dnc" | "raw" | "other";
+  | "company" | "brief" | "score" | "calibration" | "signal" | "person" | "icp" | "scoring" | "config" | "dnc" | "raw"
+  | "watchlist" | "draft" | "draft_original" | "callprep" | "voice" | "other";
 
 /** Classify a workspace-relative path into the entity it holds. */
 export function classify(rel: string): { kind: EntityKind; account?: string; icp?: string } {
@@ -15,6 +16,11 @@ export function classify(rel: string): { kind: EntityKind; account?: string; icp
   if (rel.startsWith("raw/")) return { kind: "raw" };
   if (rel === "ase.config.yaml") return { kind: "config" };
   if (rel === "dnc.yaml") return { kind: "dnc" };
+  if (rel === "watchlist.yaml") return { kind: "watchlist" };
+  if (rel === "company/voice/profile.md") return { kind: "voice" };
+  if ((m = /^accounts\/([^/]+)\/drafts\/\.originals\/[^/]+\.md$/.exec(rel))) return { kind: "draft_original", account: m[1] };
+  if ((m = /^accounts\/([^/]+)\/drafts\/[^/]+\.md$/.exec(rel))) return { kind: "draft", account: m[1] };
+  if ((m = /^accounts\/([^/]+)\/callprep\/[^/]+\.md$/.exec(rel))) return { kind: "callprep", account: m[1] };
   if ((m = /^accounts\/([^/]+)\/company\.md$/.exec(rel))) return { kind: "company", account: m[1] };
   if ((m = /^accounts\/([^/]+)\/brief\.md$/.exec(rel))) return { kind: "brief", account: m[1] };
   if ((m = /^accounts\/([^/]+)\/scores\/([^/]+)\.md$/.exec(rel))) return { kind: "score", account: m[1], icp: m[2] };
@@ -140,6 +146,30 @@ export function validateContent(rel: string, content: string, opts: ValidateOpts
     case "scoring":
       errors.push(...zodErrors(Scoring, data, "scoring.yaml"));
       if (data.icp && data.icp !== c.icp) errors.push(`icp "${data.icp}" must match folder "${c.icp}"`);
+      break;
+    case "watchlist":
+      errors.push(...zodErrors(Watchlist, data, "watchlist.yaml"));
+      break;
+    case "draft": {
+      errors.push(...zodErrors(Draft, data, "draft"));
+      if (data.account && data.account !== c.account) errors.push(`account "${data.account}" must match folder "${c.account}"`);
+      if (opts.dnc && opts.dnc.linkedin(data.person_linkedin as string | undefined)) errors.push("the recipient is on the do-not-contact list");
+      const fn = checkFootnotes(body);
+      errors.push(...fn);
+      // Claims about the prospect must be traceable: a first-touch message needs at least one cited fact.
+      if (data.channel !== "intro_request" && !/\[\^[^\]]+\]/.test(body)) errors.push("cite at least one fact about the prospect with a footnote ([^1]: <source>) — drafts must be grounded in the brief");
+      break;
+    }
+    case "draft_original":
+      if (opts.exists) errors.push("draft originals are write-once; they are the baseline for learning from your edits");
+      break;
+    case "callprep":
+      errors.push(...zodErrors(CallPrep, data, "call prep"));
+      if (data.account && data.account !== c.account) errors.push(`account "${data.account}" must match folder "${c.account}"`);
+      errors.push(...checkFootnotes(body));
+      break;
+    case "voice":
+      errors.push(...checkFootnotes(body));
       break;
     case "config":
       errors.push(...zodErrors(Config, data, "ase.config.yaml"));
