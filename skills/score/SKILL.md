@@ -20,3 +20,5 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 - **--explain <domain>:** read `accounts/<d>/scores/<slug>.md` and explain the total in plain language: which factors
   carry it, which unknowns cap it (upside vs total), and the one piece of evidence that would move it most.
 - Report changes: old → new total and tier, with the factor that moved most.
+- **GATE 3:** after a batch of full scores, show the ranking and ask the user to review it before any ways-in or
+  outreach work (`ways-in` only for the A/B accounts they confirm). Never pass this gate in an unattended run.

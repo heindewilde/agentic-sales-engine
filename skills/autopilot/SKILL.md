@@ -8,7 +8,7 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts *), Bash(bun 
 # Autopilot
 
 CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/autopilot.ts` (`autopilot` below). Steps:
-discover → enrich_light → **shortlist (gate 2)** → research → **score (review gate)** → ways_in → **drafts (review)**.
+discover → enrich_light → **shortlist (gate 2)** → research → **score (gate 3)** → ways_in → **drafts (review)**.
 Each step is resumable; state lives in `lists/<icp>/<run>/autopilot.json`; one budget covers the whole run.
 
 ## Start
@@ -26,7 +26,7 @@ Each step is resumable; state lives in `lists/<icp>/<run>/autopilot.json`; one b
 - **Shortlist (gate 2):** show the proposal file (`lists/<icp>/<run>/shortlist.md`): count, cost estimate, the table.
   The user may untick accounts in the file. Ask for approval — never approve on their behalf. On approval:
   `autopilot approve --by <member> --resume --text` (background).
-- **Scores:** show the full scores (`ase score rank --icp <slug> --stage scored`), explain surprising ones
+- **Scores (gate 3):** show the full scores (`ase score rank --icp <slug> --stage scored`), explain surprising ones
   (`/agentic-sales-engine:score --explain <domain>`), let the user correct facts or exclude accounts. Ways in and drafts
   only run after approval, for tier A/B: `autopilot approve --by <member> --resume --text`.
 - **Drafts:** list them (`ase drafts list --status draft`), let the user review and edit; remind them nothing was sent.

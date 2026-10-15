@@ -10,7 +10,8 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read, Edit, Glo
 Read `${CLAUDE_PLUGIN_ROOT}/references/rules.md` and `${CLAUDE_PLUGIN_ROOT}/methodology/ways-in.md`.
 CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 
-Accounts: domains in `$ARGUMENTS`, else stage `scored` with tier A or B (`ase score rank --icp <slug> --stage scored`).
+Accounts: domains in `$ARGUMENTS`, else stage `scored` with tier A or B (`ase score rank --icp <slug> --stage scored`)
+whose scores the user reviewed (GATE 3). Interactive and not reviewed yet: show the ranking and ask first.
 Run `ase connections match` once first so new accounts get their warm matches.
 
 Per account:

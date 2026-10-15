@@ -79,12 +79,12 @@ index.md                         # generated LLM-wiki index
 | S0b Scoring design | scoring.yaml v1, calibration.md | user accepts the back-test |
 | S1 Discover (Exa + seed CSVs, deduped by domain, DNC dropped) | company stubs, candidates.csv | — |
 | S2 Light enrich and light score (Haiku, homepage and firmographics, `light: true` factors only) | facts, brief Snapshot, scores (light) | — |
-| S3 Shortlist (ranked, with a p50/p90 cost estimate) | shortlist.md | **GATE 2: user approves; this fixes the run budget** |
+| S3 Shortlist (ranked, with a p50/p90 cost estimate) | shortlist.md | **GATE 2: user approves the accounts (and, with API billing, the budget)** |
 | S4 Deep research (Exa Agent / Firecrawl extraction, people, signals) | brief sections, people/, signals/, raw/ | — |
-| S5 Full score | scores/<icp>.md (full) | — |
+| S5 Full score | scores/<icp>.md (full) | **GATE 3: user reviews the scores before ways in and outreach** |
 | S6 Ways in (warm paths and trigger hooks) | brief "Ways in" | — |
-| S7 Outreach (later) | drafts/ with status draft, never sent | — |
-| S8 Call prep (later) | callprep/<date>.md | — |
+| S7 Outreach | drafts/ with status draft, never sent | **draft review: a person edits and sends** |
+| S8 Call prep | callprep/<date>.md | — |
 
 ### Scoring model
 - **Structure:** `scoring.yaml` holds the groups fit, intent and access, each with a weight. Each factor has:
