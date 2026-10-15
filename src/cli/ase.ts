@@ -16,7 +16,8 @@ import { parseYaml, readDoc, stringifyYaml } from "../core/frontmatter.ts";
 import { appendLedger, currentRun, newRunId, readLedger, spentForRun, spentToday, sumSpend } from "../core/ledger.ts";
 import { lint } from "../core/lint.ts";
 import { normalizeDomain, normalizeLinkedIn } from "../core/normalize.ts";
-import { DncEntry, type Company } from "../core/schemas.ts";
+import { DncEntry, Stage, type Company } from "../core/schemas.ts";
+import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { dncMatcher, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
 import { callProvider, estimateCall } from "../core/providers/gateway.ts";
@@ -59,6 +60,7 @@ const { values: flags, positionals } = parseArgs({
     pct: { type: "string" },
     max: { type: "string" },
     file: { type: "string" },
+    to: { type: "string" },
   },
 });
 
@@ -102,6 +104,9 @@ const HELP = `ase <command>
   accounts --icp <s> [--stage <stage>]    list account domains for an ICP (optionally at one stage)
   shortlist propose --icp <s> [--pct N] [--max N]     GATE 2 proposal with cost estimate
   shortlist approve --icp <s> --file <lists/.../shortlist.md> --approved-by <member>
+  stage advance <domain> --icp <s> --to <stage> [--reason ...]   move forward only if the contract holds
+  ways-in <domain> --icp <s>              warm paths, recent signals, people/personas for an account
+  ttl [--icp <s>] [--limit N]             facts past their TTL, most advanced accounts first
   contracts                               list stage contracts`;
 
 const ws = () => requireWorkspace(flags.workspace as string | undefined);
@@ -312,6 +317,33 @@ switch (cmd) {
     } catch (e) {
       fail((e as Error).message, 2);
     }
+    break;
+  }
+  case "stage": {
+    const w = ws();
+    const [sub, domainRaw] = positionals;
+    if (sub !== "advance" || !domainRaw) fail("usage: stage advance <domain> --icp <slug> --to <stage>");
+    const to = Stage.safeParse(flags.to);
+    if (!to.success) fail(`--to must be one of ${Stage.options.join(", ")}`);
+    try {
+      const r = await advanceStage(w, normalizeDomain(domainRaw) ?? domainRaw!, (flags.icp as string) ?? fail("--icp is required"), to.data!, flags.reason as string | undefined);
+      out(r);
+      if (!r.advanced) process.exitCode = 2;
+    } catch (e) {
+      fail((e as Error).message, 2);
+    }
+    break;
+  }
+  case "ways-in": {
+    const w = ws();
+    const d = positionals[0] ?? fail("usage: ways-in <domain> --icp <slug>");
+    out(await waysIn(w, normalizeDomain(d) ?? d, (flags.icp as string) ?? fail("--icp is required")));
+    break;
+  }
+  case "ttl": {
+    const w = ws();
+    await reindexAll(w);
+    out(await staleFacts(w, { icp: flags.icp as string | undefined, limit: flags.limit ? Number(flags.limit) : undefined }));
     break;
   }
   case "contracts":

@@ -56,7 +56,7 @@ export const UNATTENDED_NOTE = (root: string) =>
   [
     "Unattended batch session — no human is watching, so don't ask questions; finish what you can and summarize.",
     `Permissions: Read, Write, Edit, Glob, Grep, WebFetch/WebSearch, the ase MCP tools, and Bash ONLY for \`bun ${root}/src/cli/ase.ts <command>\` (one command per call, no pipes, no cd, no &&).`,
-    "Use Glob/Read/Grep to explore files (not ls/find/cat). Write judgement JSON with the Write tool to a file, then pass it with --judgements <file>.",
+    "Use Glob/Read/Grep to explore files (not ls/find/cat). Write judgement JSON with the Write tool to .ase/tmp/<domain>-<mode>.json (never inside accounts/), then pass it with --judgements <file>.",
     "If one command is denied, the rest of the toolset still works — adjust and continue.",
   ].join("\n");
 

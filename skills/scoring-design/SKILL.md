@@ -34,7 +34,7 @@ the result is indicative only.
 - For each known customer, run the `factor-judge` agent (parallel, ≤ 10 at a time) with today's date, mode `full`, the
   scoring file, and that research note as evidence. Check each returned level against its rationale. Pipe its JSON into:
   `ase score compute --icp <slug> --calibration <domain> --label <good|bad> --mode full --judgements <tmpfile>`
-  (write the JSON to a temp file in your scratchpad first).
+  (write the JSON to `.ase/tmp/<domain>-full.json` first).
 - `ase score backtest --icp <slug>` → AUC, median percentile of good customers, misranked accounts, verdict.
 - `ase score sensitivity --icp <slug>` → per factor τ for ±20% weight and drop; `dead` and `dominant` flags.
 

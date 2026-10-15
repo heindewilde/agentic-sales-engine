@@ -28,7 +28,7 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 4. Write the brief **Snapshot** (2–4 sentences: what they do, for whom, size, where — footnoted), set
    `sections_updated.Snapshot: <today>`, add a Changelog line `- <today> enrich-light: …`. If something important is
    unclear, add an Open question (owner: research).
-5. Judge the **light** factors per judging.md, write the JSON to a scratch file, run
+5. Judge the **light** factors per judging.md, write the JSON to `.ase/tmp/<domain>-<mode>.json`, run
    `ase score compute --icp <slug> --account <d> --mode light --judgements <file>`. This sets `light_scored`
    (or `excluded` on a known knockout).
 6. Obvious non-matches (not a company, wrong country, out of business): judge the knockout factor at 0 with the

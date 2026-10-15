@@ -15,7 +15,7 @@ import { persistCandidates } from "../core/accounts.ts";
 import { z } from "zod";
 import { findWorkspace, loadConfig } from "../core/workspace.ts";
 
-const server = new McpServer({ name: "ase", version: "0.2.0" });
+const server = new McpServer({ name: "ase", version: "0.6.0" });
 
 const text = (data: unknown, isError = false) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], isError });
 
