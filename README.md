@@ -311,8 +311,9 @@ Each came with the fix to make. Details in [docs/evals.md](docs/evals.md).
 
 ## See every step
 
-Set one environment variable and every run becomes a trace you can open in Langfuse, LangSmith, Phoenix, Jaeger or any
-OpenTelemetry backend:
+Connect a tool with one command (`pbpaste | ase observability connect langfuse`, or `langsmith`, or both side by side)
+and every run becomes a trace there. Eval scores (`ase eval run --push`) and datasets (`ase dataset push`) follow. Any
+other OpenTelemetry backend (Phoenix, Jaeger, Grafana…) works through the standard OTLP variables:
 
 ```text
 autopilot.run                        [autopilot]  budget · status · spent
@@ -328,7 +329,7 @@ autopilot.run                        [autopilot]  budget · status · spent
 The labels in brackets are separate processes (the autopilot, batch driver, headless Claude session, provider gateway and
 CLI), yet they show up as one connected trace. That makes "why did this account score low?" and "where did the money go?" one click each. Spans
 carry metadata only (operations, domains, costs, durations, outcomes) unless you explicitly turn on content capture.
-Setup per backend in [docs/tracing.md](docs/tracing.md).
+Setup in [docs/observability.md](docs/observability.md) and [docs/tracing.md](docs/tracing.md).
 
 ## What it costs
 
@@ -509,7 +510,7 @@ claude plugin validate .
 claude --plugin-dir .            # run the plugin from a checkout, inside a workspace folder
 ```
 
-More: [architecture](docs/architecture.md) · [quality evals](docs/evals.md) · [tracing (OpenTelemetry)](docs/tracing.md) · [scheduling](docs/scheduling.md).
+More: [architecture](docs/architecture.md) · [quality evals](docs/evals.md) · [observability](docs/observability.md) · [tracing](docs/tracing.md) · [scheduling](docs/scheduling.md).
 Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License

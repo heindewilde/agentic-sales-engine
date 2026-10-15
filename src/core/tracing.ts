@@ -4,6 +4,8 @@ import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, BatchSpanProcessor, SimpleSpanProcessor, type SpanExporter } from "@opentelemetry/sdk-trace-base";
+import { BACKENDS, connectedBackends } from "../observability/backends.ts";
+import { credentialFileValues } from "./credentials.ts";
 
 /**
  * Optional OpenTelemetry tracing — works with any OTLP backend (Langfuse, LangSmith, Phoenix, Jaeger, Honeycomb, Grafana…).
@@ -21,7 +23,9 @@ let provider: BasicTracerProvider | null = null;
  * Settings are read from the standard OTEL_* variables, falling back to ASE_-prefixed copies. Claude Code doesn't pass
  * OTEL_* or TRACEPARENT to its own child processes (MCP servers, Bash), so the batch driver forwards ASE_* copies.
  */
-const env = (name: string): string | undefined => process.env[name] || process.env[`ASE_${name}`] || undefined;
+const env = (name: string): string | undefined => process.env[name] || process.env[`ASE_${name}`] || fileVars()[name] || undefined;
+let fileCache: Record<string, string> | null = null;
+const fileVars = () => (fileCache ??= credentialFileValues());
 
 export function tracesUrl(): string | undefined {
   const t = env("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT");
@@ -40,16 +44,38 @@ export function otlpHeaders(): Record<string, string> {
   return out;
 }
 
+/** Every place traces should go: a generic OTLP endpoint and/or each connected observability backend. */
+export function traceTargets(): { name: string; url: string; headers: Record<string, string> }[] {
+  if (env("OTEL_SDK_DISABLED") === "true") return [];
+  const out: { name: string; url: string; headers: Record<string, string> }[] = [];
+  if (tracesUrl()) out.push({ name: "otlp", url: tracesUrl()!, headers: otlpHeaders() });
+  for (const b of connectedBackends(backendEnv())) {
+    const o = b.otlp(backendEnv());
+    if (o) out.push({ name: b.id, ...o });
+  }
+  return out;
+}
+
+/** Backend credentials as seen by this process (env, or ASE_-prefixed copies forwarded by the batch driver). */
+function backendEnv(): NodeJS.ProcessEnv {
+  const e: NodeJS.ProcessEnv = { ...fileVars(), ...process.env };
+  for (const b of BACKENDS) for (const k of b.keys) if (!e[k] && process.env[`ASE_${k}`]) e[k] = process.env[`ASE_${k}`];
+  return e;
+}
+
 export function tracingConfigured(): boolean {
-  return Boolean(tracesUrl()) && env("OTEL_SDK_DISABLED") !== "true";
+  return traceTargets().length > 0;
 }
 
 /** Variables a child process needs to continue this trace (namespaced so Claude Code passes them through). */
 export function childTracingEnv(span?: Span): Record<string, string> {
   if (!tracingConfigured()) return {};
-  const out: Record<string, string> = { ASE_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: tracesUrl()! };
+  const out: Record<string, string> = {};
+  if (tracesUrl()) out.ASE_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = tracesUrl()!;
   const h = env("OTEL_EXPORTER_OTLP_TRACES_HEADERS") ?? env("OTEL_EXPORTER_OTLP_HEADERS");
   if (h) out.ASE_OTEL_EXPORTER_OTLP_HEADERS = h;
+  const be = backendEnv();
+  for (const b of connectedBackends(be)) for (const k of b.keys) if (be[k]) out[`ASE_${k}`] = be[k]!;
   if (process.env.ASE_TRACE_CONTENT) out.ASE_TRACE_CONTENT = process.env.ASE_TRACE_CONTENT;
   const tp = span ? traceparentFor(span) : undefined;
   if (tp) {
@@ -68,18 +94,22 @@ export function includeContent(): boolean {
 /** `immediate` exports each span as it ends (for long-lived or abruptly-stopped processes like the MCP gateway). */
 export function initTracing(component: string, opts: { exporter?: SpanExporter; version?: string; immediate?: boolean } = {}): boolean {
   if (provider) return true;
+  fileCache = null; // re-read the credentials file on every init (e.g. after `observability connect`)
   if (!opts.exporter && !tracingConfigured()) return false;
   provider = new BasicTracerProvider({
     resource: resourceFromAttributes({ "service.name": NAME, "service.version": opts.version ?? "0.10.0", "ase.component": component }),
-    spanProcessors: [opts.exporter ? new SimpleSpanProcessor(opts.exporter) : opts.immediate ? new SimpleSpanProcessor(exporter()) : new BatchSpanProcessor(exporter())],
+    spanProcessors: opts.exporter
+      ? [new SimpleSpanProcessor(opts.exporter)]
+      : traceTargets().map((t) => {
+          const exp = new OTLPTraceExporter({ url: t.url, headers: t.headers });
+          return opts.immediate ? new SimpleSpanProcessor(exp) : new BatchSpanProcessor(exp);
+        }),
   });
   trace.setGlobalTracerProvider(provider);
   context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
   propagation.setGlobalPropagator(new W3CTraceContextPropagator());
   return true;
 }
-
-const exporter = () => new OTLPTraceExporter({ url: tracesUrl(), headers: otlpHeaders() });
 
 export async function shutdownTracing(): Promise<void> {
   if (!provider) return;

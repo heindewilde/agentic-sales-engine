@@ -258,9 +258,9 @@ export const Config = z.object({
     .object({
       per_run_usd: z.number().positive().default(5),
       per_day_usd: z.number().positive().default(20),
-      deep_research_per_account_usd: z.number().positive().default(0.6),
+      deep_research_per_account_usd: z.number().positive().default(0.3),
     })
-    .default({ per_run_usd: 5, per_day_usd: 20, deep_research_per_account_usd: 0.6 }),
+    .default({ per_run_usd: 5, per_day_usd: 20, deep_research_per_account_usd: 0.3 }),
   /** Model per stage. Cheap stages run on Haiku; research, judging and writing stay on Sonnet (quality-checked by evals). */
   models: z
     .object({

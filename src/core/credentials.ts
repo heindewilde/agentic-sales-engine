@@ -9,7 +9,14 @@ import { dirname, join } from "node:path";
  *   2. <workspace>/.env, when the CLI runs with --workspace from elsewhere
  *   3. ~/.config/agentic-sales-engine/credentials.env (user-level, chmod 600)
  */
-export const KEYS = ["EXA_API_KEY", "FIRECRAWL_API_KEY", "FIRECRAWL_BASE_URL"] as const;
+export const KEYS = [
+  "EXA_API_KEY", "FIRECRAWL_API_KEY", "FIRECRAWL_BASE_URL",
+  // observability backends (see src/observability/backends.ts)
+  "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST",
+  "LANGSMITH_API_KEY", "LANGSMITH_ENDPOINT", "LANGSMITH_PROJECT",
+  // generic OpenTelemetry endpoint (any OTLP backend)
+  "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS",
+] as const;
 
 export function credentialsPath(): string {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
@@ -47,6 +54,14 @@ export function loadCredentials(ws?: string | null): Record<string, string> {
   return origin;
 }
 
+/** Read known keys from the user-level file without touching process.env (for components that only need to look). */
+export function credentialFileValues(): Record<string, string> {
+  const p = credentialsPath();
+  if (!existsSync(p)) return {};
+  const vars = parseEnv(readFileSync(p, "utf8"));
+  return Object.fromEntries(KEYS.filter((k) => vars[k]).map((k) => [k, vars[k]!]));
+}
+
 /** Store (or replace) one key in the user-level credentials file, kept private (0600). */
 export function saveCredential(key: (typeof KEYS)[number], value: string): string {
   const p = credentialsPath();
@@ -58,6 +73,24 @@ export function saveCredential(key: (typeof KEYS)[number], value: string): strin
   writeFileSync(p, lines.join("\n"), { mode: 0o600 });
   chmodSync(p, 0o600);
   return p;
+}
+
+/** Remove keys from the user-level credentials file. */
+export function removeCredentials(keys: readonly string[]): string[] {
+  const p = credentialsPath();
+  if (!existsSync(p)) return [];
+  const removed: string[] = [];
+  const lines = readFileSync(p, "utf8").split(/\r?\n/).filter((l) => {
+    const k = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(l.trim())?.[1];
+    if (k && keys.includes(k)) {
+      removed.push(k);
+      return false;
+    }
+    return true;
+  });
+  writeFileSync(p, lines.join("\n"), { mode: 0o600 });
+  for (const k of removed) delete process.env[k];
+  return removed;
 }
 
 export function credentialsFileMode(): string | null {

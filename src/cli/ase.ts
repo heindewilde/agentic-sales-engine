@@ -18,11 +18,14 @@ import { appendLedger, currentRun, newRunId, readLedger, spentForRun, spentToday
 import { lint } from "../core/lint.ts";
 import { normalizeDomain, normalizeLinkedIn } from "../core/normalize.ts";
 import { DncEntry, Stage, type Company } from "../core/schemas.ts";
-import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, saveCredential } from "../core/credentials.ts";
+import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, removeCredentials, saveCredential } from "../core/credentials.ts";
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
 import { accountStates, logEvent, migrateLegacy, openItems, outcomeStats, readEvents, winLossCases, type EventType, type OutcomeEvent } from "../core/outcomes.ts";
 import { runOffline } from "../evals/offline.ts";
+import { BACKENDS, connectedBackends } from "../observability/backends.ts";
+import { buildDataset } from "../observability/datasets.ts";
+import { tracesUrl } from "../core/tracing.ts";
 import { buildContext } from "../core/context.ts";
 import { applyUpdates, readApplyFile } from "../core/apply.ts";
 import { initTracing, setAttrs, shutdownTracing, withSpan } from "../core/tracing.ts";
@@ -77,6 +80,11 @@ const { values: flags, positionals } = parseArgs({
     model: { type: "string" },
     "no-save": { type: "boolean" },
     min: { type: "string" },
+    push: { type: "boolean" },
+    experiment: { type: "string" },
+    host: { type: "string" },
+    endpoint: { type: "string" },
+    project: { type: "string" },
     page: { type: "string", multiple: true },
     query: { type: "string" },
     status: { type: "string" },
@@ -145,13 +153,18 @@ const HELP = `ase <command>
   drafts list [--status s] [--account d] | snapshot <file> | mark <file> <draft|edited|sent|discarded>
   drafts edits                            original vs human-final pairs not yet learned from
   drafts learned <file> [...]             mark edit pairs as absorbed into the voice profile
-  eval run [--suite offline|llm] [--budget usd] [--sample n] [--model m] [--min 0.9] [--no-save]
+  eval run [--suite offline|llm] [--budget usd] [--sample n] [--model m] [--min 0.9] [--no-save] [--push [--experiment <label>]]
                                           quality evals: citation faithfulness, grounding, handoffs, draft rules (offline);
                                           claim support, judge stability, draft quality (llm, via Claude). Exit 3 on regression,
                                           exit 4 when an evaluator's mean is below --min.
   context <domain...> --icp <s> [--mode light|full]   compact JSON with everything a stage session needs
   apply <file.json>                       structured writes for a chunk of accounts (facts, brief sections, people,
                                           signals, judgements → score + stage), validated per account
+  observability connect langfuse [--host https://cloud.langfuse.com|https://us.cloud.langfuse.com|<self-hosted>]
+                                          reads "public_key:secret_key" from stdin; enables traces, eval scores, datasets
+  observability connect langsmith [--endpoint <url>] [--project <name>]   reads the API key from stdin
+  observability status | disconnect <langfuse|langsmith>
+  dataset push --icp <s> [--mode full|light] [--name <dataset>]   accounts as input/expected pairs → connected backends
   keys status                             which provider keys the CLI/batch will use (masked) and from where
   keys set <EXA_API_KEY|FIRECRAWL_API_KEY|FIRECRAWL_BASE_URL>   read the value from stdin (e.g. pbpaste | …)
   keys pull-firecrawl                     import the key from the official Firecrawl CLI login
@@ -454,7 +467,9 @@ switch (cmd) {
     if (positionals[0] !== "run") fail("usage: eval run [--suite offline|llm] [--budget usd] [--sample n]");
     const suite = ((flags.suite as string) ?? "offline") as "offline" | "llm";
     if (suite !== "offline" && suite !== "llm") fail("--suite must be offline or llm");
-    const r = await withSpan(`eval.${suite}`, { "ase.suite": suite }, async (span) => {
+    let evalTraceId: string | undefined;
+    const r = await withSpan(`eval.${suite}`, { "ase.suite": suite, "ase.experiment": (flags.experiment as string) ?? null }, async (span) => {
+      evalTraceId = span.spanContext().traceId;
       const res = suite === "offline"
         ? await runOffline(w)
         : await runLlm(w, { budgetUsd: flags.budget ? Number(flags.budget) : 1, sample: flags.sample ? Number(flags.sample) : 3, model: (flags.model as string) ?? "sonnet" });
@@ -463,7 +478,13 @@ switch (cmd) {
     });
     const saved = flags["no-save"] ? null : saveResult(w, r);
     const cmp = compare(r, latestResult(w, suite, saved ?? undefined));
-    out({ saved, ...cmp, summary: r.summary, cost_usd: r.cost_usd, results: r.results }, formatReport(r, cmp));
+    const pushed: Record<string, unknown> = {};
+    if (flags.push) {
+      const backends = connectedBackends();
+      if (!backends.length) process.stderr.write("ase: --push: no observability backend connected (ase observability connect langfuse|langsmith)\n");
+      for (const b of backends) pushed[b.id] = await b.pushScores(process.env, r, { traceId: evalTraceId, experiment: flags.experiment as string | undefined }).catch((e) => ({ error: (e as Error).message }));
+    }
+    out({ saved, ...cmp, pushed, summary: r.summary, cost_usd: r.cost_usd, results: r.results }, `${formatReport(r, cmp)}${Object.keys(pushed).length ? `\n\nPushed: ${JSON.stringify(pushed)}` : ""}`);
     if (cmp.regressions.length) process.exitCode = 3;
     if (flags.min !== undefined) {
       const below = Object.entries(r.summary).filter(([, v]) => v.mean !== null && v.mean < Number(flags.min)).map(([k]) => k);
@@ -472,6 +493,53 @@ switch (cmd) {
         process.exitCode = 4;
       }
     }
+    break;
+  }
+  case "observability": {
+    const [sub, which] = positionals;
+    const backend = BACKENDS.find((b) => b.id === which);
+    if (sub === "connect") {
+      if (!backend) fail(`usage: observability connect <${BACKENDS.map((b) => b.id).join("|")}>`);
+      const secret = (await Bun.stdin.text()).trim();
+      if (backend!.id === "langfuse") {
+        const [pk, sk] = secret.includes(":") ? secret.split(":") : secret.split(/\s+/);
+        if (!pk?.startsWith("pk-") || !sk?.startsWith("sk-")) fail('pipe "pk-lf-…:sk-lf-…" (public and secret key) on stdin');
+        saveCredential("LANGFUSE_PUBLIC_KEY", pk!);
+        saveCredential("LANGFUSE_SECRET_KEY", sk!);
+        if (flags.host) saveCredential("LANGFUSE_HOST", flags.host as string);
+      } else {
+        if (!secret || /\s/.test(secret)) fail("pipe the LangSmith API key on stdin");
+        saveCredential("LANGSMITH_API_KEY", secret);
+        if (flags.endpoint) saveCredential("LANGSMITH_ENDPOINT", flags.endpoint as string);
+        if (flags.project) saveCredential("LANGSMITH_PROJECT", flags.project as string);
+      }
+      loadCredentials(findWorkspace(flags.workspace as string | undefined));
+      const v = await backend!.verify(process.env);
+      out({ backend: backend!.id, connected: v.ok, detail: v.detail, enabled: v.ok ? ["traces of every run", "eval scores (ase eval run --push)", "datasets (ase dataset push)"] : [] },
+        v.ok ? `${backend!.label} connected — ${v.detail}. Traces, eval scores (--push) and datasets now go there.` : `Saved, but the connection check failed: ${v.detail}`);
+      if (!v.ok) process.exitCode = 2;
+    } else if (sub === "disconnect") {
+      if (!backend) fail("usage: observability disconnect <langfuse|langsmith>");
+      out({ removed: removeCredentials(backend!.keys) });
+    } else {
+      const rows = [];
+      for (const b of BACKENDS) rows.push({ backend: b.id, connected: b.configured(process.env), check: b.configured(process.env) ? (await b.verify(process.env)).detail : null });
+      out({ backends: rows, generic_otlp: tracesUrl() ?? null }, rows.map((r) => `${r.connected ? "●" : "○"} ${r.backend}${r.check ? ` — ${r.check}` : ""}`).join("\n"));
+    }
+    break;
+  }
+  case "dataset": {
+    const w = ws();
+    if (positionals[0] !== "push") fail("usage: dataset push --icp <slug> [--mode full|light] [--name <dataset>]");
+    const icp = (flags.icp as string) ?? fail("--icp is required");
+    const mode = ((flags.mode as string) ?? "full") as "light" | "full";
+    const items = await buildDataset(w, icp, mode);
+    const name = (flags.name as string) ?? `ase-${icp}-${mode}`;
+    const backends = connectedBackends();
+    if (!backends.length) fail("no observability backend connected (ase observability connect langfuse|langsmith)");
+    const res: Record<string, unknown> = {};
+    for (const b of backends) res[b.id] = await b.pushDataset(process.env, name, items).catch((e) => ({ error: (e as Error).message }));
+    out({ dataset: name, items: items.length, pushed: res });
     break;
   }
   case "keys": {

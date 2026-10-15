@@ -9,6 +9,7 @@ A fixed, repeatable workload to compare engine changes on **cost per account** w
 ```bash
 bun bench/run.ts --label baseline        # ~$2–3 with live providers; results in bench/results/<label>.json
 bun bench/run.ts --compare baseline,optimized
+bun bench/run.ts --label my-change --push   # also send the scores to Langfuse/LangSmith as experiment "my-change"
 ```
 
 Requires provider keys (`ase keys status`) and a Claude login. Costs are API-equivalent (Agent SDK `total_cost_usd`).
