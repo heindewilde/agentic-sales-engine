@@ -37,20 +37,32 @@
 
 ## Why
 
-Good prospecting is research: who fits, what changed for them recently, who decides, and what you could say that
-isn't generic. Doing that properly takes an hour per account, so most teams don't. They buy a list, blast a sequence,
-and learn nothing.
+Outbound works when it's specific: the right company, at the right moment, with a reason to talk that is about
+*them*. Getting there takes research, roughly an hour per account, so most teams skip it. They buy a list, blast a
+sequence, get ignored, and learn nothing.
 
-**agentic-sales-engine** is a [Claude Code](https://claude.com/claude-code) plugin that does the research part
-autonomously and hands each step's findings to the next one:
+**agentic-sales-engine does that hour of research for every account, on its own, and keeps what it learns.**
 
-- **Research-first.** It reads company sites, job ads, news and registries, maps the buying committee to your personas, and keeps a running brief per account with the questions still open.
-- **Evidence or nothing.** Every fact has a source, date and confidence. A write hook *rejects* unsourced claims. Unknowns stay unknown instead of being guessed.
-- **Explainable scores.** Your own Fit × Intent × Access rubric, back-tested against customers you already know. Every point in a score links to a quote.
-- **You stay in charge.** You approve the ICP, the shortlist before deep research, and the scores before any outreach work. Nothing is ever sent for you.
-- **It checks its own work.** Built-in evals measure whether claims match their sources, handoffs are complete and drafts follow the rules. Connect Langfuse or LangSmith to see every step, score and dataset.
-- **It learns.** Outcomes flow back into win-loss reviews and score recalibration.
-- **Your data stays yours.** Everything lives in a git repository of plain markdown that your team can read, edit, review and diff. No SaaS database.
+|  | The usual way | With agentic-sales-engine |
+|---|---|---|
+| **Who to target** | a bought list, stale and generic | companies found for *your* ICP, scored on *your* rubric |
+| **Why now** | no idea, so the timing is random | dated triggers: a new store, a hire, a funding round, a launch |
+| **Who to talk to** | whoever's title matches | the buying committee mapped to your personas, plus warm paths through your team |
+| **What to say** | a template with a first name | a first message built on what's actually going on at that company |
+| **Can you trust it?** | you can't check it | every fact sourced and dated; every score point linked to a quote |
+| **Next quarter** | start over | outcomes feed back into the ICP and the scoring |
+
+What makes it different:
+
+- **Research that holds up.** A write hook rejects any fact without a source. What isn't known stays unknown instead of
+  being guessed, and the engine's own evals check that quotes really appear in the pages they cite.
+- **Scores you can argue with.** Your own Fit × Intent × Access rubric, back-tested on customers you already have.
+  Ask why an account scored 72 and you get the evidence, factor by factor.
+- **You make the calls.** You approve the ICP, the shortlist and the scores before anyone is approached. It drafts,
+  you send. Nothing goes out on its own.
+- **Your data, in your git repo.** Plain markdown your team can read, edit, review and diff. No platform to leave.
+- **Runs on Claude Code.** On a Claude subscription, the AI part costs nothing extra; data providers are cents per
+  account.
 
 ## Quickstart
 
@@ -140,91 +152,40 @@ my-sales-workspace/
 ## Autopilot
 
 Run the whole funnel for an ICP with one command. It works through every step on its own and stops only where a
-human should decide.
+person should decide:
 
 ```text
-/agentic-sales-engine:autopilot start --icp ap-automation-midmarket
+/agentic-sales-engine:autopilot start --icp <your-icp>
 ```
 
-A run waiting at its first gate, on a Claude subscription:
-
-```text
-autopilot 20261015-145833-autopilot · ap-automation-midmarket · waiting
-          providers $0.09 of $5 · Claude on your subscription (≈ $0.50 API-equivalent)
-  ✓ discover      25 new candidates
-  ✓ enrich_light  25/25 light-scored
-  ⏸ shortlist     proposed 6 of 25
-  · research
-  · score
-  · ways_in
-  · drafts
-
-GATE 2: review lists/ap-automation-midmarket/20261015-150146-shortlist/shortlist.md
-        (6 accounts) and approve: ase autopilot approve --by <member>
-```
-
-- **Your decisions, never skipped.** It waits for you at the shortlist (gate 2: which accounts get deep research,
-  with a cost estimate), at the scores (gate 3: which accounts are worth approaching) and at the drafts (you edit and
-  send). Untick accounts in the shortlist file to leave them out.
-- **Resumable.** Progress is checkpointed after every step; the account files remain the source of truth. After a crash, a
-  gate or a budget stop, `resume` continues where it left off without repeating finished work.
-- **One budget, only where money is spent.** With an API key, every model and data call counts against it. On a
-  subscription it only caps Exa/Firecrawl and needs no `--budget`. When it runs out, the run waits for you to raise it
-  instead of failing.
-- **Plan limits pause, they don't fail.** On a subscription, a usage limit that resets within 6 hours is waited out. A
-  later one pauses the run, and `resume` continues after the reset. Runs never continue into paid extra usage unless
-  you allow it.
-- **Retries, not surprises.** A step whose sessions crash is retried with backoff and only re-processes the accounts
-  that didn't advance. Accounts a session couldn't move forward are listed, not hidden.
-
-`/agentic-sales-engine:status` shows a waiting or failed run at the top, and the skill walks you through each gate.
+- **Three decisions stay yours:** which accounts get deep research (gate 2), which scored accounts are worth
+  approaching (gate 3), and the drafts you edit and send.
+- **Leave it running.** It picks up where it left off after an interruption, waits out a Claude usage limit, and
+  `/agentic-sales-engine:status` always shows where a run is and what it needs from you.
 
 ## Quality and observability
 
-Two questions matter once the engine runs on its own: **is the output any good, and what exactly did it do?** Connect
-[Langfuse](https://langfuse.com) or [LangSmith](https://smith.langchain.com), or both side by side to compare them,
-and the engine answers both there. You choose the tool; connecting it is one command.
+Once the engine runs on its own, you want to know two things: **is the output right, and what exactly did it do?**
+Connect [Langfuse](https://langfuse.com) or [LangSmith](https://smith.langchain.com), or both to compare them, and
+every run reports there.
 
-```text
-pbpaste | ase observability connect langfuse      # clipboard: pk-lf-…:sk-lf-…  (cloud or self-hosted, --host)
-pbpaste | ase observability connect langsmith     # clipboard: your API key    (--project, --endpoint)
-ase observability status                          # what's connected, checked live
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/observability-dark.svg">
+    <img alt="Every run sends traces, quality scores and datasets to Langfuse, LangSmith or any OpenTelemetry tool" src="assets/observability-light.svg" width="900">
+  </picture>
+</p>
 
-Keys are read from stdin and stored in your private credentials file, never in a repository. From then on:
+- **Traces** show each run step by step: which pages were read, which tools were called, what every step cost and
+  how long it took. Why did this account score low? Open its trace.
+- **Quality scores** say whether the output can be trusted: are quotes really in their sources, are claims supported,
+  does re-scoring give the same result, are drafts specific and grounded. Each finding comes with the fix.
+- **Datasets** turn your researched accounts into test cases, so a new prompt, model or rubric is judged on the same
+  accounts as the last one.
 
-| You get | How | In the tool |
-|---|---|---|
-| **A trace of every run** | automatic: autopilot, batches, headless sessions, provider calls, scoring | one connected trace per run, with tool calls, costs, durations and outcomes |
-| **Quality scores** | `ase eval run --push [--experiment <label>]` | scores attached to the run, comparable across experiments |
-| **Datasets** | `ase dataset push --icp <slug>` | accounts as input → expected output pairs to test prompt or rubric changes against |
-
-A trace follows one run across every process involved (the labels in brackets), so "why did this account score low?"
-and "where did the time go?" are one click each:
-
-```text
-autopilot.run                        [autopilot]  status · providers spent
-└─ autopilot.step.enrich_light
-   └─ batch.run                      [batch]      skill · accounts · advanced
-      └─ batch.chunk                              model · tokens · usage
-         ├─ tool.fetch_pages  2.8s   [session]
-         ├─ provider.fetch_pages     [gateway]    firecrawl · cost
-         ├─ tool.Edit  error         [session]    rejected or failed edit
-         └─ score.compute            [cli]        53.6 · tier B
-```
-
-**What the quality scores measure.** Free checks run in seconds and also in CI: are scored quotes really in the
-sources they cite, is every statement in a brief sourced, was every cited page saved, is each handoff complete, and do
-drafts follow the rules. Claude-as-judge checks go further: is each statement supported by what it cites, does
-re-scoring the same evidence give the same levels, and are drafts specific, grounded and clear in their ask. Each
-finding comes with the fix to make. Details in [docs/evals.md](docs/evals.md).
-
-**Compare changes.** `bun bench/run.ts --label <change> --push` runs a fixed workload and sends its scores as an
-experiment, so a new prompt, model or rubric is judged on the same data as the last one.
-
-Traces carry metadata only (operations, domains, costs, durations, outcomes) unless you turn on content capture.
-Phoenix, Jaeger, Grafana and any other OpenTelemetry backend work too, through the standard OTLP variables. Setup:
-[docs/observability.md](docs/observability.md) · [docs/tracing.md](docs/tracing.md).
+Connecting takes one command (`pbpaste | ase observability connect langfuse`, or `langsmith`); keys are read from the
+clipboard and stored privately. Setup and details: [docs/observability.md](docs/observability.md) ·
+[docs/evals.md](docs/evals.md).
 
 ## What it costs
 
