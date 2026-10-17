@@ -51,6 +51,17 @@ const model = Scoring.parse({
 const j = (levels: Record<string, number | null>, conf = 1) => Object.entries(levels).map(([id, level]) => ({ id, level: level as 0 | 1 | 2 | 3 | null, confidence: level === null ? 0 : conf }));
 
 describe("computeScore", () => {
+  test("tier_from: the tier comes from fit + access; intent becomes a timing label", () => {
+    const split = Scoring.parse({ ...model, tier_from: ["fit", "access"], timing_now: 50 });
+    const quiet = j({ size: 3, industry: 3, trigger: 0, warm: 1 });
+    expect(computeScore(model, quiet, "full")).toMatchObject({ tier: "B" }); // blended: a quiet quarter costs the tier
+    expect(computeScore(model, quiet, "full").timing).toBeUndefined(); // no tier_from: unchanged behaviour
+    expect(computeScore(split, quiet, "full")).toMatchObject({ total: 81, tier: "A", timing: "later" }); // (0.5·100 + 0.2·33.3) / 0.7
+    expect(computeScore(split, j({ size: 3, industry: 3, trigger: 3, warm: 3 }), "full")).toMatchObject({ tier: "A", timing: "now" });
+    expect(computeScore(split, j({ size: 3, industry: 3, trigger: null, warm: 3 }), "full").timing).toBe("unknown");
+    expect(computeScore(split, j({ size: 3, industry: 3 }), "light")).toMatchObject({ total: 100, timing: "unknown" }); // light: no intent factors judged
+  });
+
   test("all max = 100, all zero but knockout = X", () => {
     expect(computeScore(model, j({ size: 3, industry: 3, trigger: 3, warm: 3 }), "full")).toMatchObject({ total: 100, upside: 100, coverage: 1, tier: "A" });
     const zero = computeScore(model, j({ size: 0, industry: 0, trigger: 0, warm: 0 }), "full");
