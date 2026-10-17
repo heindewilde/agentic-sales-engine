@@ -158,9 +158,45 @@ export async function withSpan<T>(name: string, attrs: Record<string, unknown>, 
 }
 
 /** Start a span you end yourself (e.g. one per tool call observed in a message stream). */
-export function startSpan(name: string, attrs: Record<string, unknown>, parent?: Span): Span {
+export function startSpan(name: string, attrs: Record<string, unknown>, parent?: Span, startTime?: number): Span {
   const ctx = parent ? trace.setSpan(context.active(), parent) : parentContext();
-  return trace.getTracer(NAME).startSpan(name, { attributes: clean(attrs) }, ctx);
+  return trace.getTracer(NAME).startSpan(name, { attributes: clean(attrs), startTime }, ctx);
+}
+
+/**
+ * What a span is, in the vocabulary of each backend: OpenInference (Arize, LangSmith, Langfuse, Braintrust), Langfuse's
+ * observation types and LangSmith's run types. One set of attributes, so every connected tool shows the same tree.
+ */
+export type SpanKind = "agent" | "llm" | "tool" | "chain" | "evaluator";
+export function kindAttrs(kind: SpanKind): Record<string, string> {
+  return {
+    "openinference.span.kind": kind === "evaluator" ? "EVALUATOR" : kind.toUpperCase(),
+    "langfuse.observation.type": kind === "llm" ? "generation" : kind,
+    "langsmith.span.kind": kind === "llm" || kind === "tool" ? kind : "chain",
+  };
+}
+
+/** Model and token usage under the OpenInference and gen_ai names (LangSmith and Langfuse read either). */
+export function usageAttrs(u: { model?: string; input?: number; output?: number; cacheRead?: number; cacheWrite?: number }): Record<string, unknown> {
+  const prompt = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
+  return {
+    "llm.model_name": u.model, "gen_ai.request.model": u.model,
+    "llm.token_count.prompt": u.input === undefined ? undefined : prompt,
+    "llm.token_count.completion": u.output,
+    "llm.token_count.total": u.input === undefined && u.output === undefined ? undefined : prompt + (u.output ?? 0),
+    "llm.token_count.prompt_details.cache_read": u.cacheRead,
+    "llm.token_count.prompt_details.cache_write": u.cacheWrite,
+    "gen_ai.usage.input_tokens": u.input === undefined ? undefined : prompt, "gen_ai.usage.output_tokens": u.output,
+  };
+}
+
+const IO_LIMIT = 16_000;
+/** Input/output shown in each tool's input and output panels. Content, so only with ASE_TRACE_CONTENT=1. */
+export function setIO(span: Span, io: { input?: unknown; output?: unknown }): void {
+  if (!includeContent()) return;
+  const str = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v)).slice(0, IO_LIMIT);
+  if (io.input !== undefined) span.setAttribute("input.value", str(io.input));
+  if (io.output !== undefined) span.setAttribute("output.value", str(io.output));
 }
 
 export function setAttrs(span: Span, attrs: Record<string, unknown>): void {

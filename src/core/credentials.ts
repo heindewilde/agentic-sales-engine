@@ -14,6 +14,7 @@ export const KEYS = [
   // observability backends (see src/observability/backends.ts)
   "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST",
   "LANGSMITH_API_KEY", "LANGSMITH_ENDPOINT", "LANGSMITH_PROJECT",
+  "BRAINTRUST_API_KEY", "BRAINTRUST_API_URL", "BRAINTRUST_PROJECT",
   // generic OpenTelemetry endpoint (any OTLP backend)
   "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS",
 ] as const;

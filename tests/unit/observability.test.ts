@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { cpSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connectedBackends, dottedOrder, langfuse, langsmith, uuidFrom } from "../../src/observability/backends.ts";
+import { braintrust, connectedBackends, dottedOrder, langfuse, langsmith, uuidFrom } from "../../src/observability/backends.ts";
 import { buildDataset } from "../../src/observability/datasets.ts";
 import type { SuiteResult } from "../../src/evals/types.ts";
 import { PLUGIN_ROOT } from "../helpers.ts";
@@ -31,6 +31,7 @@ const suite: SuiteResult = {
 
 const LF = { LANGFUSE_PUBLIC_KEY: "pk-lf-1", LANGFUSE_SECRET_KEY: "sk-lf-2", LANGFUSE_HOST: "https://lf.example" } as NodeJS.ProcessEnv;
 const LS = { LANGSMITH_API_KEY: "lsv2-key", LANGSMITH_PROJECT: "sales" } as NodeJS.ProcessEnv;
+const BT = { BRAINTRUST_API_KEY: "bt-key", BRAINTRUST_API_URL: "https://bt.example" } as NodeJS.ProcessEnv;
 
 test("uuidFrom is deterministic and UUID-shaped; dotted order format", () => {
   expect(uuidFrom("x")).toBe(uuidFrom("x"));
@@ -124,14 +125,34 @@ test("CLI: observability status with nothing connected; dataset push refuses wit
   const xdg = mkdtempSync(join(tmpdir(), "ase-xdg-"));
   const ws = join(mkdtempSync(join(tmpdir(), "ase-obs-")), "ws");
   cpSync(join(PLUGIN_ROOT, "fixtures/workspace-ledgerly"), ws, { recursive: true });
-  const env = { ...process.env, XDG_CONFIG_HOME: xdg, LANGFUSE_PUBLIC_KEY: "", LANGFUSE_SECRET_KEY: "", LANGSMITH_API_KEY: "", OTEL_EXPORTER_OTLP_ENDPOINT: "" };
+  const env = { ...process.env, XDG_CONFIG_HOME: xdg, LANGFUSE_PUBLIC_KEY: "", LANGFUSE_SECRET_KEY: "", LANGSMITH_API_KEY: "", BRAINTRUST_API_KEY: "", OTEL_EXPORTER_OTLP_ENDPOINT: "" };
   const run = (args: string[]) => Bun.spawnSync(["bun", join(PLUGIN_ROOT, "src/cli/ase.ts"), ...args, "--workspace", ws], { env });
   const st = JSON.parse(run(["observability", "status"]).stdout.toString());
-  expect(st.backends.map((b: { backend: string; connected: boolean }) => [b.backend, b.connected])).toEqual([["langfuse", false], ["langsmith", false]]);
+  expect(st.backends.map((b: { backend: string; connected: boolean }) => [b.backend, b.connected])).toEqual([["langfuse", false], ["langsmith", false], ["braintrust", false]]);
   const ds = run(["dataset", "push", "--icp", "ap-automation-midmarket"]);
   expect(ds.exitCode).toBe(1);
   expect(ds.stderr.toString()).toContain("observability connect");
   const bad = Bun.spawnSync(["bun", join(PLUGIN_ROOT, "src/cli/ase.ts"), "observability", "connect", "langfuse", "--workspace", ws], { env, stdin: new Blob(["not-a-key"]) });
   expect(bad.exitCode).toBe(1);
   expect(bad.stderr.toString()).toContain("pk-lf");
+});
+
+describe("Braintrust", () => {
+  test("OTLP endpoint with bearer auth and the project as parent", () => {
+    expect(braintrust.otlp(BT)).toEqual({ url: "https://bt.example/otel/v1/traces", headers: { Authorization: "Bearer bt-key", "x-bt-parent": "project_name:agentic-sales-engine" } });
+    expect(braintrust.otlp({})).toBeNull();
+    expect(connectedBackends({ ...LF, ...BT }).map((b) => b.id)).toEqual(["langfuse", "braintrust"]);
+  });
+  test("scores become one experiment, rows keyed by evaluator + target; datasets get stable ids", async () => {
+    const { f, calls } = fakeFetch({ "/v1/project": { json: { id: "p1" } }, "/v1/experiment": { json: { id: "e1" } }, "/v1/dataset": { json: { id: "d1" } } });
+    expect((await braintrust.verify(BT, f)).ok).toBe(true);
+    const s = await braintrust.pushScores(BT, suite, { traceId: "t1", experiment: "optimized" }, f);
+    expect(s.pushed).toBe(2); // null scores skipped; Braintrust computes the averages itself
+    expect(calls.find((c) => c.url.endsWith("/v1/experiment"))!.body).toMatchObject({ project_id: "p1", metadata: { experiment: "optimized", otel_trace_id: "t1" } });
+    const ins = calls.find((c) => c.url.endsWith("/v1/experiment/e1/insert"))!;
+    expect(ins.body.events[0]).toMatchObject({ input: { evaluator: "citation_faithfulness", target: "accounts/a.example/scores/x.md" }, scores: { citation_faithfulness: 1 } });
+    const d = await braintrust.pushDataset(BT, "bench", [{ id: "a", input: { x: 1 }, expected: { y: 2 } }], f);
+    expect(d.pushed).toBe(1);
+    expect(calls.find((c) => c.url.endsWith("/v1/dataset/d1/insert"))!.body.events[0]).toMatchObject({ id: uuidFrom("bench|a"), input: { x: 1 }, expected: { y: 2 } });
+  });
 });

@@ -89,7 +89,7 @@ export const UNATTENDED_NOTE = (root: string) =>
 /** Agent SDK runner: one session per chunk. Used with an API key (servers, CI); see headless.ts. */
 export const sdkRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, pluginRoot, span }) => {
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
-  const c = streamCollector(span);
+  const c = streamCollector(span, prompt);
   for await (const m of query({
     prompt,
     options: {

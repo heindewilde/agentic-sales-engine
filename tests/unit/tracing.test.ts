@@ -8,7 +8,8 @@ import { runBatch } from "../../src/core/batch.ts";
 import { callProvider } from "../../src/core/providers/gateway.ts";
 import type { Adapter, AdapterResult, Op, OpInputs } from "../../src/core/providers/types.ts";
 import { writeScore } from "../../src/core/scorefile.ts";
-import { initTracing, shutdownTracing, withSpan } from "../../src/core/tracing.ts";
+import { initTracing, shutdownTracing, startSpan, withSpan } from "../../src/core/tracing.ts";
+import { streamCollector } from "../../src/core/headless.ts";
 import { makeWorkspace, PLUGIN_ROOT } from "../helpers.ts";
 
 const ICP = "ap-automation-midmarket";
@@ -82,4 +83,40 @@ test("batch run → chunk spans (with child-process traceparent) → score spans
   expect(scores[0]!.attributes).toMatchObject({ "ase.mode": "light", "ase.stage": "light_scored" });
   expect(run.attributes).toMatchObject({ "ase.processed": 2, "ase.advanced": 2 });
   expect(JSON.stringify(spans.map((s) => s.attributes))).not.toContain("secret prompt text");
+});
+
+test("a session stream becomes agent → generation per turn → tools, subagents nested; content only when enabled", async () => {
+  const run = async () => {
+    const exp = new InMemorySpanExporter();
+    initTracing("test", { exporter: exp });
+    const session = startSpan("batch.chunk", {});
+    const c = streamCollector(session, "research acme.example");
+    const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100 };
+    // one message streamed as two blocks (same id), then a subagent turn under the Agent call
+    c.add({ type: "assistant", message: { id: "m1", model: "claude-sonnet-5-5", content: [{ type: "text", text: "Looking up." }], usage } });
+    c.add({ type: "assistant", message: { id: "m1", model: "claude-sonnet-5-5", content: [{ type: "tool_use", id: "a1", name: "Agent", input: { prompt: "judge" } }], usage } });
+    c.add({ type: "assistant", parent_tool_use_id: "a1", message: { id: "m2", model: "claude-haiku-5-5", content: [{ type: "tool_use", id: "t1", name: "Read", input: { file: "x" } }], usage } });
+    c.add({ type: "user", parent_tool_use_id: "a1", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "file text" }] } });
+    c.add({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "a1", content: "level 3" }] } });
+    c.add({ type: "result", subtype: "success", result: "done", total_cost_usd: 0.1, num_turns: 2, usage });
+    c.finish();
+    session.end();
+    const spans = exp.getFinishedSpans();
+    await shutdownTracing();
+    return spans;
+  };
+  const spans = await run();
+  const by = (n: string) => spans.filter((s) => s.name === n);
+  expect(by("llm.turn")).toHaveLength(2); // two messages, not three blocks
+  const [turn1, turn2] = by("llm.turn");
+  expect(turn1!.attributes).toMatchObject({ "openinference.span.kind": "LLM", "langfuse.observation.type": "generation", "llm.model_name": "claude-sonnet-5-5", "llm.token_count.prompt": 110, "llm.token_count.completion": 5 });
+  const agentTool = by("tool.Agent")[0]!;
+  expect(turn2!.parentSpanContext?.spanId).toBe(agentTool.spanContext().spanId); // subagent turn nests under the Agent call
+  expect(by("tool.Read")[0]!.parentSpanContext?.spanId).toBe(agentTool.spanContext().spanId);
+  expect(by("batch.chunk")[0]!.attributes).toMatchObject({ "openinference.span.kind": "AGENT", "ase.turns": 2 });
+  expect(spans.some((s) => "input.value" in s.attributes || "output.value" in s.attributes)).toBe(false);
+  process.env.ASE_TRACE_CONTENT = "1";
+  const withContent = await run();
+  expect(withContent.find((s) => s.name === "batch.chunk")!.attributes).toMatchObject({ "input.value": "research acme.example", "output.value": "done" });
+  expect(withContent.find((s) => s.name === "tool.Read")!.attributes).toMatchObject({ "input.value": '{"file":"x"}', "output.value": "file text" });
 });
