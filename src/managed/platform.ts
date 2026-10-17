@@ -120,7 +120,7 @@ export async function run(o: RunOptions, log: (l: string) => void = console.erro
     resources: [
       { type: "github_repository", url: `https://github.com/${o.repo}`, authorization_token: secret("ASE_MANAGED_AGENTS_GITHUB_TOKEN"), checkout: { type: "branch", name: o.baseBranch } },
       // the engine at the exact local commit; mounted repos are cached across sessions, so no clone per run
-      { type: "github_repository", url: "https://github.com/heindewilde/agentic-sales-engine", mount_path: ENGINE_DIR, checkout: { type: "commit", sha: engineSha(o.pluginRoot) } },
+      { type: "github_repository", url: "https://github.com/heindewilde/agentic-sales-engine", checkout: { type: "commit", sha: engineSha(o.pluginRoot) } }, // → ENGINE_DIR
     ],
     budget: { type: "limit", max_list_cost: { amount: String(Math.round(o.capUsd * 100)), currency: "USD" } },
     metadata: { icp: o.icp, branch },

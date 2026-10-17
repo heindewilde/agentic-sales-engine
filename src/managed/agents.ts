@@ -9,7 +9,8 @@ import { parseDoc } from "../core/frontmatter.ts";
  */
 
 /** Where the engine and the workspace live inside the cloud sandbox. */
-export const ENGINE_DIR = "/opt/ase";
+// Mounted repos land at /workspace/<repo name> (a custom mount_path is also put under /workspace).
+export const ENGINE_DIR = "/workspace/agentic-sales-engine";
 export const workspaceDir = (repo: string) => `/workspace/${repo.split("/").pop()}`;
 
 export const MODELS: Record<string, string> = { haiku: "claude-haiku-5-5", sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5" };
