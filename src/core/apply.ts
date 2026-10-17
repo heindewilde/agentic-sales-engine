@@ -32,6 +32,20 @@ export const SourceIn = z.object({
 });
 type SourceIn = z.infer<typeof SourceIn>;
 
+const MONTHS = [
+  ["jan", "januari", "janvier", "januar"], ["feb", "februari", "février", "februar"], ["mar", "maart", "mars", "märz", "march"],
+  ["apr", "april", "avril"], ["may", "mei", "mai"], ["jun", "juni", "juin", "june"], ["jul", "juli", "juillet", "july"],
+  ["aug", "augustus", "août", "august"], ["sep", "september", "septembre", "sept"], ["oct", "oktober", "octobre", "october"],
+  ["nov", "november", "novembre"], ["dec", "december", "décembre", "dezember"],
+];
+/** Is an ISO date backed by a quote: the year plus the month as a number or a name (any common language)? */
+function dateBacked(year: string, month: number, text: string): boolean {
+  if (!text.includes(year)) return false;
+  const low = text.toLowerCase();
+  if (new RegExp(`(^|\\D)0?${month}(\\D|$)`).test(text.replace(year, " "))) return true;
+  return (MONTHS[month - 1] ?? []).some((name) => new RegExp(`\\b${name}`).test(low));
+}
+
 /** Render a checked source as a footnote: label, URL, date, and the quote it rests on. */
 export function renderSource(s: SourceIn): string {
   const q = s.quote.replace(/\s+/g, " ").trim();
@@ -126,6 +140,26 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
       continue;
     }
     renderedSources[id] = renderSource({ ...v, raw_ref: found });
+  }
+  // Every number in a footnoted statement must be in one of its footnotes' quotes: numbers (counts, years, sizes) are
+  // where added details hide. Statements citing only older footnotes or non-web sources are not checked here.
+  const quotes = new Map(Object.entries(u.sources ?? {}).flatMap(([id, v]) => (typeof v === "string" ? [] : [[id, v.quote] as const])));
+  for (const [section, text] of Object.entries(u.sections ?? {})) {
+    for (const stmt of text.split(/(?<=[.!?])\s+|\n+/)) {
+      const ids = [...stmt.matchAll(/\[\^([^\]]+)\]/g)].map((m) => m[1]!);
+      if (!ids.length || !ids.every((id) => quotes.has(id))) continue;
+      const backing = ids.map((id) => quotes.get(id)!.replace(/[.,](?=\d)/g, "")).join(" ");
+      const missing: string[] = [];
+      // ISO dates (the engine's own format) need the year and the month (number or name) in a quote, not the same format.
+      let rest = stmt.replace(/\[\^[^\]]+\]/g, "");
+      for (const m of rest.matchAll(/\b(\d{4})-(\d{2})(?:-\d{2})?\b/g)) {
+        if (!dateBacked(m[1]!, Number(m[2]), backing)) missing.push(m[0]);
+      }
+      rest = rest.replace(/\b\d{4}-\d{2}(?:-\d{2})?\b/g, " ");
+      const nums = (rest.match(/\d+(?:[.,]\d+)*/g) ?? []).map((n) => n.replace(/[.,]/g, ""));
+      missing.push(...[...new Set(nums)].filter((n) => !new RegExp(`(^|\\D)${n}(\\D|$)`).test(backing)));
+      if (missing.length) res.errors.push(`${section}: "${stmt.slice(0, 90)}" has ${missing.join(", ")} but no quote of ${ids.map((i) => `[^${i}]`).join(" ")} contains it. Quote the words with that number, or leave it out`);
+    }
   }
   if (res.errors.length) return res;
 
