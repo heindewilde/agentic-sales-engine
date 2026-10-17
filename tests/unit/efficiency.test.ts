@@ -73,7 +73,10 @@ describe("context + apply", () => {
     expect(added.results[0]!.errors.join()).toContain("not on the saved page");
     expect(readFileSync(join(ws, "accounts/delta.example/brief.md"), "utf8")).not.toContain("18 countries"); // nothing written
     expect((await up({ d1: "About, https://delta.example/about (2026-10-15)" })).results[0]!.errors.join()).toContain("needs {label, url, date, quote}");
-    const ok = await up({ d1: { label: "About", url: "https://delta.example/about", date: "2026-10-15", quote: "supplies packaging to 400 bakeries in Belgium" } });
+    // a detail the quote doesn't carry is refused even when the quote itself is correct
+    const extra = await up({ d1: { label: "About", url: "https://delta.example/about", date: "2026-10-15", quote: "supplies packaging to 400 bakeries in Belgium" } });
+    expect(extra.results[0]!.errors.join()).toContain("has 18 but no quote");
+    const ok = await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "delta.example", sections: { Snapshot: "Delta supplies packaging to 400 bakeries in Belgium.[^d1]" }, sources: { d1: { label: "About", url: "https://delta.example/about", date: "2026-10-15", quote: "supplies packaging to 400 bakeries in Belgium" } } }] });
     expect(ok.results[0]!.ok).toBe(true);
     expect(readFileSync(join(ws, "accounts/delta.example/brief.md"), "utf8")).toContain("[^d1]: About, https://delta.example/about (2026-10-15) — “supplies packaging to 400 bakeries in Belgium”");
   });
@@ -145,7 +148,7 @@ describe("context + apply", () => {
         },
         sources: {
           g1: { label: "About", url: "https://gamma.example/about", date: "2026-10-15", quote: "a parts distributor for garages" },
-          g2: { label: "News", url: "https://news.example/gamma-cfo", date: "2026-08-01", quote: "appointed Jo Peeters as its new CFO" },
+          g2: { label: "News", url: "https://news.example/gamma-cfo", date: "2026-08-01", quote: "appointed Jo Peeters as its new CFO on 1 August 2026" },
         },
         open_questions: ["- [x] New finance leadership? → yes, CFO since 2026-08.[^g2]", "- [ ] Which ERP? (unknown after research; owner: call-prep)"],
         people: [{ name: "Jo Peeters", title: "CFO", linkedin_url: "https://be.linkedin.com/in/jo-peeters-x", persona: "Finance leader", seniority: "c_level", source_url: "https://news.example/gamma-cfo", confidence: 0.9 }],

@@ -37,7 +37,7 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
    Quote evidence exactly from the pages/snapshots you read and pass their `raw_ref`. Every web source in `sources` is
    `{label, url, date, quote, raw_ref}`: the quote holds the exact words its statements rest on, and every detail in a
    statement (a number, a country, a role, a date) must be in one of its footnotes' quotes. `ase apply` rejects a quote
-   that isn't on the saved page; then fix the quote, cite the page that does say it, or drop the detail.
+   that isn't on the saved page, and a number or date in a statement that none of its quotes contains; then fix the quote, cite the page that does say it, or drop the detail.
 4. `ase apply <file>` → each account ends at `scored` (or lists errors to fix and re-apply).
 5. Interactive: one line per account (light → full score, tier, top trigger, best way in or "none yet") and spend.
    Unattended: ≤ 3 lines. Then GATE 3: the user reviews the scores; `/agentic-sales-engine:ways-in` follows for the
