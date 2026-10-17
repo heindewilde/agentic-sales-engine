@@ -6,7 +6,7 @@ import type { EvalResult, SuiteResult } from "../evals/types.ts";
  *   - receive traces (OTLP endpoint + headers, used by tracing.ts),
  *   - receive eval scores (attached to the eval run),
  *   - receive datasets (benchmark accounts as input / expected-output pairs).
- * Adding a backend (Phoenix, Braintrust, …) means implementing this interface and registering it below.
+ * Adding a backend (Phoenix, Arize, …) means implementing this interface and registering it below.
  */
 
 export interface DatasetItem {
@@ -22,7 +22,7 @@ export interface BackendConfig {
 }
 
 export interface Backend {
-  id: "langfuse" | "langsmith";
+  id: "langfuse" | "langsmith" | "braintrust";
   label: string;
   keys: readonly string[];
   configured(env: NodeJS.ProcessEnv): boolean;
@@ -169,6 +169,53 @@ export const langsmith: Backend = {
   },
 };
 
-export const BACKENDS: Backend[] = [langfuse, langsmith];
+// ---------- Braintrust (hosted; EU data plane or self-hosted via BRAINTRUST_API_URL) ----------
+
+const btHost = (env: NodeJS.ProcessEnv) => (env.BRAINTRUST_API_URL || "https://api.braintrust.dev").replace(/\/$/, "");
+const btHeaders = (env: NodeJS.ProcessEnv) => ({ Authorization: `Bearer ${env.BRAINTRUST_API_KEY ?? ""}`, "Content-Type": "application/json" });
+const btProject = (env: NodeJS.ProcessEnv) => env.BRAINTRUST_PROJECT || "agentic-sales-engine";
+
+/** Braintrust's create endpoints return the existing object when the name is taken, so this is get-or-create. */
+async function btCreate(env: NodeJS.ProcessEnv, f: typeof fetch, path: string, body: Record<string, unknown>): Promise<string> {
+  const r = await call(f, `${btHost(env)}/v1/${path}`, { method: "POST", headers: btHeaders(env), body: JSON.stringify(body) });
+  return ((await r.json()) as { id: string }).id;
+}
+
+export const braintrust: Backend = {
+  id: "braintrust",
+  label: "Braintrust",
+  keys: ["BRAINTRUST_API_KEY", "BRAINTRUST_API_URL", "BRAINTRUST_PROJECT"],
+  configured: (env) => Boolean(env.BRAINTRUST_API_KEY),
+  otlp: (env) => (braintrust.configured(env) ? { url: `${btHost(env)}/otel/v1/traces`, headers: { Authorization: `Bearer ${env.BRAINTRUST_API_KEY}`, "x-bt-parent": `project_name:${btProject(env)}` } } : null),
+  async verify(env, f = fetch) {
+    try {
+      await call(f, `${btHost(env)}/v1/project?limit=1`, { headers: btHeaders(env) });
+      return { ok: true, detail: `project "${btProject(env)}" at ${btHost(env)}` };
+    } catch (e) {
+      return { ok: false, detail: (e as Error).message };
+    }
+  },
+  async pushScores(env, suite, ctx, f = fetch) {
+    // One Braintrust experiment per eval run; rows are keyed by evaluator + target, so experiments line up for comparison.
+    const project_id = await btCreate(env, f, "project", { name: btProject(env) });
+    const name = `${ctx.experiment ?? suite.suite} · ${suite.suite} · ${suite.ran_at}`;
+    const experimentId = await btCreate(env, f, "experiment", { project_id, name, metadata: { suite: suite.suite, experiment: ctx.experiment ?? null, otel_trace_id: ctx.traceId ?? null, cost_usd: suite.cost_usd } });
+    const events = suite.results.flatMap((r) => {
+      const v = numeric(r);
+      return v === null ? [] : [{ id: uuidFrom(`${experimentId}|${r.key}|${r.target}`), input: { evaluator: r.key, target: r.target }, output: r.comment, scores: { [r.key]: v }, metadata: { target: r.target, failures: r.failures?.slice(0, 10), suite: suite.suite } }];
+    });
+    if (events.length) await call(f, `${btHost(env)}/v1/experiment/${experimentId}/insert`, { method: "POST", headers: btHeaders(env), body: JSON.stringify({ events }) });
+    return { pushed: events.length, ref: `${btHost(env)} project "${btProject(env)}" experiment "${name}"` };
+  },
+  async pushDataset(env, name, items, f = fetch) {
+    const project_id = await btCreate(env, f, "project", { name: btProject(env) });
+    const datasetId = await btCreate(env, f, "dataset", { project_id, name, description: "agentic-sales-engine benchmark accounts" });
+    const events = items.map((it) => ({ id: uuidFrom(`${name}|${it.id}`), input: it.input, expected: it.expected, metadata: { ...it.metadata, key: it.id } }));
+    if (events.length) await call(f, `${btHost(env)}/v1/dataset/${datasetId}/insert`, { method: "POST", headers: btHeaders(env), body: JSON.stringify({ events }) });
+    return { pushed: items.length, ref: `${btHost(env)} dataset "${name}"` };
+  },
+};
+
+export const BACKENDS: Backend[] = [langfuse, langsmith, braintrust];
 
 export const connectedBackends = (env: NodeJS.ProcessEnv = process.env) => BACKENDS.filter((b) => b.configured(env));

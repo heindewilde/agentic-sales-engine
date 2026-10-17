@@ -2,7 +2,7 @@ import type { Span } from "@opentelemetry/api";
 import type { ChunkRunner, ChunkRunResult } from "./batch.ts";
 import { claudeBilling } from "./billing.ts";
 import { emptyLimit, observeLimit } from "./limits.ts";
-import { childTracingEnv, setAttrs, setContent, startSpan } from "./tracing.ts";
+import { childTracingEnv, kindAttrs, setAttrs, setIO, startSpan, usageAttrs, withSpan } from "./tracing.ts";
 
 /**
  * Headless Claude sessions for batch work. Two transports, same message stream:
@@ -27,8 +27,15 @@ export function sessionEnv(span?: Span): Record<string, string> {
   return Object.assign(env, childTracingEnv(span));
 }
 
-/** Folds a session's message stream into a chunk result: cost, outcome, denied tool calls, tool spans, usage limits. */
-export function streamCollector(span?: Span) {
+type Block = { type: string; id?: string; name?: string; input?: unknown; text?: string; thinking?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
+type Usage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+
+/**
+ * Folds a session's message stream into a chunk result: cost, outcome, denied tool calls, usage limits. With a span it
+ * also records the session as a trace: the session (agent) → one generation per model turn → one span per tool call,
+ * with subagent turns nested under the Agent tool call that started them. Prompts and outputs only with ASE_TRACE_CONTENT=1.
+ */
+export function streamCollector(span?: Span, prompt?: string) {
   const toolSpans = new Map<string, Span>();
   const pending = new Map<string, string>();
   const denied: string[] = [];
@@ -36,31 +43,63 @@ export function streamCollector(span?: Span) {
   let cost = 0;
   let ok = false;
   let summary = "";
+  let model: string | undefined;
+  // Claude Code streams one assistant event per content block; blocks of the same message share its id.
+  let turn: { id: string; span: Span; out: Block[]; usage?: Usage; model?: string } | null = null;
+  let lastEvent = Date.now();
+  if (span) {
+    setAttrs(span, kindAttrs("agent"));
+    setIO(span, { input: prompt });
+  }
+  const parentFor = (parentToolUseId: unknown) => (typeof parentToolUseId === "string" && toolSpans.get(parentToolUseId)) || span;
+  const closeTurn = () => {
+    if (!turn) return;
+    const u = turn.usage ?? {};
+    setAttrs(turn.span, usageAttrs({ model: turn.model, input: u.input_tokens, output: u.output_tokens, cacheRead: u.cache_read_input_tokens, cacheWrite: u.cache_creation_input_tokens }));
+    setIO(turn.span, { output: turn.out.map((b) => (b.type === "text" ? { text: b.text } : b.type === "tool_use" ? { tool_use: b.name, input: b.input } : b.type === "thinking" ? { thinking: b.thinking } : { type: b.type })) });
+    turn.span.end();
+    turn = null;
+  };
   return {
     add(m: Record<string, unknown>) {
       observeLimit(limit, m);
+      const now = Date.now();
       if (m.type === "assistant") {
+        const msg = (m as { message?: { id?: string; model?: string; content?: unknown; usage?: Usage } }).message ?? {};
+        const blocks = (msg.content ?? []) as Block[];
+        if (msg.model) model = msg.model;
+        if (span) {
+          if (!turn || turn.id !== (msg.id ?? "")) {
+            closeTurn();
+            turn = { id: msg.id ?? "", span: startSpan("llm.turn", { ...kindAttrs("llm"), "gen_ai.operation.name": "chat" }, parentFor(m.parent_tool_use_id), lastEvent), out: [], model: msg.model };
+          }
+          turn.out.push(...blocks);
+          if (msg.usage) turn.usage = msg.usage;
+        }
         // Record tool calls so refused ones show up in batch logs instead of as silent non-progress.
-        for (const c of ((m as { message?: { content?: unknown } }).message?.content ?? []) as { type: string; id?: string; name?: string; input?: unknown }[]) {
+        for (const c of blocks) {
           if (c.type === "tool_use" && c.id) {
             pending.set(c.id, `${c.name} ${JSON.stringify(c.input).slice(0, 300)}`);
             if (span) {
-              const t = startSpan(`tool.${c.name}`, { "ase.tool": c.name }, span);
-              setContent(t, "ase.tool_input", JSON.stringify(c.input));
+              const t = startSpan(`tool.${c.name}`, { ...kindAttrs("tool"), "ase.tool": c.name, "tool.name": c.name }, parentFor(m.parent_tool_use_id));
+              setIO(t, { input: c.input });
               toolSpans.set(c.id, t);
             }
           }
         }
+      } else if (m.type === "user" || m.type === "result") {
+        closeTurn();
       }
       if (m.type === "user") {
         const content = (m as { message?: { content?: unknown } }).message?.content;
-        for (const c of Array.isArray(content) ? (content as { type: string; tool_use_id?: string; is_error?: boolean; content?: unknown }[]) : []) {
+        for (const c of Array.isArray(content) ? (content as Block[]) : []) {
           if (c.type === "tool_result" && c.is_error && /permission|denied|not allowed/i.test(JSON.stringify(c.content))) {
             denied.push(pending.get(c.tool_use_id ?? "") ?? "unknown tool");
           }
           const t = c.type === "tool_result" ? toolSpans.get(c.tool_use_id ?? "") : undefined;
           if (t) {
             setAttrs(t, { "ase.tool_error": Boolean(c.is_error) });
+            setIO(t, { output: c.content });
             if (c.is_error) t.setStatus({ code: 2 });
             t.end();
             toolSpans.delete(c.tool_use_id ?? "");
@@ -68,14 +107,19 @@ export function streamCollector(span?: Span) {
         }
       }
       if (m.type === "result") {
-        const r = m as { subtype: string; is_error?: boolean; total_cost_usd?: number; result?: string; num_turns?: number; usage?: { input_tokens?: number; output_tokens?: number } };
-        if (span) setAttrs(span, { "ase.turns": r.num_turns, "gen_ai.usage.input_tokens": r.usage?.input_tokens, "gen_ai.usage.output_tokens": r.usage?.output_tokens, "ase.result": r.subtype });
+        const r = m as { subtype: string; is_error?: boolean; total_cost_usd?: number; result?: string; num_turns?: number; usage?: Usage };
+        if (span) {
+          setAttrs(span, { "ase.turns": r.num_turns, "ase.result": r.subtype, ...usageAttrs({ model, input: r.usage?.input_tokens, output: r.usage?.output_tokens, cacheRead: r.usage?.cache_read_input_tokens, cacheWrite: r.usage?.cache_creation_input_tokens }) });
+          setIO(span, { output: r.result ?? r.subtype });
+        }
         cost = r.total_cost_usd ?? 0;
         ok = r.subtype === "success" && !r.is_error;
         summary = String(r.result ?? r.subtype).slice(0, 2000);
       }
+      lastEvent = now;
     },
     finish(): ChunkRunResult {
+      closeTurn();
       for (const t of toolSpans.values()) t.end(); // tools still open when the session stopped
       if (span && (limit.limited || limit.overage)) setAttrs(span, { "ase.usage_limited": limit.limited, "ase.usage_overage": limit.overage, "ase.usage_resets_at": limit.resetsAt ?? undefined });
       return { cost_usd: cost, ok: ok && !limit.limited, summary, denied, limit: limit.limited || limit.overage ? limit : undefined };
@@ -97,7 +141,7 @@ export const cliRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, 
   // A per-session dollar cap only means something when tokens are billed; on a subscription the plan's own limits apply.
   if (claudeBilling() === "api") args.push("--max-budget-usd", String(maxBudgetUsd));
   const proc = Bun.spawn(args, { cwd: ws, env: sessionEnv(span), stdin: new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
-  const c = streamCollector(span);
+  const c = streamCollector(span, prompt);
   let buf = "";
   const decoder = new TextDecoder();
   for await (const chunk of proc.stdout as ReadableStream<Uint8Array>) {
@@ -169,10 +213,16 @@ export async function askOnceSdk(prompt: string, opts: { model: string }): Promi
   return { text, cost_usd: cost };
 }
 
-/** The right one-shot transport for this billing mode (ASE_HEADLESS=cli|sdk overrides). */
+/** The right one-shot transport for this billing mode (ASE_HEADLESS=cli|sdk overrides), traced as one generation. */
 export function askOnce(billing = claudeBilling()) {
   const forced = process.env.ASE_HEADLESS;
-  if (forced === "sdk") return askOnceSdk;
-  if (forced === "cli") return askOnceCli;
-  return billing === "api" ? askOnceSdk : askOnceCli;
+  const transport = forced === "sdk" ? askOnceSdk : forced === "cli" ? askOnceCli : billing === "api" ? askOnceSdk : askOnceCli;
+  return (prompt: string, opts: { model: string }): Promise<AskResult> =>
+    withSpan("llm.ask", { ...kindAttrs("llm"), "gen_ai.operation.name": "chat", "llm.model_name": opts.model, "gen_ai.request.model": opts.model, "ase.effort": judgeEffort() }, async (span) => {
+      setIO(span, { input: prompt });
+      const r = await transport(prompt, opts);
+      setIO(span, { output: r.text });
+      setAttrs(span, { "ase.cost_usd": r.cost_usd, "gen_ai.usage.cost": r.cost_usd, "llm.token_count.completion": r.tokens?.out, "gen_ai.usage.output_tokens": r.tokens?.out, "ase.thinking_tokens": r.tokens?.thinking });
+      return r;
+    });
 }

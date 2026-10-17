@@ -1,4 +1,4 @@
-# Observability: Langfuse, LangSmith, or any OpenTelemetry backend
+# Observability: Langfuse, LangSmith, Braintrust, or any OpenTelemetry backend
 
 Pick the tool you like, or several at once to compare them. **One command connects it**, and from then on:
 
@@ -20,9 +20,16 @@ pbpaste | ase observability connect langfuse --host https://langfuse.mycompany.c
 pbpaste | ase observability connect langsmith --project sales-engine
 pbpaste | ase observability connect langsmith --endpoint https://eu.api.smith.langchain.com
 
+# Braintrust — API key from Settings → API keys
+pbpaste | ase observability connect braintrust --project sales-engine
+pbpaste | ase observability connect braintrust --api-url https://api-eu.braintrust.dev   # EU data plane
+
 ase observability status          # what's connected, with a live check
 ase observability disconnect langsmith
 ```
+
+Or skip the commands: put the keys (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGSMITH_API_KEY`,
+`BRAINTRUST_API_KEY`, …) in `~/.config/agentic-sales-engine/credentials.env` with any editor.
 
 Keys are read from stdin, so they never appear on a command line or in shell history. They're stored in
 `~/.config/agentic-sales-engine/credentials.env` (mode 600), never in a repository. Each `connect` verifies the keys
@@ -44,12 +51,21 @@ Connect both tools to compare them: traces, scores and datasets go to each, iden
 
 ## How it maps
 
-| | Langfuse | LangSmith |
-|---|---|---|
-| Traces | OTLP → `<host>/api/public/otel/v1/traces` (Basic auth) | OTLP → `<endpoint>/otel/v1/traces` (`x-api-key`, `Langsmith-Project`) |
-| Eval scores | `POST /api/public/scores` on the eval run's trace (Langfuse uses the OTel trace id) | an `eval.<suite>` run created via `POST /api/v1/runs`, scores as feedback (LangSmith can't link OTel span ids to runs) |
-| Datasets | `POST /api/public/v2/datasets` + `/api/public/dataset-items` | `POST /api/v1/datasets` + `/api/v1/examples` |
-| Re-pushing | stable ids → updates, no duplicates | stable UUIDs → no duplicates |
+| | Langfuse | LangSmith | Braintrust |
+|---|---|---|---|
+| Traces | OTLP → `<host>/api/public/otel/v1/traces` (Basic auth) | OTLP → `<endpoint>/otel/v1/traces` (`x-api-key`, `Langsmith-Project`) | OTLP → `<api-url>/otel/v1/traces` (Bearer, `x-bt-parent: project_name:…`) |
+| Eval scores | `POST /api/public/scores` on the eval run's trace (Langfuse uses the OTel trace id) | an `eval.<suite>` run created via `POST /api/v1/runs`, scores as feedback (LangSmith can't link OTel span ids to runs) | one experiment per eval run, rows keyed by evaluator + target so runs line up |
+| Datasets | `POST /api/public/v2/datasets` + `/api/public/dataset-items` | `POST /api/v1/datasets` + `/api/v1/examples` | `POST /v1/dataset` + `/v1/dataset/<id>/insert` |
+| Re-pushing | stable ids → updates, no duplicates | stable UUIDs → no duplicates | stable ids → no duplicates |
+
+## What a trace shows
+
+Every connected tool gets the same tree, described with OpenInference attributes (plus Langfuse observation types and
+LangSmith run types): a batch run → one **agent** span per session → one **generation** per model turn (model, tokens)
+→ one **tool** span per tool call, with subagent turns nested under the `Agent` call that started them. One-shot judge
+calls (LLM evals, second opinions) are generations too. With `ASE_TRACE_CONTENT=1` each span also carries its input
+and output: the session prompt and result, each turn's text and tool calls, each tool's arguments and response,
+each judge prompt and verdict.
 
 ## Add another tool
 

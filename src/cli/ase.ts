@@ -85,6 +85,7 @@ const { values: flags, positionals } = parseArgs({
     experiment: { type: "string" },
     host: { type: "string" },
     endpoint: { type: "string" },
+    "api-url": { type: "string" },
     project: { type: "string" },
     page: { type: "string", multiple: true },
     query: { type: "string" },
@@ -165,7 +166,9 @@ const HELP = `ase <command>
   observability connect langfuse [--host https://cloud.langfuse.com|https://us.cloud.langfuse.com|<self-hosted>]
                                           reads "public_key:secret_key" from stdin; enables traces, eval scores, datasets
   observability connect langsmith [--endpoint <url>] [--project <name>]   reads the API key from stdin
-  observability status | disconnect <langfuse|langsmith>
+  observability connect braintrust [--api-url https://api-eu.braintrust.dev] [--project <name>]   API key from stdin
+  observability status | disconnect <langfuse|langsmith|braintrust>
+                                          (or put the keys in ~/.config/agentic-sales-engine/credentials.env yourself)
   dataset push --icp <s> [--mode full|light] [--name <dataset>]   accounts as input/expected pairs → connected backends
   keys status                             which provider keys the CLI/batch will use (masked) and from where
   keys set <EXA_API_KEY|FIRECRAWL_API_KEY|FIRECRAWL_BASE_URL>   read the value from stdin (e.g. pbpaste | …)
@@ -498,7 +501,7 @@ switch (cmd) {
     const pushed: Record<string, unknown> = {};
     if (flags.push) {
       const backends = connectedBackends();
-      if (!backends.length) process.stderr.write("ase: --push: no observability backend connected (ase observability connect langfuse|langsmith)\n");
+      if (!backends.length) process.stderr.write("ase: --push: no observability backend connected (ase observability connect langfuse|langsmith|braintrust)\n");
       for (const b of backends) pushed[b.id] = await b.pushScores(process.env, r, { traceId: evalTraceId, experiment: flags.experiment as string | undefined }).catch((e) => ({ error: (e as Error).message }));
     }
     out({ saved, ...cmp, pushed, summary: r.summary, cost_usd: r.cost_usd, results: r.results }, `${formatReport(r, cmp)}${Object.keys(pushed).length ? `\n\nPushed: ${JSON.stringify(pushed)}` : ""}`);
@@ -524,6 +527,11 @@ switch (cmd) {
         saveCredential("LANGFUSE_PUBLIC_KEY", pk!);
         saveCredential("LANGFUSE_SECRET_KEY", sk!);
         if (flags.host) saveCredential("LANGFUSE_HOST", flags.host as string);
+      } else if (backend!.id === "braintrust") {
+        if (!secret || /\s/.test(secret)) fail("pipe the Braintrust API key on stdin");
+        saveCredential("BRAINTRUST_API_KEY", secret);
+        if (flags["api-url"]) saveCredential("BRAINTRUST_API_URL", flags["api-url"] as string);
+        if (flags.project) saveCredential("BRAINTRUST_PROJECT", flags.project as string);
       } else {
         if (!secret || /\s/.test(secret)) fail("pipe the LangSmith API key on stdin");
         saveCredential("LANGSMITH_API_KEY", secret);
@@ -536,7 +544,7 @@ switch (cmd) {
         v.ok ? `${backend!.label} connected — ${v.detail}. Traces, eval scores (--push) and datasets now go there.` : `Saved, but the connection check failed: ${v.detail}`);
       if (!v.ok) process.exitCode = 2;
     } else if (sub === "disconnect") {
-      if (!backend) fail("usage: observability disconnect <langfuse|langsmith>");
+      if (!backend) fail(`usage: observability disconnect <${BACKENDS.map((b) => b.id).join("|")}>`);
       out({ removed: removeCredentials(backend!.keys) });
     } else {
       const rows = [];
@@ -553,7 +561,7 @@ switch (cmd) {
     const items = await buildDataset(w, icp, mode);
     const name = (flags.name as string) ?? `ase-${icp}-${mode}`;
     const backends = connectedBackends();
-    if (!backends.length) fail("no observability backend connected (ase observability connect langfuse|langsmith)");
+    if (!backends.length) fail("no observability backend connected (ase observability connect langfuse|langsmith|braintrust)");
     const res: Record<string, unknown> = {};
     for (const b of backends) res[b.id] = await b.pushDataset(process.env, name, items).catch((e) => ({ error: (e as Error).message }));
     out({ dataset: name, items: items.length, pushed: res });
