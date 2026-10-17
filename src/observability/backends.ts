@@ -71,6 +71,8 @@ export const langfuse: Backend = {
     }
   },
   async pushScores(env, suite, ctx, f = fetch) {
+    // Langfuse rejects scores that aren't attached to a trace, session or dataset run (HTTP 400)
+    if (!ctx.traceId) throw new Error("Langfuse scores need a trace id: push from inside a span (see `ase eval run`, bench/run.ts)");
     let n = 0;
     const post = (body: Record<string, unknown>) =>
       call(f, `${lfHost(env)}/api/public/scores`, { method: "POST", headers: { Authorization: lfAuth(env), "Content-Type": "application/json" }, body: JSON.stringify(body) });

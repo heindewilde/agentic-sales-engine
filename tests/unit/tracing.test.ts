@@ -12,6 +12,8 @@ import { initTracing, shutdownTracing, withSpan } from "../../src/core/tracing.t
 import { makeWorkspace, PLUGIN_ROOT } from "../helpers.ts";
 
 const ICP = "ap-automation-midmarket";
+// never read the user's real credentials file: a connected backend would turn tracing on and export test spans to it
+process.env.XDG_CONFIG_HOME = mkdtempSync(join(tmpdir(), "ase-xdg-"));
 afterEach(async () => {
   delete process.env.TRACEPARENT;
   delete process.env.ASE_TRACE_CONTENT;
@@ -28,6 +30,14 @@ const fakeExa: Adapter = {
 test("tracing is a no-op without an endpoint", async () => {
   expect(initTracing("test")).toBe(false);
   expect(await withSpan("x", {}, async () => 42)).toBe(42);
+});
+
+test("alsoTargets keeps the explicit exporter when no backend is configured", async () => {
+  const exp = new InMemorySpanExporter();
+  expect(initTracing("test", { exporter: exp, alsoTargets: true })).toBe(true);
+  await withSpan("bench", {}, async () => {});
+  expect(exp.getFinishedSpans().map((s) => s.name)).toEqual(["bench"]);
+  await shutdownTracing();
 });
 
 test("provider calls become spans with cost and outcome; parent taken from TRACEPARENT", async () => {
