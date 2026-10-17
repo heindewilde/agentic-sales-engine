@@ -188,6 +188,13 @@ export const Scoring = z
     version: z.number().int().positive(),
     groups: z.object({ fit: z.number().min(0), intent: z.number().min(0), access: z.number().min(0) }),
     tiers: z.object({ A: z.number(), B: z.number() }).default({ A: 70, B: 50 }),
+    /**
+     * Groups the total and the tier come from (default: all). Groups left out become a timing label instead
+     * (`now` when their score ≥ timing_now, else `later`; `unknown` when nothing in them was judged), so a quiet
+     * quarter doesn't sink an account that fits.
+     */
+    tier_from: z.array(z.enum(["fit", "intent", "access"])).min(1).optional(),
+    timing_now: z.number().min(0).max(100).default(50),
     unknown_prior: z.number().min(0).max(3).default(1),
     factors: z.array(Factor).min(1),
     calibration: z.record(z.string(), z.unknown()).optional(),
@@ -246,6 +253,8 @@ export const ScoreFile = z.object({
   upside: z.number().min(0).max(100),
   coverage: z.number().min(0).max(1),
   tier: z.enum(["A", "B", "C", "X"]),
+  /** only when the rubric sets tier_from: the groups left out of the tier, as a timing label */
+  timing: z.enum(["now", "later", "unknown"]).optional(),
   knocked_out: z.array(z.string()).default([]),
   needs_check: z.array(z.string()).default([]),
   scored_at: isoDate,

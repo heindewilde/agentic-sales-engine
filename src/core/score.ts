@@ -14,6 +14,8 @@ export interface ScoreResult {
   upside: number;
   coverage: number;
   tier: "A" | "B" | "C" | "X";
+  /** set when the rubric's tier_from leaves groups out: those groups as a timing label */
+  timing?: "now" | "later" | "unknown";
   knocked_out: string[];
   needs_check: string[];
   groups: Record<"fit" | "intent" | "access", number | null>;
@@ -53,11 +55,14 @@ export function computeScore(scoring: Scoring, judged: Pick<FactorScore, "id" | 
     return res;
   };
 
-  const combine = (gs: Record<"fit" | "intent" | "access", number | null>) => {
+  const ALL = ["fit", "intent", "access"] as const;
+  const tierGroups = scoring.tier_from ?? [...ALL];
+  const timingGroups = ALL.filter((g) => !tierGroups.includes(g));
+  const combine = (gs: Record<"fit" | "intent" | "access", number | null>, only: readonly ("fit" | "intent" | "access")[] = tierGroups) => {
     // Renormalize group weights over groups that have factors in this mode (light mode may lack some groups).
     let num = 0;
     let den = 0;
-    for (const g of ["fit", "intent", "access"] as const) {
+    for (const g of only) {
       if (gs[g] === null) continue;
       num += scoring.groups[g] * gs[g]!;
       den += scoring.groups[g];
@@ -83,11 +88,18 @@ export function computeScore(scoring: Scoring, judged: Pick<FactorScore, "id" | 
   }
 
   const tier = knocked.length ? "X" : total >= scoring.tiers.A ? "A" : total >= scoring.tiers.B ? "B" : "C";
+  let timing: ScoreResult["timing"];
+  if (timingGroups.length) {
+    const timingFactors = factors.filter((f) => (timingGroups as string[]).includes(f.group));
+    const judgedAny = timingFactors.some((f) => { const j = byId.get(f.id); return j && j.level !== null && j.level !== undefined; });
+    timing = !judgedAny ? "unknown" : combine(groups, timingGroups) >= scoring.timing_now ? "now" : "later";
+  }
   return {
     total: round1(total),
     upside: round1(Math.max(upside, total)),
     coverage: allWeight ? Math.round((knownWeight / allWeight) * 100) / 100 : 0,
     tier,
+    ...(timing ? { timing } : {}),
     knocked_out: knocked,
     needs_check: needsCheck,
     groups: { fit: groups.fit === null ? null : round1(groups.fit), intent: groups.intent === null ? null : round1(groups.intent), access: groups.access === null ? null : round1(groups.access) },

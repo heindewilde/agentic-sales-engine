@@ -30,6 +30,7 @@ function renderBody(scoring: Scoring, file: ScoreFile, label?: string): string {
     `# ${file.account} — ${file.icp} (${file.mode} score v${file.scoring_version})${label ? ` — calibration: ${label}` : ""}`,
     "",
     `**Total ${file.total}** · upside ${file.upside} · coverage ${Math.round(file.coverage * 100)}% · tier **${file.tier}**` +
+      (file.timing ? ` · timing **${file.timing}**` : "") +
       (file.knocked_out.length ? ` · knocked out by ${file.knocked_out.join(", ")}` : "") +
       (file.needs_check.length ? ` · needs check: ${file.needs_check.join(", ")}` : ""),
     "",
@@ -106,6 +107,7 @@ async function writeScoreInner(a: WriteScoreArgs) {
     upside: r.upside,
     coverage: r.coverage,
     tier: r.tier,
+    ...(r.timing ? { timing: r.timing } : {}),
     knocked_out: r.knocked_out,
     needs_check: r.needs_check,
     scored_at: new Date().toISOString(),
@@ -221,6 +223,7 @@ export interface RankRow {
   upside: number;
   coverage: number;
   tier: string;
+  timing?: "now" | "later" | "unknown";
   needs_check: string[];
   knocked_out: string[];
   research_to_resolve: boolean;
@@ -241,12 +244,15 @@ export async function rank(ws: string, icp: string, opts: { stage?: string; limi
     const s = readScoreDoc(paths.score(ws, d, icp));
     if (!s) continue;
     rows.push({
-      domain: d, name: data.name, stage: st.stage, mode: s.mode, total: s.total, upside: s.upside, coverage: s.coverage, tier: s.tier,
+      domain: d, name: data.name, stage: st.stage, mode: s.mode, total: s.total, upside: s.upside, coverage: s.coverage, tier: s.tier, ...(s.timing ? { timing: s.timing } : {}),
       needs_check: s.needs_check ?? [], knocked_out: s.knocked_out ?? [], owner: data.owner,
       research_to_resolve: s.coverage < 0.5 && s.upside - s.total >= 20,
     });
   }
-  rows.sort((a, b) => (a.tier === "X" ? 1 : 0) - (b.tier === "X" ? 1 : 0) || b.total - a.total || b.upside - a.upside);
+  // within a tier, accounts where the timing is now come first
+  const tierOrder = { A: 0, B: 1, C: 2, X: 3 } as Record<string, number>;
+  const timingOrder = { now: 0, unknown: 1, later: 2 } as Record<string, number>;
+  rows.sort((a, b) => (tierOrder[a.tier] ?? 4) - (tierOrder[b.tier] ?? 4) || (timingOrder[a.timing ?? "unknown"]! - timingOrder[b.timing ?? "unknown"]!) || b.total - a.total || b.upside - a.upside);
   return opts.limit ? rows.slice(0, opts.limit) : rows;
 }
 
