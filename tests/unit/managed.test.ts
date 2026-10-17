@@ -12,16 +12,18 @@ test("agent files become managed definitions: tools mapped, MCP tools via the CL
   expect(def.system).not.toContain("${CLAUDE_PLUGIN_ROOT}");
   expect(managedDefinition(readAgentFile(PLUGIN_ROOT, "account-researcher"), "other-sha").hash).toBe(hash); // engine sha alone doesn't version the agent
   const judge = managedDefinition(readAgentFile(PLUGIN_ROOT, "factor-judge"), "sha1").def;
-  expect(judge.tools[0]!.configs.map((c) => c.name)).toEqual(["read", "glob", "grep"]); // read-only, no provider preamble
+  expect(judge.tools[0]!.configs.map((c) => c.name)).toEqual(["read", "glob", "grep", "write"]); // writes its own output on the platform
   expect(judge.system).not.toContain("Provider tools");
+  expect(judge.system).toContain(".ase/tmp/evidence-<domain>.json");
 });
 
 test("research task: pinned engine, own branch, two applies, never pushes the base branch", () => {
-  const t = researchTask({ repo: "o/shotlift-sales", branch: "managed/x", baseBranch: "master", icp: "i", domains: ["a.com", "b.nl"], engineSha: "abc123", budgetUsd: 1.2, approvedBy: "hein", judgeName: "ase-factor-judge", today: "2026-10-17" });
-  expect(t).toContain("git -C /opt/ase checkout -q abc123");
-  expect(t).toContain("cd /workspace/shotlift-sales && git checkout -b managed/x");
+  const t = researchTask({ repo: "o/shotlift-sales", branch: "managed/x", baseBranch: "master", icp: "i", domains: ["a.com", "b.nl"], budgetUsd: 1.2, approvedBy: "hein", judgeName: "ase-factor-judge", today: "2026-10-17" });
+  expect(t).toContain("cd /workspace/shotlift-sales && git checkout -q -b managed/x");
+  expect(t).toContain('"stage":"researched"'); // the apply format is spelled out, no source reading needed
+  expect(t).toContain("context <domain> --icp i --mode full > .ase/tmp/evidence-<domain>.json");
   expect(t).toContain("git push -q -u origin managed/x");
-  expect(t).toContain('"mode": "full", "judgements"');
+  expect(t).toContain('"mode":"full","judgements"');
   expect(t).toContain("Never push to `master`");
   expect(t).not.toContain("${CLAUDE_PLUGIN_ROOT}");
 });
