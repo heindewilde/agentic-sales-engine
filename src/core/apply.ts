@@ -11,6 +11,7 @@ import { loadScoring, writeScore } from "./scorefile.ts";
 import { validateContent } from "./validate.ts";
 import { dncMatcher, loadConfig, loadDnc, paths, today } from "./workspace.ts";
 import { briefSkeleton } from "./accounts.ts";
+import { findQuote, snapshotIndex } from "./snapshots.ts";
 
 /**
  * Structured writes: a stage session sends ONE compact JSON for a whole chunk of accounts and the engine does the
@@ -21,13 +22,33 @@ import { briefSkeleton } from "./accounts.ts";
 
 const FactIn = Fact.omit({ retrieved_at: true }).extend({ retrieved_at: z.string().optional() });
 
-export const AccountUpdate = z.object({
+export const SourceIn = z.object({
+  label: z.string().min(1),
+  url: z.string().url(),
+  date: z.string().optional(),
+  /** the exact words (≤ 40) on that page that support the footnoted statement */
+  quote: z.string().min(3),
+  raw_ref: z.string().optional(),
+});
+type SourceIn = z.infer<typeof SourceIn>;
+
+/** Render a checked source as a footnote: label, URL, date, and the quote it rests on. */
+export function renderSource(s: SourceIn): string {
+  const q = s.quote.replace(/\s+/g, " ").trim();
+  return `${s.label}, ${s.url}${s.date ? ` (${s.date})` : ""} — “${q.length > 220 ? `${q.slice(0, 217)}…` : q}”`;
+}
+
+const AccountUpdate = z.object({
   domain: z.string(),
   facts: z.record(z.string(), FactIn).optional(),
   /** brief sections to (re)write, by heading — e.g. { "Snapshot": "… [^s1]" } */
   sections: z.record(z.string(), z.string()).optional(),
-  /** footnote definitions used in sections: { s1: "About page, https://… (2026-10-15)" } */
-  sources: z.record(z.string(), z.string()).optional(),
+  /**
+   * footnote definitions used in sections. A web source carries the exact words the statement rests on, checked
+   * against the saved page: { s1: { label: "About page", url: "https://…", date: "2026-10-15", quote: "…", raw_ref? } }.
+   * Plain strings are only for non-web sources ("import:…", "user:…").
+   */
+  sources: z.record(z.string(), z.union([z.string(), SourceIn])).optional(),
   /** replaces the Open questions section; use "- [x] q → answer[^id]" and "- [ ] q (owner: <stage>)" */
   open_questions: z.array(z.string()).optional(),
   people: z.array(z.object({
@@ -90,6 +111,24 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
   }
   pending.push({ rel: `accounts/${u.domain}/company.md`, content: stringifyDoc(company.data, company.body) });
 
+  // sources: every web footnote must quote words that are really on its saved page
+  const renderedSources: Record<string, string> = {};
+  const snapIdx = Object.values(u.sources ?? {}).some((v) => typeof v !== "string") ? snapshotIndex(ws) : undefined;
+  for (const [id, v] of Object.entries(u.sources ?? {})) {
+    if (typeof v === "string") {
+      if (/https?:\/\//.test(v)) res.errors.push(`sources.${id}: a web source needs {label, url, date, quote} — the exact words on that page the statement rests on`);
+      else renderedSources[id] = v;
+      continue;
+    }
+    const found = findQuote(ws, v.quote, v.url, v.raw_ref, snapIdx);
+    if (!found) {
+      res.errors.push(`sources.${id}: "${v.quote.slice(0, 80)}" is not on the saved page for ${v.url}${v.raw_ref ? ` (${v.raw_ref})` : ""}. Quote the page's exact words, cite the page that says it, or drop that detail from the statement`);
+      continue;
+    }
+    renderedSources[id] = renderSource({ ...v, raw_ref: found });
+  }
+  if (res.errors.length) return res;
+
   // brief
   if (u.sections || u.open_questions || u.changelog) {
     const bp = paths.brief(ws, u.domain);
@@ -97,7 +136,7 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
     const updated = { ...(brief.data.sections_updated ?? {}) };
     for (const s of Object.keys(u.sections ?? {})) updated[s] = today();
     if (u.open_questions) updated["Open questions"] = today();
-    const body = rebuildBrief(brief.body, u.sections ?? {}, u.sources ?? {}, u.open_questions, u.changelog);
+    const body = rebuildBrief(brief.body, u.sections ?? {}, renderedSources, u.open_questions, u.changelog);
     const open = (u.open_questions ?? []).filter((q) => /^\s*-\s*\[ \]/.test(q)).length;
     const data = { ...brief.data, account: u.domain, sections_updated: updated, open_questions: u.open_questions ? open : (brief.data.open_questions ?? 0) };
     pending.push({ rel: `accounts/${u.domain}/brief.md`, content: stringifyDoc(data, body) });

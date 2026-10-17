@@ -44,7 +44,7 @@ _No primary source on the ERP yet (see open questions)._
 ## Changelog
 - 2026-10-01 research: brief written from site, careers page and news.
 
-[^1]: About page, https://maasverhoeven.example/about (2026-10-01)
-[^2]: News, https://news.example/maas-verhoeven-acquires-delcourt (2026-07-01)
-[^3]: News, https://news.example/buurtmarkt-launch (2026-09-10)
-[^4]: Careers page, https://maasverhoeven.example/careers (2026-10-01)
+[^1]: About page, https://maasverhoeven.example/about (2026-10-01) — “We supply around 6,000 restaurants and independent retailers from three depots, with approximately 310 employees. We work with about 1,200 active suppliers.”
+[^2]: News, https://news.example/maas-verhoeven-acquires-delcourt (2026-07-01) — “has acquired Delcourt Traiteur in Liège, its ninth acquisition since 2015. The deal closed on 1 July 2026.”
+[^3]: News, https://news.example/buurtmarkt-launch (2026-09-10) — “launched Buurtmarkt on 10 September 2026 … The partners plan to grow from 10 pilot stores to 100.”
+[^4]: Careers page, https://maasverhoeven.example/careers (2026-10-01) — “Open positions (14): warehouse operator (6), delivery driver (4) … No vacancies in finance or administration at the moment.”

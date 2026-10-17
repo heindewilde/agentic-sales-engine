@@ -29,12 +29,13 @@ call, one structured write — never read or write account files one by one.
      "facts":{"industry":{"value":"food wholesale","source_url":"https://a.com/about","confidence":0.9,"raw_ref":"raw/…"},
               "employees":{"value":320,"source_url":"…","confidence":0.7}},
      "sections":{"Snapshot":"2–3 sentences: what they do, for whom, size, where.[^a1]"},
-     "sources":{"a1":"About page, https://a.com/about (<today>)"},
+     "sources":{"a1":{"label":"About page","url":"https://a.com/about","date":"<today>","quote":"exact words from that page","raw_ref":"raw/…"}},
      "judgements":[{"id":"industry_fit","level":3,"confidence":0.9,"evidence":[{"quote":"…","source_url":"…","raw_ref":"raw/…"}],"rationale":"…"}],
      "mode":"light","changelog":"enrich-light: snapshot + light score"}]}
    ```
    Judge only the ids in `factors` (rules digest applies; no evidence → `"level": null`). Footnote ids must be unique
-   per account (use a letter prefix per account). Obvious non-matches: judge the knockout factor at 0 with evidence.
+   per account (use a letter prefix per account). Each source quotes the exact words (≤ 40) its statement rests on;
+   `ase apply` checks them against the saved page. A detail no quote covers gets its own source, or is left out. Obvious non-matches: judge the knockout factor at 0 with evidence.
 4. `ase apply .ase/tmp/light-<first-domain>.json` → per account `ok`, stage, score, or `errors`. Fix only the failed
    accounts and apply again with just those.
 5. Reply with ≤ 3 lines: counts per tier, notable exclusions, failures. Next: `/agentic-sales-engine:shortlist --icp <slug>`.

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { quoteSupported } from "../evals/offline.ts";
+import { quoteSupported } from "./snapshots.ts";
 import { parseDoc } from "./frontmatter.ts";
 import type { FactorScore, ScoreFile, Scoring } from "./schemas.ts";
 import { factorsFor } from "./score.ts";

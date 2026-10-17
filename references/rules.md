@@ -5,7 +5,8 @@ agents write to it over months, and so that one stage can rely on what another l
 
 ## 1. Evidence
 - **Cite every value.** Structured facts go in frontmatter as `{value, source_url, retrieved_at, confidence}`
-  (+ optional `ttl_days`, `method`, `raw_ref`). Prose claims get a footnote `[^n]` whose definition holds a URL.
+  (+ optional `ttl_days`, `method`, `raw_ref`). Prose claims get a footnote `[^n]` whose definition holds a URL and the exact quote from that page
+  (`ase apply` sources: `{label, url, date, quote, raw_ref}`; the quote is checked against the saved page).
   `source_url` may also be `user:<member>` (a team member told you) or `import:<path>` (from a file).
 - Facts that come from the workspace itself (a draft we sent, a team note, warm-matches, an outcome) are cited as
   `import:<workspace path>` — never borrow an unrelated web URL to satisfy the citation check.
