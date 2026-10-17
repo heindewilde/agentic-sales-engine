@@ -134,25 +134,32 @@ export const cliRunner: ChunkRunner = async ({ ws, prompt, model, maxBudgetUsd, 
 export const judgeEffort = () => (process.env.ASE_JUDGE_EFFORT || "low") as "low" | "medium" | "high";
 
 /** One question, one answer, no tools: `claude -p` on the user's Claude Code login. */
-export async function askOnceCli(prompt: string, opts: { model: string }): Promise<{ text: string; cost_usd: number }> {
+export interface AskResult {
+  text: string;
+  cost_usd: number;
+  /** output and thinking tokens, when the transport reports them (for diagnosing cost) */
+  tokens?: { out: number; thinking: number };
+}
+
+export async function askOnceCli(prompt: string, opts: { model: string }): Promise<AskResult> {
   const args = [process.env.ASE_CLAUDE_BIN || "claude", "-p", "--output-format", "json", "--model", MODEL_ALIASES[opts.model] ?? opts.model, "--effort", judgeEffort(), "--tools", "", "--setting-sources", ""];
   const proc = Bun.spawn(args, { env: sessionEnv(), stdin: new Blob([prompt]), stdout: "pipe", stderr: "pipe" });
   const out = await new Response(proc.stdout).text();
   await proc.exited;
   try {
-    const r = JSON.parse(out) as { result?: string; total_cost_usd?: number };
-    return { text: r.result ?? "", cost_usd: r.total_cost_usd ?? 0 };
+    const r = JSON.parse(out) as { result?: string; total_cost_usd?: number; usage?: { output_tokens?: number; output_tokens_details?: { thinking_tokens?: number } } };
+    return { text: r.result ?? "", cost_usd: r.total_cost_usd ?? 0, tokens: { out: r.usage?.output_tokens ?? 0, thinking: r.usage?.output_tokens_details?.thinking_tokens ?? 0 } };
   } catch {
     return { text: out, cost_usd: 0 };
   }
 }
 
 /** One question via the Agent SDK (API-key setups). */
-export async function askOnceSdk(prompt: string, opts: { model: string }): Promise<{ text: string; cost_usd: number }> {
+export async function askOnceSdk(prompt: string, opts: { model: string }): Promise<AskResult> {
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
   let text = "";
   let cost = 0;
-  for await (const m of query({ prompt, options: { model: MODEL_ALIASES[opts.model] ?? opts.model, allowedTools: [], settingSources: [], maxTurns: 1, permissionMode: "dontAsk", effort: judgeEffort() } })) {
+  for await (const m of query({ prompt, options: { model: MODEL_ALIASES[opts.model] ?? opts.model, tools: [], allowedTools: [], settingSources: [], maxTurns: 1, permissionMode: "dontAsk", effort: judgeEffort() } })) {
     if (m.type === "result") {
       const r = m as { result?: string; total_cost_usd?: number };
       text = r.result ?? "";

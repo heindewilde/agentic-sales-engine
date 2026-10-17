@@ -14,7 +14,7 @@ import { paths } from "./workspace.ts";
  * as disputed. Rule-based (auto) factors are never re-judged. Two model calls per account at most.
  */
 
-export type Ask = (prompt: string, opts: { model: string }) => Promise<{ text: string; cost_usd: number }>;
+export type Ask = (prompt: string, opts: { model: string }) => Promise<{ text: string; cost_usd: number; tokens?: { out: number; thinking: number } }>;
 
 export interface ReconcileResult {
   domain: string;
@@ -24,6 +24,8 @@ export interface ReconcileResult {
   before: number;
   after: number;
   cost_usd: number;
+  /** model calls made and their output/thinking tokens (cost diagnosis) */
+  calls: { cost_usd: number; out?: number; thinking?: number }[];
   skipped?: string;
 }
 
@@ -57,7 +59,7 @@ function rubric(scoring: Scoring, ids: string[]): string {
 export async function reconcileAccount(ws: string, icp: string, domain: string, o: { ask: Ask; model?: string }): Promise<ReconcileResult> {
   const model = o.model ?? "sonnet";
   const sp = paths.score(ws, domain, icp);
-  const base: ReconcileResult = { domain, agreed: [], changed: [], disputed: [], before: 0, after: 0, cost_usd: 0 };
+  const base: ReconcileResult = { domain, agreed: [], changed: [], disputed: [], before: 0, after: 0, cost_usd: 0, calls: [] };
   if (!existsSync(sp)) return { ...base, skipped: "no score file" };
   const score = parseDoc<ScoreFile>(readFileSync(sp, "utf8")).data;
   if (score.mode !== "full") return { ...base, skipped: "not a full score" };
@@ -86,6 +88,7 @@ export async function reconcileAccount(ws: string, icp: string, domain: string, 
     { model },
   );
   base.cost_usd += second.cost_usd;
+  base.calls.push({ cost_usd: second.cost_usd, out: second.tokens?.out, thinking: second.tokens?.thinking });
   const lv2 = new Map((json<{ id: string; level: number | null }[]>(second.text) ?? []).map((x) => [x.id, x.level]));
   const disagree = ids.filter((id) => lv2.has(id) && (lv2.get(id) ?? null) !== (first.get(id)!.level ?? null));
   base.agreed = ids.filter((id) => lv2.has(id) && !disagree.includes(id));
@@ -114,6 +117,7 @@ export async function reconcileAccount(ws: string, icp: string, domain: string, 
     { model },
   );
   base.cost_usd += third.cost_usd;
+  base.calls.push({ cost_usd: third.cost_usd, out: third.tokens?.out, thinking: third.tokens?.thinking });
   const verdicts = new Map((json<{ id: string; level: number | null; quote?: string | null; source_url?: string | null; reason?: string }[]>(third.text) ?? []).map((x) => [x.id, x]));
 
   const factors: FactorScore[] = score.factors.map((f) => ({ ...f }));
