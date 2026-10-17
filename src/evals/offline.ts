@@ -8,6 +8,7 @@ import { BRIEF_SECTIONS, STAGES, type Company, type Draft, type ScoreFile } from
 
 const STAGE_ORDER: readonly string[] = STAGES;
 import { kendallTau } from "../core/stats.ts";
+import { canonicalUrl, findQuote, quoteSupported, snapshotIndex } from "../core/snapshots.ts";
 import { paths } from "../core/workspace.ts";
 import { summarize, type EvalResult, type SuiteResult } from "./types.ts";
 
@@ -17,28 +18,7 @@ import { summarize, type EvalResult, type SuiteResult } from "./types.ts";
  * outreach rules, and handoffs that leave the next stage without what it needs.
  */
 
-const norm = (s: string) =>
-  s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[“”«»"']/g, "").replace(/[^a-z0-9€$%.,]+/g, " ").trim();
-
-/** Does `quote` appear in `text`? Exact after normalization, or ≥ 85% of its words in one window (tolerates "…" and minor reformatting). */
-export function quoteSupported(quote: string, text: string): boolean {
-  const q = norm(quote.replace(/…|\.\.\./g, " "));
-  const t = norm(text);
-  if (!q) return false;
-  if (t.includes(q)) return true;
-  const qw = q.split(" ").filter((w) => w.length > 2);
-  if (qw.length < 3) return false;
-  const tw = t.split(" ");
-  const need = Math.ceil(qw.length * 0.85);
-  const span = Math.round(qw.length * 1.6) + 2;
-  for (let i = 0; i < tw.length; i++) {
-    const win = new Set(tw.slice(i, i + span));
-    let hit = 0;
-    for (const w of qw) if (win.has(w)) hit++;
-    if (hit >= need) return true;
-  }
-  return false;
-}
+export { quoteSupported } from "../core/snapshots.ts";
 
 function accountDirs(ws: string): string[] {
   const dir = join(ws, "accounts");
@@ -189,10 +169,6 @@ export function draftRules(ws: string): EvalResult[] {
   return out;
 }
 
-/** Same page, different spelling: LinkedIn locale subdomains, www., trailing slash. */
-function canonicalUrl(u: string): string {
-  return normalizeLinkedIn(u) ?? u.replace(/^https?:\/\/www\./, "https://").replace(/\/$/, "");
-}
 
 /**
  * snapshot_coverage: share of URLs cited in a brief that have a stored raw snapshot. Without one, nobody can
@@ -303,8 +279,41 @@ export function lightFullAgreement(ws: string): EvalResult[] {
   return out;
 }
 
+/**
+ * source_quotes: brief footnotes carry the exact words they rest on ("Label, URL (date) — “quote”"); each quote must be on
+ * the saved page for that URL. Web footnotes without a quote are counted in the comment (older briefs).
+ */
+export function sourceQuotes(ws: string): EvalResult[] {
+  const idx = snapshotIndex(ws);
+  const out: EvalResult[] = [];
+  for (const d of accountDirs(ws)) {
+    const p = paths.brief(ws, d);
+    if (!existsSync(p)) continue;
+    const body = parseDoc(readFileSync(p, "utf8")).body;
+    let quoted = 0;
+    let ok = 0;
+    let bare = 0;
+    const failures: string[] = [];
+    for (const m of body.matchAll(/^\[\^([^\]]+)\]:\s*(.*)$/gm)) {
+      const url = /(https?:\/\/[^\s)]+)/.exec(m[2]!)?.[1]?.replace(/[).,;]+$/, "");
+      if (!url) continue;
+      const q = /—\s*“(.+)”\s*$/.exec(m[2]!)?.[1];
+      if (!q) {
+        bare++;
+        continue;
+      }
+      quoted++;
+      if (findQuote(ws, q.replace(/…$/, ""), url, undefined, idx)) ok++;
+      else failures.push(`[^${m[1]}] "${q.slice(0, 80)}" not on the saved page for ${url}`);
+    }
+    if (!quoted && !bare) continue;
+    out.push({ key: "source_quotes", target: `accounts/${d}/brief.md`, score: quoted ? ok / quoted : null, comment: `${ok}/${quoted} footnote quotes found on their saved page; ${bare} web footnotes without a quote`, failures });
+  }
+  return out;
+}
+
 export async function runOffline(ws: string): Promise<SuiteResult> {
-  const results = [...citationFaithfulness(ws), ...briefGrounding(ws), ...snapshotCoverage(ws), ...(await handoffCompleteness(ws)), ...draftRules(ws), ...researchTrajectory(ws), ...lightFullAgreement(ws)];
+  const results = [...citationFaithfulness(ws), ...briefGrounding(ws), ...snapshotCoverage(ws), ...(await handoffCompleteness(ws)), ...draftRules(ws), ...researchTrajectory(ws), ...lightFullAgreement(ws), ...sourceQuotes(ws)];
   return { suite: "offline", workspace: ws, ran_at: new Date().toISOString(), results, summary: summarize(results), cost_usd: 0 };
 }
 

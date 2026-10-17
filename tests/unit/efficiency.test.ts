@@ -5,6 +5,7 @@ import { join } from "node:path";
 import YAML from "yaml";
 import { persistCandidates } from "../../src/core/accounts.ts";
 import { applyUpdates, rebuildBrief } from "../../src/core/apply.ts";
+import { writeRaw } from "../../src/core/providers/gateway.ts";
 import { autoJudge, inRange, parseNumber } from "../../src/core/autojudge.ts";
 import { buildContext } from "../../src/core/context.ts";
 import { focusText } from "../../src/core/focus.ts";
@@ -63,6 +64,20 @@ describe("focused excerpts", () => {
 });
 
 describe("context + apply", () => {
+  test("a footnote's quote must be on its saved page; plain-text web sources are refused", async () => {
+    const ws = fixture();
+    await persistCandidates(ws, ICP, "r", "t", [{ name: "Delta", domain: "delta.example", source_url: "https://delta.example" }]);
+    writeRaw(ws, { provider: "firecrawl", op: "fetch_pages", url: "https://delta.example/about" }, "Delta supplies packaging to 400 bakeries in Belgium.");
+    const up = (sources: unknown) => applyUpdates(ws, { icp: ICP, accounts: [{ domain: "delta.example", sections: { Snapshot: "Delta supplies packaging to bakeries in 18 countries.[^d1]" }, sources: sources as never }] });
+    const added = await up({ d1: { label: "About", url: "https://delta.example/about", quote: "supplies packaging to bakeries in 18 countries" } });
+    expect(added.results[0]!.errors.join()).toContain("not on the saved page");
+    expect(readFileSync(join(ws, "accounts/delta.example/brief.md"), "utf8")).not.toContain("18 countries"); // nothing written
+    expect((await up({ d1: "About, https://delta.example/about (2026-10-15)" })).results[0]!.errors.join()).toContain("needs {label, url, date, quote}");
+    const ok = await up({ d1: { label: "About", url: "https://delta.example/about", date: "2026-10-15", quote: "supplies packaging to 400 bakeries in Belgium" } });
+    expect(ok.results[0]!.ok).toBe(true);
+    expect(readFileSync(join(ws, "accounts/delta.example/brief.md"), "utf8")).toContain("[^d1]: About, https://delta.example/about (2026-10-15) — “supplies packaging to 400 bakeries in Belgium”");
+  });
+
   test("context is compact: auto factors flagged, light factors only", async () => {
     const ws = fixture();
     await persistCandidates(ws, ICP, "r", "t", [{ name: "Alpha", domain: "alpha.example", source_url: "https://alpha.example", employees: 320 }]);
@@ -77,6 +92,7 @@ describe("context + apply", () => {
   test("light apply: facts + snapshot + judgements → light_scored in one call; rule factor auto-judged", async () => {
     const ws = fixture();
     await persistCandidates(ws, ICP, "r", "t", [{ name: "Alpha", domain: "alpha.example", source_url: "https://alpha.example" }, { name: "Beta", domain: "beta.example", source_url: "https://beta.example" }]);
+    writeRaw(ws, { provider: "firecrawl", op: "fetch_pages", url: "https://alpha.example/about" }, "Alpha is a food wholesaler supplying restaurants, with about 320 staff.");
     const r = await applyUpdates(ws, {
       icp: ICP,
       accounts: [
@@ -84,7 +100,7 @@ describe("context + apply", () => {
           domain: "alpha.example",
           facts: { employees: { value: 320, source_url: "https://alpha.example/about", confidence: 0.9 }, industry: { value: "food wholesale", source_url: "https://alpha.example/about", confidence: 0.9 } },
           sections: { Snapshot: "Alpha is a food wholesaler with about 320 staff.[^a1]" },
-          sources: { a1: "About page, https://alpha.example/about (2026-10-15)" },
+          sources: { a1: { label: "About page", url: "https://alpha.example/about", date: "2026-10-15", quote: "a food wholesaler supplying restaurants, with about 320 staff" } },
           judgements: [{ id: "industry_fit", level: 3, confidence: 0.9, evidence: [{ quote: "food wholesale", source_url: "https://alpha.example/about" }] }],
           mode: "light",
           changelog: "enrich-light: snapshot + light score",
@@ -111,7 +127,10 @@ describe("context + apply", () => {
     const ws = fixture();
     await persistCandidates(ws, ICP, "r", "t", [{ name: "Gamma", domain: "gamma.example", source_url: "https://gamma.example", employees: 200 }]);
     // pretend light + shortlist already happened
-    await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "gamma.example", sections: { Snapshot: "Gamma distributes parts.[^g0]" }, sources: { g0: "Home, https://gamma.example (2026-10-15)" }, mode: "light", judgements: [] }] });
+    writeRaw(ws, { provider: "firecrawl", op: "fetch_pages", url: "https://gamma.example" }, "Gamma distributes car parts to independent garages.");
+    writeRaw(ws, { provider: "firecrawl", op: "fetch_pages", url: "https://gamma.example/about" }, "We are a parts distributor for garages across Flanders.");
+    writeRaw(ws, { provider: "exa", op: "search_news", url: "https://news.example/gamma-cfo" }, "Gamma appointed Jo Peeters as its new CFO on 1 August 2026.");
+    await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "gamma.example", sections: { Snapshot: "Gamma distributes parts.[^g0]" }, sources: { g0: { label: "Home", url: "https://gamma.example", date: "2026-10-15", quote: "Gamma distributes car parts to independent garages" } }, mode: "light", judgements: [] }] });
     const cp = join(ws, "accounts/gamma.example/company.md");
     writeFileSync(cp, readFileSync(cp, "utf8").replace("stage: light_scored", "stage: shortlisted\n    approved_by: hein"));
     const r = await applyUpdates(ws, {
@@ -124,7 +143,10 @@ describe("context + apply", () => {
           "People map": "- Finance leader: Jo Peeters, CFO.[^g2]",
           Technographics: "ERP not publicly identified after site and job-ad search.",
         },
-        sources: { g1: "About, https://gamma.example/about (2026-10-15)", g2: "News, https://news.example/gamma-cfo (2026-08-01)" },
+        sources: {
+          g1: { label: "About", url: "https://gamma.example/about", date: "2026-10-15", quote: "a parts distributor for garages" },
+          g2: { label: "News", url: "https://news.example/gamma-cfo", date: "2026-08-01", quote: "appointed Jo Peeters as its new CFO" },
+        },
         open_questions: ["- [x] New finance leadership? → yes, CFO since 2026-08.[^g2]", "- [ ] Which ERP? (unknown after research; owner: call-prep)"],
         people: [{ name: "Jo Peeters", title: "CFO", linkedin_url: "https://be.linkedin.com/in/jo-peeters-x", persona: "Finance leader", seniority: "c_level", source_url: "https://news.example/gamma-cfo", confidence: 0.9 }],
         signals: [{ type: "exec_change", title: "New CFO Jo Peeters", date: "2026-08-01", source_url: "https://news.example/gamma-cfo", confidence: 0.9, relevance: 3 }],

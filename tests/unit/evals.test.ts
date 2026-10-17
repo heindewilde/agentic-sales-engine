@@ -163,3 +163,15 @@ test("light judgements survive the full score; agreement names the light factor 
   expect(agree.failures!.join()).toContain("judges industry_fit");
   expect(agree.failures!.join()).toContain("too high");
 });
+
+test("source_quotes: elided quotes pass when every part is on the page; a doctored quote is caught", async () => {
+  const text = "We supply around 6,000 restaurants from three depots. Founded in 1958 in Ghent, we employ approximately 310 people.";
+  expect(quoteSupported("We supply around 6,000 restaurants … we employ approximately 310 people", text)).toBe(true);
+  expect(quoteSupported("We supply around 6,000 restaurants … we employ approximately 450 people", text)).toBe(false);
+  const ws = golden();
+  expect(mean(await runOffline(ws), "source_quotes")).toBe(1);
+  edit(ws, `accounts/${D}/brief.md`, "since 2015. The deal closed", "in 18 countries since 2015. The deal closed");
+  const r = await runOffline(ws);
+  expect(mean(r, "source_quotes")).toBeLessThan(1);
+  expect(r.results.find((x) => x.key === "source_quotes")!.failures!.join()).toContain("[^2]");
+});
