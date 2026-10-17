@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { credentialsPath, parseEnv } from "../core/credentials.ts";
-import { managedDefinition, readAgentFile, researchTask } from "./agents.ts";
+import { ENGINE_DIR, managedDefinition, readAgentFile, researchTask } from "./agents.ts";
 
 /**
  * Claude Managed Agents for the owner's own runs (the plugin itself is unchanged). Billed to the Claude Console
@@ -106,7 +106,7 @@ export interface RunOptions {
 }
 
 /** One research session: workspace repo mounted, results pushed to a new branch. Streams progress; returns the branch. */
-export async function run(o: RunOptions, log: (l: string) => void = console.error): Promise<{ session_id: string; branch: string; status: string; cost_usd: number | null }> {
+export async function run(o: RunOptions, log: (l: string) => void = console.error): Promise<{ session_id: string; branch: string; status: string; cost_usd: number | null; pr: string | null }> {
   const s = await sync(o.pluginRoot, log);
   const c = client();
   const researcher = s.agents["account-researcher"]!;
@@ -117,14 +117,18 @@ export async function run(o: RunOptions, log: (l: string) => void = console.erro
     environment_id: s.environment_id!,
     title: `research ${o.domains.join(", ")}`,
     vault_ids: s.vault_id ? [s.vault_id] : [],
-    resources: [{ type: "github_repository", url: `https://github.com/${o.repo}`, authorization_token: secret("ASE_MANAGED_AGENTS_GITHUB_TOKEN"), checkout: { type: "branch", name: o.baseBranch } }],
+    resources: [
+      { type: "github_repository", url: `https://github.com/${o.repo}`, authorization_token: secret("ASE_MANAGED_AGENTS_GITHUB_TOKEN"), checkout: { type: "branch", name: o.baseBranch } },
+      // the engine at the exact local commit; mounted repos are cached across sessions, so no clone per run
+      { type: "github_repository", url: "https://github.com/heindewilde/agentic-sales-engine", mount_path: ENGINE_DIR, checkout: { type: "commit", sha: engineSha(o.pluginRoot) } },
+    ],
     budget: { type: "limit", max_list_cost: { amount: String(Math.round(o.capUsd * 100)), currency: "USD" } },
     metadata: { icp: o.icp, branch },
   });
   log(`session ${session.id} → https://platform.claude.com/sessions/${session.id}`);
 
   const stream = await c.beta.sessions.events.stream(session.id); // open before sending: it only delivers later events
-  const task = researchTask({ repo: o.repo, branch, baseBranch: o.baseBranch, icp: o.icp, domains: o.domains, engineSha: engineSha(o.pluginRoot), budgetUsd: o.budgetUsd, approvedBy: o.approvedBy, judgeName: "ase-factor-judge", today });
+  const task = researchTask({ repo: o.repo, branch, baseBranch: o.baseBranch, icp: o.icp, domains: o.domains, budgetUsd: o.budgetUsd, approvedBy: o.approvedBy, judgeName: "ase-factor-judge", today });
   await c.beta.sessions.events.send(session.id, { events: [{ type: "user.message", content: [{ type: "text", text: task }] }] });
 
   let status = "running";
@@ -151,7 +155,42 @@ export async function run(o: RunOptions, log: (l: string) => void = console.erro
       break;
     }
   }
-  return { session_id: session.id, branch, status, cost_usd: cost };
+  const final = await c.beta.sessions.retrieve(session.id);
+  cost = Number((final.usage as { list_cost?: { amount?: string } } | undefined)?.list_cost?.amount ?? NaN) / 100;
+  const pr = status === "end_turn" ? openPullRequest(o, branch, session.id, cost, log) : null;
+  return { session_id: session.id, branch, status, cost_usd: Number.isFinite(cost) ? cost : null, pr };
+}
+
+/** One pull request per run: scores before → after per account, with the session link and cost, for review on GitHub. */
+function openPullRequest(o: RunOptions, branch: string, sessionId: string, cost: number | null, log: (l: string) => void): string | null {
+  const gh = (args: string[]) => Bun.spawnSync(["gh", ...args]);
+  const file = (ref: string, path: string) => {
+    const r = gh(["api", `repos/${o.repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, "-H", "Accept: application/vnd.github.raw"]);
+    return r.exitCode === 0 ? r.stdout.toString() : "";
+  };
+  const field = (text: string, k: string) => text.match(new RegExp(`^${k}: (.+)$`, "m"))?.[1]?.trim() ?? "–";
+  const rows = o.domains.map((d) => {
+    const path = `accounts/${d}/scores/${o.icp}.md`;
+    const [before, after] = [file(o.baseBranch, path), file(branch, path)];
+    return `| ${d} | ${field(before, "mode")} ${field(before, "total")} · ${field(before, "tier")} | ${field(after, "mode")} ${field(after, "total")} · **${field(after, "tier")}** · timing ${field(after, "timing")} |`;
+  });
+  const body = [
+    `Research and full score by Claude Managed Agents (session [${sessionId}](https://platform.claude.com/sessions/${sessionId})).`,
+    "",
+    "| Account | Before | After |", "|---|---|---|", ...rows,
+    "",
+    `Claude cost: ${cost === null || !Number.isFinite(cost) ? "unknown" : `$${cost.toFixed(2)}`} (API credits). Provider spend: see \`ledger/costs.jsonl\` in the diff.`,
+    "",
+    "Review the briefs, signals and people, then merge to accept or close to discard.",
+  ].join("\n");
+  const r = gh(["pr", "create", "--repo", o.repo, "--base", o.baseBranch, "--head", branch, "--title", `Managed research: ${o.domains.join(", ")}`, "--body", body]);
+  const url = r.stdout.toString().trim();
+  if (r.exitCode !== 0) {
+    log(`pull request not created: ${r.stderr.toString().slice(0, 300)}`);
+    return null;
+  }
+  log(`pull request: ${url}`);
+  return url;
 }
 
 /**
