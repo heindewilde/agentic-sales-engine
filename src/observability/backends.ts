@@ -33,7 +33,8 @@ export interface Backend {
   pushDataset(env: NodeJS.ProcessEnv, name: string, items: DatasetItem[], f?: typeof fetch): Promise<{ pushed: number; ref: string }>;
 }
 
-const numeric = (r: EvalResult): number | null => (r.score === null ? null : typeof r.score === "boolean" ? (r.score ? 1 : 0) : r.score);
+// 4 decimals: LangSmith rejects more precise scores (HTTP 422), and none of the tools shows more
+const numeric = (r: EvalResult): number | null => (r.score === null ? null : typeof r.score === "boolean" ? (r.score ? 1 : 0) : Math.round(r.score * 1e4) / 1e4);
 
 /** RFC-4122-shaped UUID derived from a string (deterministic; LangSmith requires UUID ids). */
 export function uuidFrom(s: string): string {
@@ -84,7 +85,7 @@ export const langfuse: Backend = {
     }
     for (const [k, s] of Object.entries(suite.summary)) {
       if (s.mean === null) continue;
-      await post({ id: uuidFrom(`${suite.ran_at}|${k}|mean`), traceId: ctx.traceId, name: `${k}.mean`, value: s.mean, dataType: "NUMERIC", comment: `mean over ${s.n}`, metadata: { suite: suite.suite, experiment: ctx.experiment } });
+      await post({ id: uuidFrom(`${suite.ran_at}|${k}|mean`), traceId: ctx.traceId, name: `${k}.mean`, value: Math.round(s.mean * 1e4) / 1e4, dataType: "NUMERIC", comment: `mean over ${s.n}`, metadata: { suite: suite.suite, experiment: ctx.experiment } });
       n++;
     }
     return { pushed: n, ref: ctx.traceId ? `${lfHost(env)} trace ${ctx.traceId}` : lfHost(env) };
@@ -147,7 +148,7 @@ export const langsmith: Backend = {
     }
     for (const [k, s] of Object.entries(suite.summary)) {
       if (s.mean === null) continue;
-      await fb({ id: uuidFrom(`${id}|${k}|mean`), key: `${k}.mean`, score: s.mean, comment: `mean over ${s.n}` });
+      await fb({ id: uuidFrom(`${id}|${k}|mean`), key: `${k}.mean`, score: Math.round(s.mean * 1e4) / 1e4, comment: `mean over ${s.n}` });
       n++;
     }
     return { pushed: n, ref: `${lsHost(env)} project "${lsProject(env)}" run ${id}` };

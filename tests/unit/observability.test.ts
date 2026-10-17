@@ -156,3 +156,10 @@ describe("Braintrust", () => {
     expect(calls.find((c) => c.url.endsWith("/v1/dataset/d1/insert"))!.body.events[0]).toMatchObject({ id: uuidFrom("bench|a"), input: { x: 1 }, expected: { y: 2 } });
   });
 });
+
+test("scores are rounded to 4 decimals (LangSmith rejects more)", async () => {
+  const { f, calls } = fakeFetch();
+  const precise: SuiteResult = { ...suite, results: [{ key: "judge_stability", target: "x", score: 5 / 7, comment: "" }], summary: { judge_stability: { mean: 5 / 7, n: 1, min: 5 / 7 } } };
+  await langsmith.pushScores(LS, precise, {}, f);
+  expect(calls.filter((c) => c.url.endsWith("/feedback")).map((c) => c.body.score)).toEqual([0.7143, 0.7143]);
+});
