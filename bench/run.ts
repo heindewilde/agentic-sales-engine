@@ -11,7 +11,7 @@ import { loadCredentials } from "../src/core/credentials.ts";
 import { readSeedCsv } from "../src/core/importers.ts";
 import { readLedger } from "../src/core/ledger.ts";
 import { approveShortlist } from "../src/core/shortlist.ts";
-import { initTracing, shutdownTracing } from "../src/core/tracing.ts";
+import { initTracing, shutdownTracing, withSpan } from "../src/core/tracing.ts";
 import { runLlm } from "../src/evals/llm.ts";
 import { runOffline } from "../src/evals/offline.ts";
 import { stringifyDoc } from "../src/core/frontmatter.ts";
@@ -46,29 +46,33 @@ mkdirSync(join(ws, "imports/seeds"), { recursive: true });
 cpSync(join(ROOT, "bench/seeds.csv"), join(ws, "imports/seeds/bench.csv"));
 loadCredentials(ws);
 const spans = new InMemorySpanExporter();
-initTracing("bench", { exporter: spans });
+initTracing("bench", { exporter: spans, alsoTargets: true }); // in-memory for the cost numbers, plus any connected backend
 const log = (l: string) => process.stderr.write(`${l}\n`);
 
-const { candidates } = readSeedCsv(ws, join(ws, "imports/seeds/bench.csv"));
-await persistCandidates(ws, ICP, "bench", "import:imports/seeds/bench.csv", candidates);
+// one trace for the whole run, so pushed scores can be attached to it (Langfuse requires a trace)
+const { light, appr, research, offline, llm, traceId } = await withSpan("bench", { "ase.experiment": label }, async (span) => {
+  const { candidates } = readSeedCsv(ws, join(ws, "imports/seeds/bench.csv"));
+  await persistCandidates(ws, ICP, "bench", "import:imports/seeds/bench.csv", candidates);
 
-log("light enrich…");
-const light = await runBatch({ ws, skill: "enrich-light", icp: ICP, pluginRoot: ROOT, budgetUsd: 3, chunk: 10, log });
-rmSync(join(ws, ".ase", "current-run.json"), { force: true }); // research gets its own run budget
+  log("light enrich…");
+  const light = await runBatch({ ws, skill: "enrich-light", icp: ICP, pluginRoot: ROOT, budgetUsd: 3, chunk: 10, log });
+  rmSync(join(ws, ".ase", "current-run.json"), { force: true }); // research gets its own run budget
 
-// fixed shortlist: approve exactly the two research accounts (whatever their light score)
-const sl = `lists/${ICP}/bench/shortlist.md`;
-mkdirSync(join(ws, `lists/${ICP}/bench`), { recursive: true });
-writeFileSync(join(ws, sl), stringifyDoc({ icp: ICP, run_id: "bench", status: "proposed", cost: { per_account_p90: 1 } }, `| Research | Domain |\n|---|---|\n${RESEARCH.map((d) => `| [x] | ${d} |`).join("\n")}\n`));
-const appr = await approveShortlist(ws, ICP, sl, "hein");
-log(`approved ${appr.approved.join(", ")} (skipped ${JSON.stringify(appr.skipped)})`);
+  // fixed shortlist: approve exactly the two research accounts (whatever their light score)
+  const sl = `lists/${ICP}/bench/shortlist.md`;
+  mkdirSync(join(ws, `lists/${ICP}/bench`), { recursive: true });
+  writeFileSync(join(ws, sl), stringifyDoc({ icp: ICP, run_id: "bench", status: "proposed", cost: { per_account_p90: 1 } }, `| Research | Domain |\n|---|---|\n${RESEARCH.map((d) => `| [x] | ${d} |`).join("\n")}\n`));
+  const appr = await approveShortlist(ws, ICP, sl, "hein");
+  log(`approved ${appr.approved.join(", ")} (skipped ${JSON.stringify(appr.skipped)})`);
 
-log("research…");
-const research = await runBatch({ ws, skill: "research", icp: ICP, pluginRoot: ROOT, budgetUsd: 4, domains: appr.approved, log });
+  log("research…");
+  const research = await runBatch({ ws, skill: "research", icp: ICP, pluginRoot: ROOT, budgetUsd: 4, domains: appr.approved, log });
 
-log("evals…");
-const offline = await runOffline(ws);
-const llm = await runLlm(ws, { budgetUsd: 0.6, sample: 2 });
+  log("evals…");
+  const offline = await runOffline(ws);
+  const llm = await runLlm(ws, { budgetUsd: 0.6, sample: 2 });
+  return { light, appr, research, offline, llm, traceId: span.spanContext().traceId };
+});
 const finished = spans.getFinishedSpans(); // read before shutdown: shutting down clears the in-memory exporter
 await shutdownTracing();
 
@@ -97,7 +101,13 @@ const result = {
 if (f.push) {
   const { connectedBackends } = await import("../src/observability/backends.ts");
   for (const b of connectedBackends()) {
-    for (const s of [offline, llm]) log(`${b.id}: ${JSON.stringify(await b.pushScores(process.env, s, { experiment: label }).catch((e) => ({ error: (e as Error).message })))}`);
+    for (const s of [offline, llm]) {
+      const r = await b.pushScores(process.env, s, { traceId, experiment: label }).catch((e) => ({ error: (e as Error).message }));
+      if ("error" in r) {
+        log(`PUSH FAILED ${b.id} (${s.suite}): ${r.error}`);
+        process.exitCode = 2;
+      } else log(`${b.id}: ${JSON.stringify(r)}`);
+    }
   }
 }
 mkdirSync(join(ROOT, "bench/results"), { recursive: true });

@@ -60,6 +60,11 @@ describe("Langfuse", () => {
     const item = calls.find((c) => c.url.endsWith("/dataset-items"))!;
     expect(item.body).toMatchObject({ datasetName: "bench", id: uuidFrom("bench|a"), input: { x: 1 }, expectedOutput: { y: 2 } });
   });
+  test("scores without a trace id are refused before any request (Langfuse would answer 400)", async () => {
+    const { f, calls } = fakeFetch();
+    expect(langfuse.pushScores(LF, suite, { experiment: "bench" }, f)).rejects.toThrow("trace id");
+    expect(calls).toHaveLength(0);
+  });
   test("verify reports failures instead of throwing", async () => {
     const { f } = fakeFetch({ "/api/public/projects": { status: 401, json: { message: "bad key" } } });
     const r = await langfuse.verify(LF, f);

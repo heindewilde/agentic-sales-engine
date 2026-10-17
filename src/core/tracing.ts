@@ -92,18 +92,20 @@ export function includeContent(): boolean {
 
 /** Start tracing for this process if configured (or with an explicit exporter, for tests). Idempotent. */
 /** `immediate` exports each span as it ends (for long-lived or abruptly-stopped processes like the MCP gateway). */
-export function initTracing(component: string, opts: { exporter?: SpanExporter; version?: string; immediate?: boolean } = {}): boolean {
+/** `alsoTargets` keeps an explicit exporter (e.g. the benchmark's in-memory one) and also sends to configured backends. */
+export function initTracing(component: string, opts: { exporter?: SpanExporter; version?: string; immediate?: boolean; alsoTargets?: boolean } = {}): boolean {
   if (provider) return true;
   fileCache = null; // re-read the credentials file on every init (e.g. after `observability connect`)
   if (!opts.exporter && !tracingConfigured()) return false;
+  const targets = !opts.exporter || opts.alsoTargets
+    ? traceTargets().map((t) => {
+        const exp = new OTLPTraceExporter({ url: t.url, headers: t.headers });
+        return opts.immediate ? new SimpleSpanProcessor(exp) : new BatchSpanProcessor(exp);
+      })
+    : [];
   provider = new BasicTracerProvider({
     resource: resourceFromAttributes({ "service.name": NAME, "service.version": opts.version ?? "0.10.0", "ase.component": component }),
-    spanProcessors: opts.exporter
-      ? [new SimpleSpanProcessor(opts.exporter)]
-      : traceTargets().map((t) => {
-          const exp = new OTLPTraceExporter({ url: t.url, headers: t.headers });
-          return opts.immediate ? new SimpleSpanProcessor(exp) : new BatchSpanProcessor(exp);
-        }),
+    spanProcessors: [...(opts.exporter ? [new SimpleSpanProcessor(opts.exporter)] : []), ...targets],
   });
   trace.setGlobalTracerProvider(provider);
   context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
