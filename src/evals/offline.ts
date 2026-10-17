@@ -68,7 +68,8 @@ export function citationFaithfulness(ws: string): EvalResult[] {
   return out;
 }
 
-const NEGATIVE_FINDING = /\b(not (publicly )?(identified|found|confirmed|disclosed)|no (\w+ ){0,4}(found|identified|evidence|source)|unknown|unconfirmed|could not (find|verify|confirm)|caveat)\b/i;
+const NEGATIVE_FINDING =
+  /\b(not (publicly )?(identified|found|confirmed|disclosed|listed|shown)|no\b[^.;]{0,90}\b(found|identified|evidence|source|listed|shown|announced|visible)|unknown|unconfirmed|could not (find|verify|confirm)|cannot be (judged|confirmed|determined|verified)|(yielded|returned|showed) (no|only)|none (found|listed)|caveat)\b/i;
 
 /** brief_grounding: share of written paragraphs/bullets in research sections that carry a footnote. */
 export function briefGrounding(ws: string): EvalResult[] {

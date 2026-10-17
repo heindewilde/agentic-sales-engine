@@ -243,7 +243,7 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
       try {
         const rr = await reconcileAccount(o.ws, o.icp, d, { ask, model: cfg.judging.model });
         if (rr.skipped) return;
-        appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: "reconcile", usd: rr.cost_usd, kind: "actual", note: d, ...(modelSpendIsBilled(billing) ? {} : { billed: false }) });
+        appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: "reconcile", usd: rr.cost_usd, kind: "actual", note: `${d} ${rr.calls.map((c) => `[$${c.cost_usd.toFixed(3)} out ${c.out ?? "?"} think ${c.thinking ?? "?"}]`).join(" ")}`, ...(modelSpendIsBilled(billing) ? {} : { billed: false }) });
         reconciled.push({ domain: d, changed: rr.changed.length, disputed: rr.disputed.length });
         if (rr.changed.length || rr.disputed.length) log(`second opinion ${d}: ${rr.changed.map((c) => `${c.id} ${c.from}→${c.to}`).join(", ") || "no changes"}${rr.disputed.length ? `; disputed ${rr.disputed.join(", ")}` : ""} (${rr.before} → ${rr.after})`);
       } catch (e) {
