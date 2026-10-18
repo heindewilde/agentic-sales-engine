@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, normalize } from "node:path";
 import { buildModel, type AgentVersion, type MapModel } from "./data.ts";
 import { compactDiff, lineDiff } from "./diff.ts";
+import { JOURNEY, MAINTENANCE, ROLES } from "./process.ts";
 
 /**
  * The agent map as a local web app: read-only, bound to localhost. The model is built once and rebuilt on
@@ -32,12 +33,12 @@ export function configChanges(a: AgentVersion, b: AgentVersion): string[] {
   return out;
 }
 
-export async function serve(port = 4317, log: (l: string) => void = console.error): Promise<string> {
+export async function serve(port = 4317, log: (l: string) => void = console.error, workspace?: string): Promise<string> {
   let model: MapModel | null = null;
   let building: Promise<MapModel> | null = null;
   const load = (fresh = false) => {
     if (fresh || (!model && !building)) {
-      building = buildModel(log).then((m) => {
+      building = buildModel(log, workspace).then((m) => {
         model = m;
         building = null;
         return m;
@@ -56,6 +57,7 @@ export async function serve(port = 4317, log: (l: string) => void = console.erro
       try {
         if (url.pathname === "/api/model") return json(await load());
         if (url.pathname === "/api/refresh") return json(await load(true));
+        if (url.pathname === "/api/story") return json({ roles: ROLES, journey: JOURNEY, maintenance: MAINTENANCE });
         if (url.pathname === "/api/doc") {
           const p = normalize(url.searchParams.get("path") ?? "");
           if (!READABLE.some((r) => p.startsWith(r)) || p.includes("..")) return json({ error: "not an engine document" }, 400);
@@ -84,8 +86,7 @@ export async function serve(port = 4317, log: (l: string) => void = console.erro
           return json({ lines: compactDiff(lineDiff(a, b)) });
         }
         const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-        if (file === "vendor/cytoscape.min.js") return new Response(Bun.file(join(ROOT, "node_modules/cytoscape/dist/cytoscape.min.js")));
-        if (["index.html", "app.js", "style.css"].includes(file)) return new Response(Bun.file(join(UI, file)));
+        if (["index.html", "app.js", "style.css", "viz.js"].includes(file)) return new Response(Bun.file(join(UI, file)));
         return new Response("not found", { status: 404 });
       } catch (e) {
         return json({ error: (e as Error).message }, 500);

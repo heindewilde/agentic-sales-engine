@@ -6,7 +6,7 @@
  *   bun src/managed/cli.ts reply <session-id> "<answer>"   answer the question a run is waiting on
  *   bun src/managed/cli.ts schedule <skill> [args...] --cron "0 7 * * 1" --repo owner/name [--cap 2]   recurring run
  *   bun src/managed/cli.ts inbox [days]                  finished runs nobody listened to → pull requests; runs waiting on a question
- *   bun src/managed/cli.ts map [--port 4317]             the agent map: a local, read-only view of agents, skills, context and runs
+ *   bun src/managed/cli.ts map [--workspace <dir>]       the agent map: how the engine works, live (local, read-only)
  *   bun src/managed/cli.ts telemetry                     platform traces → Braintrust (needs an Admin key once)
  *   bun src/managed/cli.ts status                        what exists on the platform
  * A run ends as `done` (with a pull request), `question` (answer it with reply) or `failed`.
@@ -17,7 +17,7 @@ import { connectTelemetry, inbox, managedState, reply, run, schedule, sync } fro
 
 const ROOT = join(import.meta.dir, "../..");
 // everything after the skill name that isn't one of our own flags is passed to the skill as its arguments
-const OWN = new Set(["--repo", "--base", "--cap", "--approved-by", "--cron", "--port"]);
+const OWN = new Set(["--repo", "--base", "--cap", "--approved-by", "--cron", "--port", "--workspace"]);
 const argv = process.argv.slice(2);
 const own: string[] = [];
 const rest: string[] = [];
@@ -25,7 +25,7 @@ for (let i = 0; i < argv.length; i++) {
   if (OWN.has(argv[i]!)) own.push(argv[i]!, argv[++i] ?? "");
   else rest.push(argv[i]!);
 }
-const { values: f } = parseArgs({ args: own, options: { repo: { type: "string" }, base: { type: "string" }, cap: { type: "string" }, "approved-by": { type: "string" }, cron: { type: "string" }, port: { type: "string" } } });
+const { values: f } = parseArgs({ args: own, options: { repo: { type: "string" }, base: { type: "string" }, cap: { type: "string" }, "approved-by": { type: "string" }, cron: { type: "string" }, port: { type: "string" }, workspace: { type: "string" } } });
 const [cmd, ...params] = rest;
 const out = (v: unknown) => console.log(JSON.stringify(v, null, 2));
 const quote = (a: string) => (/^[\w./:@=-]+$/.test(a) ? a : JSON.stringify(a));
@@ -36,7 +36,16 @@ try {
   else if (cmd === "telemetry") out(await connectTelemetry());
   else if (cmd === "map") {
     const { serve } = await import("../map/server.ts");
-    const url = await serve(Number(f.port ?? 4317));
+    // the local workspace gives the live funnel (accounts per stage); remembered for next time
+    const { managedState: st } = await import("./platform.ts");
+    const ws = f.workspace ?? (st() as { map_workspace?: string }).map_workspace;
+    if (f.workspace) {
+      const { writeFileSync, readFileSync } = await import("node:fs");
+      const { credentialsPath } = await import("../core/credentials.ts");
+      const p = join(credentialsPath(), "..", "managed.json");
+      writeFileSync(p, `${JSON.stringify({ ...JSON.parse(readFileSync(p, "utf8")), map_workspace: f.workspace }, null, 2)}\n`, { mode: 0o600 });
+    }
+    const url = await serve(Number(f.port ?? 4317), console.error, ws);
     if (process.platform === "darwin") Bun.spawn(["open", url]);
     await new Promise(() => {}); // keep serving until stopped
   } else if (cmd === "inbox") out((await inbox(Number(params[0] ?? 7), console.error, f.repo)).map((r) => ({ ...r, message: r.message.slice(0, 300) })));
