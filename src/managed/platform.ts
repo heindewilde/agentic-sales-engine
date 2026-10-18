@@ -84,6 +84,7 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
     if (prev?.hash === hash) return log(`${body.name}: v${prev.version}, unchanged`);
     const a = prev ? await c.beta.agents.update(prev.id, body as never) : await c.beta.agents.create(body as never);
     s.agents[key] = { id: a.id, version: a.version, hash };
+    saveState(s);
     log(`${body.name}: ${prev ? "new version" : "created"} v${a.version} (${a.id})`);
   };
   const pin = (r: Ref) => ({ type: "agent" as const, id: r.id, version: r.version });
@@ -99,7 +100,12 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
 
   // skills: each plugin skill uploaded once, a new version when its text changes
   s.skills ??= {};
+  // adopt skills an interrupted sync already created (matched by display name), instead of creating duplicates
+  const existing = new Map<string, { id: string; latest_version_id: string }>();
+  for await (const k of c.beta.skills.list()) if (k.display_name.startsWith("ase ")) existing.set(k.display_name.slice(4), k);
   for (const name of listSkills(pluginRoot)) {
+    const found = existing.get(name);
+    if (!s.skills[name] && found) s.skills[name] = { id: found.id, version: found.latest_version_id, hash: "" }; // hash unknown: uploads a fresh version
     const sk = convertSkill(pluginRoot, name);
     const prev = s.skills[name];
     if (prev?.hash === sk.hash) continue;
@@ -108,10 +114,12 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
       const v = await c.beta.skills.versions.create(prev.id, { files });
       s.skills[name] = { id: prev.id, version: v.id, hash: sk.hash };
       log(`skill ${name}: new version`);
+      saveState(s);
     } else {
       const created = await c.beta.skills.create({ display_name: `ase ${name}`, files });
       s.skills[name] = { id: created.id, version: created.latest_version_id, hash: sk.hash };
       log(`skill ${name}: created`);
+      saveState(s);
     }
   }
 

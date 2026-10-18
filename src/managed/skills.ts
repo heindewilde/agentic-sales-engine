@@ -23,6 +23,8 @@ export function listSkills(pluginRoot: string): string[] {
 export function convertSkill(pluginRoot: string, name: string): SkillFile {
   const doc = parseDoc<{ name?: string; description?: string }>(readFileSync(join(pluginRoot, "skills", name, "SKILL.md"), "utf8"));
   // only name + description: plugin-only frontmatter (allowed-tools, argument-hint) means nothing on the platform
-  const content = stringifyDoc({ name, description: doc.data.description ?? name }, doc.body.replaceAll("${CLAUDE_PLUGIN_ROOT}", ENGINE_DIR));
+  // the platform rejects anything tag-like in a description: "<slug>" becomes "SLUG"
+  const description = (doc.data.description ?? name).replace(/<([^<>]+)>/g, (_, t: string) => t.toUpperCase().replace(/\s+/g, "_"));
+  const content = stringifyDoc({ name, description }, doc.body.replaceAll("${CLAUDE_PLUGIN_ROOT}", ENGINE_DIR));
   return { name, content, hash: createHash("sha256").update(content).digest("hex").slice(0, 16) };
 }
