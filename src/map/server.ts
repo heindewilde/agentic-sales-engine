@@ -106,7 +106,8 @@ export async function serve(port = 4317, log: (l: string) => void = console.erro
           if (a == null || b == null) return json({ error: "version text not available" }, 404);
           return json({ lines: compactDiff(lineDiff(a, b)) });
         }
-        const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
+        // the pages are one app: / and /process show the process, /brain the brain
+        const file = ["/", "/process", "/brain"].includes(url.pathname) ? "index.html" : url.pathname.slice(1);
         if (["index.html", "app.js", "style.css"].includes(file)) return new Response(Bun.file(join(UI, file)));
         return new Response("not found", { status: 404 });
       } catch (e) {
