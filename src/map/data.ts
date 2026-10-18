@@ -27,8 +27,10 @@ export interface SkillNode {
 }
 export interface DocNode { key: string; kind: "doc"; path: string; scope: "engine" | "workspace"; referenced_by: string[] }
 export interface ScheduleNode { key: string; kind: "schedule"; skill: string; id: string; cron: string; timezone: string; cap_usd: number | null; operator_version: number | null; description: string; paused: boolean }
+export interface Funnel { icp: string; stages: Record<string, number>; gates: string[] }
 export interface MapModel {
   generated_at: string;
+  funnel: Funnel[]; // live, from the local workspace (ase doctor), when the map was started with one
   month: { credits_usd: number; runs: number; failed: number; capped: number; questions: number };
   agents: AgentNode[]; skills: SkillNode[]; docs: DocNode[]; schedules: ScheduleNode[]; runs: Run[]; edges: Edge[];
 }
@@ -109,7 +111,19 @@ function cached<T>(name: string, stamp: string, make: () => Promise<T>): Promise
 
 // ---------- the model ----------
 
-export async function buildModel(log: (l: string) => void = () => {}): Promise<MapModel> {
+/** Accounts per stage and open gates, from the local workspace (the same numbers as `ase doctor`). */
+export function funnelFrom(workspace: string | undefined): Funnel[] {
+  if (!workspace) return [];
+  const r = Bun.spawnSync(["bun", join(import.meta.dir, "../cli/ase.ts"), "doctor", "--workspace", workspace]);
+  try {
+    const d = JSON.parse(r.stdout.toString()) as { stages?: Record<string, Record<string, number>>; gates?: string[] };
+    return Object.entries(d.stages ?? {}).map(([icp, stages]) => ({ icp, stages, gates: (d.gates ?? []).filter((g) => g.includes(icp)) }));
+  } catch {
+    return [];
+  }
+}
+
+export async function buildModel(log: (l: string) => void = () => {}, workspace?: string): Promise<MapModel> {
   const c = client();
   const state = managedState();
   const skillIdToName = new Map(Object.entries(state.skills ?? {}).map(([n, s]) => [s.id, n]));
@@ -291,6 +305,7 @@ export async function buildModel(log: (l: string) => void = () => {}): Promise<M
   const month = runs.filter((r) => r.created_at.startsWith(monthStart));
   return {
     generated_at: new Date().toISOString(),
+    funnel: funnelFrom(workspace),
     month: {
       credits_usd: Math.round(monthCredits * 100) / 100, runs: month.length,
       failed: month.filter((r) => !["done", "question", "budget_reached", "running", "rescheduling"].includes(r.status)).length,

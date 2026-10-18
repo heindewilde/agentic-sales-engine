@@ -1,215 +1,170 @@
-// Agent map UI: graph (Cytoscape) + detail panel + flags and runs tabs. Read-only; data from /api/model.
+// Agent map: live data (/api/model) + the process story (/api/story) → dashboard. Read-only.
 const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const money = (x) => `$${(x ?? 0).toFixed(2)}`;
-const day = (iso) => (iso ? iso.slice(0, 10) : "");
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const console_ = (id) => `https://platform.claude.com/sessions/${id}`;
-const BAD = new Set(["budget_reached", "retries_exhausted", "failed", "terminated"]);
+const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+const consoleUrl = (id) => `https://platform.claude.com/sessions/${id}`;
+const CRON_DAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+const human = (cron) => {
+  if (!cron) return "";
+  const [m, h, dom, , dow] = cron.split(" ");
+  const at = `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+  if (dow !== "*") return `${CRON_DAYS[Number(dow)]} ${at}`;
+  if (dom !== "*") return `${dom === "1" ? "1st" : dom} of the month ${at}`;
+  return `daily ${at}`;
+};
+const MAINT = { n: "↻", id: "maintenance", short: "Maintenance", title: "Scheduled maintenance", parallel: true };
+const STAGES = [["discovered", "Found"], ["light_scored", "Quick-scanned"], ["shortlisted", "Shortlisted"], ["researched", "Researched"], ["scored", "Scored"], ["outreach_ready", "Outreach ready"]];
 
-let model = null;
-let cy = null;
+let model, story;
+const modelName = (id) => id.replace(/^claude-/, "").replace(/^(\w)(\w*)-(\d+)-(\d+)$/, (_, a, b, x, y) => `${a.toUpperCase()}${b} ${x}.${y}`);
 
 async function load(fresh = false) {
-  $("#loading").style.display = "block";
-  model = await (await fetch(fresh ? "/api/refresh" : "/api/model")).json();
-  $("#loading").style.display = "none";
-  renderStats();
-  renderGraph();
-  renderFlags();
-  renderRuns();
+  const [m, s] = await Promise.all([fetch(fresh ? "/api/refresh" : "/api/model").then((r) => r.json()), story ?? fetch("/api/story").then((r) => r.json())]);
+  model = m;
+  story = s;
+  render();
 }
 
-function renderStats() {
+/** Accounts that reached at least each stage (excluded ones were light-scored first). */
+function funnelRows() {
+  const f = model.funnel[0];
+  if (!f) return [];
+  const st = f.stages;
+  const idx = (k) => STAGES.findIndex(([s]) => s === k);
+  const rows = STAGES.map(([stage, label], i) => {
+    let n = Object.entries(st).filter(([k]) => idx(k) >= i).reduce((a, [, v]) => a + v, 0);
+    if (i <= 1) n += st.excluded ?? 0;
+    return { stage, label, n };
+  });
+  return rows.map((r, i) => ({ ...r, conv: i ? (rows[i - 1].n ? Math.round((100 * r.n) / rows[i - 1].n) : 0) : null, note: i === 1 && st.excluded ? `${st.excluded} excluded as a clear misfit` : "" }));
+}
+
+/** The journey with live numbers, plus a maintenance row from the schedules. */
+function steps() {
+  const reached = funnelRows();
+  const avg = (runs) => (runs.length ? `${money(runs.reduce((a, r) => a + r.cost, 0) / runs.length)} per run` : "");
+  const out = story.journey.map((s) => {
+    const runs = model.runs.filter((r) => s.skills.includes(r.skill));
+    const row = reached.find((r) => r.stage === s.stage);
+    return { ...s, runs, metric: row ? `${row.n} accounts` : runs.length ? `${runs.length} runs` : "", cost: avg(runs) };
+  });
+  const mskills = story.maintenance.jobs.map((j) => j.skill);
+  const acts = story.maintenance.jobs.map((j) => {
+    const sc = model.schedules.find((x) => x.skill === j.skill);
+    return { by: "operator", label: `${j.title} · ${sc ? human(sc.cron) : "manual"}` };
+  });
+  const runs = model.runs.filter((r) => mskills.includes(r.skill));
+  out.push({ ...MAINT, what: story.maintenance.what, skills: mskills, acts: [...acts, { by: "wiki-linter", label: "Deep audit · on demand" }], runs, metric: `${model.schedules.length} scheduled`, cost: avg(runs) });
+  return out;
+}
+
+function render() {
+  const S = steps();
   const m = model.month;
-  const next = model.schedules.map((s) => `${s.skill} (${s.cron})`).join(", ");
-  $("#stats").innerHTML = [
-    `<div class="stat"><b>${money(m.credits_usd)}</b><span>credits this month</span></div>`,
-    `<div class="stat"><b>${m.runs}</b><span>runs</span></div>`,
-    `<div class="stat ${m.failed ? "bad" : ""}"><b>${m.failed}</b><span>failed</span></div>`,
-    `<div class="stat ${m.capped ? "bad" : ""}"><b>${m.capped}</b><span>hit a budget cap</span></div>`,
-    `<div class="stat"><b>${m.questions}</b><span>waiting on you</span></div>`,
-    `<div class="stat"><span>scheduled: ${esc(next) || "none"}</span></div>`,
-  ].join("");
-}
+  const waiting = (model.funnel[0]?.gates.length ?? 0) + m.questions;
+  $("#tiles").innerHTML = `
+    <div class="tile"><div class="k">API credits this month</div><div class="v">${money(m.credits_usd)}<small>of $100</small></div><div class="meter"><i style="width:${Math.min(100, m.credits_usd)}%"></i></div></div>
+    <div class="tile"><div class="k">Runs this month</div><div class="v">${m.runs}</div><div class="note">${m.failed} failed · ${m.capped} hit a budget cap</div></div>
+    <div class="tile ${waiting ? "alert" : ""}"><div class="k">Waiting on you</div><div class="v">${waiting}</div><div class="note">${waiting ? "approvals and reviews" : "nothing open"}</div></div>
+    <div class="tile"><div class="k">Scheduled</div><div class="v">${model.schedules.length}</div><div class="note">${model.schedules.map((x) => `${escH(x.skill)} · ${human(x.cron)}`).join("<br>") || "none"}</div></div>`;
 
-// ---------- graph ----------
+  $("#lane-legend").innerHTML = `<span><i style="background:var(--gate)"></i>Your decision</span><span class="muted">Click a step or agent for details</span>`;
+  drawSwimlane($("#swimlane"), S, openStep, openAgent);
 
-function nodeData() {
-  const show = Object.fromEntries([...document.querySelectorAll("#filters input")].map((i) => [i.dataset.kind, i.checked]));
-  const recentBad = (runs) => runs.some((r) => BAD.has(r.status));
-  const nodes = [];
-  for (const s of model.schedules) nodes.push({ id: s.key, label: `⏱ ${s.skill}\n${s.cron}`, kind: "schedule" });
-  for (const a of model.agents) {
-    if (a.kind === "agent" && !show.agent) continue;
-    const runs = model.runs.filter((r) => r.threads.some((t) => t.agent === a.name));
-    nodes.push({ id: a.key, label: `${a.name}\nv${a.current.version} · ${money(a.cost_total)}`, kind: a.kind, bad: recentBad(runs.slice(0, 5)) });
-  }
-  if (show.skill) for (const s of model.skills) {
-    const runs = model.runs.filter((r) => r.skill === s.name);
-    const flags = runs.reduce((n, r) => n + r.checks.length, 0);
-    const per = s.runs ? money(s.cost_total / s.runs) : "–";
-    nodes.push({ id: s.key, label: `${s.name}\n${s.runs} runs · ${per}/run${flags ? ` · ⚑${flags}` : ""}`, kind: "skill", bad: recentBad(runs.slice(0, 3)) });
-  }
-  for (const d of model.docs) if ((d.scope === "engine" && show.engine) || (d.scope === "workspace" && show.workspace)) nodes.push({ id: d.key, label: d.path, kind: d.scope });
-  const ids = new Set(nodes.map((n) => n.id));
-  const edges = model.edges.filter((e) => ids.has(e.from) && ids.has(e.to) && e.kind !== "uses-skill").map((e, i) => ({ id: `e${i}`, source: e.from, target: e.to, kind: e.kind }));
-  return [...nodes.map((data) => ({ data })), ...edges.map((data) => ({ data }))];
-}
+  const fr = funnelRows();
+  $("#funnel-sub").textContent = model.funnel[0]?.icp ?? "";
+  if (fr.length) drawFunnel($("#funnel"), fr);
+  else $("#funnel").innerHTML = '<p class="muted">Start the map with <code>--workspace &lt;dir&gt;</code> for live numbers.</p>';
 
-function renderGraph() {
-  const color = { schedule: css("--schedule"), operator: css("--operator"), agent: css("--agent"), skill: css("--skill"), engine: css("--engine"), workspace: css("--workspace") };
-  if (cy) cy.destroy();
-  cy = cytoscape({
-    container: $("#cy"),
-    elements: nodeData(),
-    wheelSensitivity: 0.25,
-    style: [
-      { selector: "node", style: { label: "data(label)", "text-wrap": "wrap", "font-size": 10, color: css("--ink"), "text-valign": "bottom", "text-margin-y": 4, width: 18, height: 18, "background-color": (n) => color[n.data("kind")] } },
-      { selector: "node[kind = 'operator']", style: { width: 34, height: 34, "font-size": 12, "font-weight": 600 } },
-      { selector: "node[kind = 'agent']", style: { width: 26, height: 26, shape: "round-rectangle", "font-size": 11 } },
-      { selector: "node[kind = 'schedule']", style: { shape: "diamond", width: 22, height: 22 } },
-      { selector: "node[kind = 'engine'], node[kind = 'workspace']", style: { shape: "rectangle", width: 10, height: 10, "font-size": 8, color: css("--muted") } },
-      { selector: "node[?bad]", style: { "border-width": 3, "border-color": css("--bad") } },
-      { selector: "node:selected", style: { "border-width": 3, "border-color": css("--ink") } },
-      { selector: "edge", style: { width: 1, "line-color": css("--line"), "target-arrow-shape": "triangle", "target-arrow-color": css("--line"), "curve-style": "bezier", "arrow-scale": 0.6 } },
-      { selector: "edge[kind = 'subagent'], edge[kind = 'calls']", style: { "line-color": css("--agent"), "target-arrow-color": css("--agent"), width: 1.5 } },
-      { selector: ".faded", style: { opacity: 0.15 } },
-    ],
-    // rings: the operator in the middle, then agents and schedules, then skills, documents outside
-    layout: { name: "concentric", concentric: (n) => ({ operator: 5, agent: 4, schedule: 4, skill: 3, engine: 2, workspace: 1 })[n.data("kind")] ?? 1, levelWidth: () => 1, minNodeSpacing: 34, padding: 30, startAngle: -Math.PI / 2 },
+  const AG = ["operator", "account-researcher", "factor-judge", "wiki-linter", "icp-analyst"];
+  const costRows = S.map((s) => {
+    const by = Object.fromEntries(AG.map((a) => [a, 0]));
+    for (const r of s.runs) for (const t of r.threads) if (t.agent in by) by[t.agent] += t.cost;
+    for (const a of AG) by[a] /= s.runs.length || 1;
+    return { label: s.short, by, total: AG.reduce((x, a) => x + by[a], 0), runs: s.runs.length };
   });
-  cy.on("tap", "node", (e) => {
-    const n = e.target;
-    cy.elements().addClass("faded");
-    n.closedNeighborhood().removeClass("faded");
-    show(n.id());
-  });
-  cy.on("tap", (e) => { if (e.target === cy) cy.elements().removeClass("faded"); });
-}
+  const used = AG.filter((a) => costRows.some((r) => r.by[a] > 0));
+  $("#cost-legend").innerHTML = used.map((a) => `<span><i style="background:${actor(a).color}"></i>${actor(a).name}</span>`).join("");
+  drawCost($("#cost"), costRows, used);
 
-// ---------- detail panel ----------
+  drawSequence($("#sequence"));
 
-const kindBadge = (k) => `<span class="kind" style="background:${css(`--${k === "doc" ? "engine" : k}`)}">${k}</span>`;
-const chips = (items, link = false) => `<div class="chips">${items.map((x) => (link ? `<span class="chip link" data-go="${esc(x.key)}">${esc(x.label)}</span>` : `<span class="chip">${esc(x)}</span>`)).join("") || '<span class="muted">none</span>'}</div>`;
-const runRows = (runs) => runs.length ? `<table><tr><th>Date</th><th>Run</th><th>Status</th><th class="num">Cost</th></tr>${runs.map((r) => `<tr><td>${day(r.created_at)}</td><td><a href="${console_(r.session_id)}" target="_blank">${esc((r.args || r.skill).slice(0, 60))}</a></td><td class="status-${r.status}">${esc(r.status)}</td><td class="num">${money(r.cost)}</td></tr>`).join("")}</table>` : '<p class="muted">No runs yet.</p>';
-const flagList = (flags) => flags.length ? flags.map((f) => `<div class="flag">${esc(f.text)}<div class="meta">${day(f.created_at)} · <a href="${console_(f.session_id)}" target="_blank">session</a>${f.skill ? ` · ${esc(f.skill)}` : ""}</div></div>`).join("") : '<p class="muted">Nothing flagged.</p>';
-
-function show(key) {
-  const panel = $("#detail");
-  const agent = model.agents.find((a) => a.key === key);
-  const skill = model.skills.find((s) => s.key === key);
-  const doc = model.docs.find((d) => d.key === key);
-  const sched = model.schedules.find((s) => s.key === key);
-  const label = (k) => ({ key: k, label: k.replace(/^[a-z]+:/, "") });
-  if (agent) {
-    const v = agent.current;
-    const runs = model.runs.filter((r) => r.threads.some((t) => t.agent === agent.name));
-    const threads = runs.flatMap((r) => r.threads.filter((t) => t.agent === agent.name));
-    const usedBy = model.edges.filter((e) => e.to === key && e.kind !== "reads").map((e) => label(e.from));
-    panel.innerHTML = `${kindBadge(agent.kind)}<h2>${esc(agent.name)}</h2>
-      <div class="muted">${esc(v.model)} · version ${v.version} of ${agent.versions.length} · in ${agent.runs} runs · ${money(agent.cost_total)} in its own threads${agent.kind === "operator" ? " (subagents not included; see per-version cost of whole runs below)" : ""}</div>
-      <p>${esc(agent.description)}</p>
-      <h3>Tools</h3>${chips(v.tools)}
-      ${v.subagents.length ? `<h3>Subagents</h3>${chips(v.subagents.filter((s) => s !== agent.name).map((s) => ({ key: `agent:${s}`, label: s })), true)}` : ""}
-      ${agent.kind === "operator" ? `<h3>Skills attached (${v.skills.length})</h3>${chips(v.skills.map((s) => ({ key: `skill:${s}`, label: s })), true)}` : ""}
-      ${usedBy.length ? `<h3>Used by</h3>${chips(usedBy, true)}` : ""}
-      <h3>Documents in its prompt</h3>${chips(model.edges.filter((e) => e.from === key && e.kind === "reads").map((e) => label(e.to)), true)}
-      <h3>Versions</h3>${versionTable(agent)}
-      <div id="diff"></div>
-      <h3>System prompt (v${v.version})</h3><pre>${esc(v.system)}</pre>
-      <h3>Recent runs</h3>${runRows(runs.slice(0, 12))}`;
-  } else if (skill) {
-    const runs = model.runs.filter((r) => r.skill === skill.name);
-    const out = Object.entries(skill.outcomes).map(([k, n]) => `<span class="chip ${BAD.has(k) ? "bad" : k === "done" ? "good" : ""}">${esc(k)} ${n}</span>`).join("");
-    const refs = model.edges.filter((e) => e.from === key).map((e) => label(e.to));
-    const by = model.edges.filter((e) => e.to === key && e.kind !== "attached").map((e) => label(e.from));
-    panel.innerHTML = `${kindBadge("skill")}<h2>${esc(skill.name)}</h2>
-      <div class="muted">${skill.runs} runs · ${money(skill.cost_total)} total${skill.runs ? ` · ${money(skill.cost_total / skill.runs)} per run` : ""}${skill.schedule ? ` · scheduled ${esc(skill.schedule)}` : ""}</div>
-      <p>${esc(skill.description)}</p>
-      <h3>Outcomes</h3><div class="chips">${out || '<span class="muted">no runs</span>'}</div>
-      <h3>Calls and reads</h3>${chips(refs, true)}
-      ${by.length ? `<h3>Used by</h3>${chips(by, true)}` : ""}
-      <h3>Flags from its runs</h3>${flagList(skill.checks.slice(0, 15))}
-      <h3>Runs</h3>${runRows(runs)}
-      <h3>Versions</h3>${skillVersions(skill)}<div id="diff"></div>
-      <details><summary>Skill text (current version)</summary><pre>${esc(skill.text)}</pre></details>`;
-  } else if (doc) {
-    panel.innerHTML = `${kindBadge("doc")}<h2 style="font-size:15px">${esc(doc.path)}</h2>
-      <div class="muted">${doc.scope === "engine" ? "Engine document (same for every workspace)" : "Workspace file (per account / ICP; the pattern as the prompts name it)"}</div>
-      <h3>Referenced by</h3>${chips([...new Set(doc.referenced_by)].map(label), true)}
-      ${doc.scope === "engine" ? '<h3>Text</h3><pre id="doctext">Loading…</pre>' : ""}`;
-    if (doc.scope === "engine") fetch(`/api/doc?path=${encodeURIComponent(doc.path)}`).then((r) => r.json()).then((j) => { $("#doctext").textContent = j.text ?? "(not found in the repo)"; });
-  } else if (sched) {
-    const runs = model.runs.filter((r) => r.skill === sched.skill);
-    panel.innerHTML = `${kindBadge("schedule")}<h2>${esc(sched.skill)}</h2>
-      <div class="muted">${esc(sched.cron)} (${esc(sched.timezone)}) · cap ${sched.cap_usd != null ? money(sched.cap_usd) : "none"} per run · operator v${sched.operator_version ?? "?"}${sched.paused ? " · paused" : ""}</div>
-      <p><code>${esc(sched.description)}</code></p>
-      <h3>Skill</h3>${chips([{ key: `skill:${sched.skill}`, label: sched.skill }], true)}
-      <h3>Runs of this skill</h3>${runRows(runs)}`;
-  }
-  panel.scrollTop = 0;
-}
-
-function versionTable(agent) {
-  const rows = agent.versions.map((v, i) => {
-    const prev = agent.versions[i + 1];
-    return `<tr><td>v${v.version}</td><td>${day(v.created_at)}</td><td class="num">${v.runs}</td><td class="num">${v.runs ? money(v.cost / v.runs) : "–"}</td><td class="num">${v.checks || ""}</td><td>${prev ? `<button data-diff="agent|${esc(agent.key)}|${prev.version}|${v.version}">diff v${prev.version}</button>` : ""}</td></tr>`;
-  }).join("");
-  return `<table><tr><th>Version</th><th>Created</th><th class="num">Runs</th><th class="num">${agent.kind === "operator" ? "Run cost" : "Own cost"}</th><th class="num">⚑</th><th></th></tr>${rows}</table>`;
-}
-
-function skillVersions(skill) {
-  return `<table><tr><th>Version</th><th>Created</th><th></th></tr>${skill.versions.map((v, i) => {
-    const prev = skill.versions[i + 1];
-    return `<tr><td>${esc(v.id.slice(-6))}</td><td>${day(v.created_at)}</td><td>${prev && v.text && prev.text ? `<button data-diff="skill|${esc(skill.key)}|${prev.id}|${v.id}">diff</button>` : ""}</td></tr>`;
+  $("#agents").innerHTML = `<table><tr><th>Agent</th><th>Model</th><th class="n">Version</th><th class="n">Runs</th><th class="n">Cost</th></tr>${story.roles.map((r) => {
+    const a = model.agents.find((x) => x.name === r.agent);
+    if (!a) return "";
+    return `<tr class="click" data-agent="${r.agent}"><td><span class="sw" style="background:${actor(r.agent).color}"></span><b>${escH(actor(r.agent).name)}</b><div class="muted">${escH(r.oneLiner)}</div></td><td>${escH(modelName(a.current.model))}</td><td class="n">v${a.current.version}</td><td class="n">${a.runs}</td><td class="n">${money(a.cost_total)}</td></tr>`;
   }).join("")}</table>`;
+
+  $("#status-legend").innerHTML = ["done", "question", "budget_reached", "failed"].map((k) => `<span><i class="round" style="background:${STATUS[k].color}"></i>${STATUS[k].icon} ${STATUS[k].label}</span>`).join("");
+  const tlRows = S.map((s) => ({ label: s.short, skills: s.skills })).concat([{ label: "Other", skills: story.maintenance.other }]);
+  drawTimeline($("#timeline"), tlRows, model.runs, openRun);
+}
+
+// ---------- drawer ----------
+function drawer(html) {
+  $("#drawer-body").innerHTML = html;
+  document.body.classList.add("open");
+  $("#drawer").scrollTop = 0;
+}
+const closeDrawer = () => document.body.classList.remove("open");
+const runTable = (runs) => runs.length
+  ? `<table><tr><th>Date</th><th>Run</th><th>Status</th><th class="n">Cost</th></tr>${runs.map((r) => `<tr><td>${day(r.created_at)}</td><td><a href="${consoleUrl(r.session_id)}" target="_blank">${escH((r.args || r.skill).slice(0, 48))}</a></td><td><span class="st ${r.status}">${statusOf(r.status).label}</span></td><td class="n">${money(r.cost)}</td></tr>`).join("")}</table>`
+  : '<p class="muted">No runs yet.</p>';
+
+function openStep(s) {
+  const checks = s.runs.flatMap((r) => r.checks.map((c) => ({ c, r })));
+  drawer(`<h3>${escH(String(s.n))}. ${escH(s.title)}</h3><p class="muted">${escH(s.what)}</p>
+    ${s.input ? `<dl><dt>In</dt><dd>${escH(s.input)}</dd><dt>Out</dt><dd>${escH(s.output)}</dd><dt>You</dt><dd>${escH(s.you.text)}</dd><dt>When</dt><dd>${escH(s.when)}</dd></dl>` : ""}
+    ${s.how ? `<h4>Hand-offs</h4><ol>${s.how.map((h) => `<li>${escH(h)}</li>`).join("")}</ol>` : ""}
+    <h4>Runs</h4>${runTable(s.runs)}
+    ${checks.length ? `<h4>To double-check</h4><ol>${checks.slice(0, 12).map(({ c, r }) => `<li>${escH(c)} <span class="muted">${day(r.created_at)}</span></li>`).join("")}</ol>` : ""}
+    <h4>Playbooks</h4>${s.skills.map(skillDetails).join("")}`);
+}
+
+function skillDetails(name) {
+  const k = model.skills.find((x) => x.name === name);
+  if (!k) return "";
+  return `<details><summary><span class="pill">${escH(name)}</span><span class="muted">${k.versions.length} version${k.versions.length === 1 ? "" : "s"}</span></summary><pre>${escH(k.text)}</pre></details>`;
+}
+
+function openAgent(id) {
+  const r = story.roles.find((x) => x.agent === id);
+  const a = model.agents.find((x) => x.name === id);
+  if (!a) return;
+  const runs = model.runs.filter((x) => x.threads.some((t) => t.agent === id));
+  const v = a.current;
+  drawer(`<h3><span class="sw" style="background:${actor(id).color}"></span>${escH(actor(id).name)}</h3><p class="muted">${escH(r?.oneLiner ?? a.description)}</p>
+    ${r ? `<h4>Does</h4><ol>${r.does.map((d) => `<li>${escH(d)}</li>`).join("")}</ol><p class="muted">${escH(r.never)}</p>` : ""}
+    <dl><dt>Model</dt><dd>${escH(v.model)}</dd><dt>Tools</dt><dd>${v.tools.map((t) => `<span class="pill">${escH(t)}</span>`).join("")}</dd>${v.subagents.filter((x) => x !== id).length ? `<dt>Hands work to</dt><dd>${v.subagents.filter((x) => x !== id).map((x) => `<span class="pill">${escH(actor(x).name)}</span>`).join("")}</dd>` : ""}${r ? `<dt>Reads</dt><dd>${escH(r.reads)}</dd>` : ""}</dl>
+    <h4>Versions</h4><table><tr><th>Version</th><th>Created</th><th class="n">Runs</th><th class="n">Cost</th><th></th></tr>${a.versions.map((x, i) => `<tr><td>v${x.version}</td><td>${day(x.created_at)}</td><td class="n">${x.runs}</td><td class="n">${money(x.cost)}</td><td>${a.versions[i + 1] ? `<button class="btn" data-diff="${escH(a.key)}|${a.versions[i + 1].version}|${x.version}">changes</button>` : ""}</td></tr>`).join("")}</table>
+    <div id="diff"></div>
+    <h4>Runs</h4>${runTable(runs.slice(0, 15))}
+    <details><summary class="muted">Instructions (v${v.version})</summary><pre>${escH(v.system)}</pre></details>`);
+}
+
+function openRun(r) {
+  const per = {};
+  for (const t of r.threads) per[t.agent] = (per[t.agent] ?? 0) + t.cost;
+  drawer(`<h3>${escH(r.skill)}</h3><p class="muted">${escH(r.args)}</p>
+    <dl><dt>Started</dt><dd>${new Date(r.created_at).toLocaleString()}</dd><dt>Status</dt><dd><span class="st ${r.status}">${statusOf(r.status).label}</span></dd><dt>Cost</dt><dd>${money(r.cost)} · ${r.active_minutes} min</dd>
+    <dt>By agent</dt><dd>${Object.entries(per).map(([a, c]) => `<span class="pill">${escH(actor(a).name)} ${money(c)}</span>`).join("")}</dd><dt>Session</dt><dd><a href="${consoleUrl(r.session_id)}" target="_blank">Open in Console</a></dd></dl>
+    ${r.checks.length ? `<h4>To double-check</h4><ol>${r.checks.map((c) => `<li>${escH(c)}</li>`).join("")}</ol>` : ""}`);
 }
 
 document.addEventListener("click", async (e) => {
-  const go = e.target.closest("[data-go]");
-  if (go) {
-    const key = go.dataset.go;
-    const n = cy.getElementById(key);
-    if (n.nonempty()) { cy.elements().addClass("faded"); n.closedNeighborhood().removeClass("faded"); n.select(); }
-    return show(key);
-  }
+  const row = e.target.closest("[data-agent]");
+  if (row) return openAgent(row.dataset.agent);
   const d = e.target.closest("[data-diff]");
   if (d) {
-    const [kind, id, from, to] = d.dataset.diff.split("|");
-    const j = await (await fetch(`/api/diff?kind=${kind}&id=${encodeURIComponent(id)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).json();
-    const config = j.config?.length ? `<div class="chips" style="margin-bottom:6px">${j.config.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>` : "";
-    $("#diff").innerHTML = j.lines ? `<h3>Changes v${esc(from)} → v${esc(to)}</h3>${config}<div class="diff">${j.lines.map((l) => `<div class="${l.op === "+" ? "p" : l.op === "-" ? "m" : l.op === "…" ? "e" : ""}">${esc(l.op === "…" ? `… ${l.text}` : `${l.op} ${l.text}`)}</div>`).join("")}</div>` : `<p class="muted">${esc(j.error)}</p>`;
-    $("#diff").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  const t = e.target.closest("nav [data-tab]");
-  if (t) {
-    document.querySelectorAll("nav [data-tab]").forEach((b) => b.classList.toggle("active", b === t));
-    document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("active", s.id === t.dataset.tab));
-    $("#filters").style.visibility = t.dataset.tab === "map" ? "visible" : "hidden";
-    if (t.dataset.tab === "map") cy?.resize();
+    const [id, from, to] = d.dataset.diff.split("|");
+    const j = await (await fetch(`/api/diff?kind=agent&id=${encodeURIComponent(id)}&from=${from}&to=${to}`)).json();
+    const changed = (j.lines ?? []).some((l) => l.op === "+" || l.op === "-");
+    $("#diff").innerHTML = `<h4>v${from} → v${to}</h4>${(j.config ?? []).map((c) => `<span class="pill">${escH(c)}</span>`).join("")}${changed ? `<div class="diff">${j.lines.map((l) => `<div class="${l.op === "+" ? "p" : l.op === "-" ? "m" : l.op === "…" ? "e" : ""}">${escH(l.op === "…" ? `… ${l.text}` : `${l.op} ${l.text}`)}</div>`).join("")}</div>` : ""}`;
   }
 });
-document.querySelectorAll("#filters input").forEach((i) => i.addEventListener("change", renderGraph));
+$("#close").addEventListener("click", closeDrawer);
+$("#scrim").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => e.key === "Escape" && closeDrawer());
 $("#refresh").addEventListener("click", () => load(true));
-
-// ---------- flags and runs tabs ----------
-
-function renderFlags() {
-  const flags = model.runs.flatMap((r) => r.checks.map((text) => ({ text, created_at: r.created_at, session_id: r.session_id, skill: r.skill })));
-  const bySkill = {};
-  for (const f of flags) (bySkill[f.skill] ??= []).push(f);
-  $("#flags").innerHTML = flags.length
-    ? Object.entries(bySkill).map(([s, fs]) => `<h3>${esc(s)} (${fs.length})</h3>${flagList(fs)}`).join("")
-    : '<p class="muted">No run has flagged anything to double-check yet.</p>';
-}
-
-function renderRuns() {
-  $("#runs").innerHTML = `<table><tr><th>Date</th><th>Skill</th><th>Arguments</th><th>Status</th><th>Agents</th><th class="num">Minutes</th><th class="num">Cost</th><th class="num">⚑</th></tr>${model.runs.map((r) => {
-    const per = {};
-    for (const t of r.threads) per[t.agent] = (per[t.agent] ?? 0) + t.cost;
-    return `<tr><td>${day(r.created_at)}</td><td>${esc(r.skill)}</td><td><a href="${console_(r.session_id)}" target="_blank">${esc((r.args || "").slice(0, 70))}</a>${r.archived ? ' <span class="muted">(archived)</span>' : ""}</td><td class="status-${r.status}">${esc(r.status)}</td><td>${Object.entries(per).map(([a, c]) => `${esc(a)} ${money(c)}`).join("<br>")}</td><td class="num">${r.active_minutes}</td><td class="num">${money(r.cost)}</td><td class="num">${r.checks.length || ""}</td></tr>`;
-  }).join("")}</table>`;
-}
-
+let rt;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
 load();

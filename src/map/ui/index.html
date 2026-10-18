@@ -3,33 +3,54 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent map</title>
+<title>Sales engine</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<header>
-  <div class="brand">Agent map <span class="muted">· Claude Managed Agents</span></div>
-  <div id="stats" class="stats"></div>
-  <button id="refresh" title="Rebuild from the platform">Refresh</button>
+<body class="viz-root">
+<header class="top">
+  <div class="title">Sales engine <span>Claude Managed Agents</span></div>
+  <button id="refresh" class="btn">Refresh</button>
 </header>
-<nav>
-  <button data-tab="map" class="active">Map</button>
-  <button data-tab="flags">Flags</button>
-  <button data-tab="runs">Runs</button>
-  <span class="filters" id="filters">
-    <label><input type="checkbox" data-kind="skill" checked> Skills</label>
-    <label><input type="checkbox" data-kind="agent" checked> Agents</label>
-    <label><input type="checkbox" data-kind="engine" checked> Engine docs</label>
-    <label><input type="checkbox" data-kind="workspace"> Workspace files</label>
-  </span>
-</nav>
 <main>
-  <section id="map" class="tab active"><div id="cy"></div><div id="loading">Loading from the platform…</div></section>
-  <section id="flags" class="tab"></section>
-  <section id="runs" class="tab"></section>
-  <aside id="detail"><p class="muted">Click a node to see its configuration, versions, runs and cost.</p></aside>
+  <section id="tiles" class="tiles"></section>
+
+  <section class="card">
+    <div class="card-head"><h2>Process</h2><div id="lane-legend" class="legend"></div></div>
+    <div id="swimlane" class="scroll-x"></div>
+  </section>
+
+  <div class="grid-2">
+    <section class="card">
+      <div class="card-head"><h2>Pipeline</h2><span id="funnel-sub" class="muted"></span></div>
+      <div id="funnel"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Cost per run, by step</h2><div id="cost-legend" class="legend"></div></div>
+      <div id="cost"></div>
+    </section>
+  </div>
+
+  <div class="grid-2">
+    <section class="card">
+      <div class="card-head"><h2>Research hand-off</h2></div>
+      <div id="sequence" class="scroll-x"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Agents</h2></div>
+      <div id="agents"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2>Activity</h2><div id="status-legend" class="legend"></div></div>
+    <div id="timeline" class="scroll-x"></div>
+  </section>
 </main>
-<script src="vendor/cytoscape.min.js"></script>
+
+<aside id="drawer" aria-hidden="true"><button class="btn close" id="close">Close</button><div id="drawer-body"></div></aside>
+<div id="scrim"></div>
+<div id="tip" role="tooltip"></div>
+<script src="viz.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

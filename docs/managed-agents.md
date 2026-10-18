@@ -72,16 +72,16 @@ Research per account: $1.08 (first run) → $0.67 → $0.51 (one researcher per 
 ## Agent map
 
 ```bash
-bun src/managed/cli.ts map    # http://127.0.0.1:4317, opens the browser; read-only
+bun src/managed/cli.ts map --workspace ~/Projects/shotlift-sales   # http://127.0.0.1:4317; the workspace is remembered
 ```
 
-A local, read-only view of what runs on the platform:
-- **Map:** the operator, the four agents, the schedules, the 25 skills and the documents their text points to. Red ring
-  means recent failures or budget caps.
-- **Click a node:** an agent's model, tools, subagents and prompt, with a version timeline (runs, cost and flags per
-  version, plus a diff that includes skill-version and tool changes). A skill's text, outcomes, runs (with Console links),
-  version diffs and the items its runs flagged. A document's text and what refers to it.
-- **Flags:** every item runs asked a reviewer to double-check (`CHECK:` lines in the operator's final message).
-- **Runs:** every run with its cost split per agent.
+A local, read-only dashboard of how the engine works and how it's doing:
+- **Process:** a swimlane of the whole journey (steps as rows; You, Coordinator, Researcher, Judge, Auditor, ICP analyst
+  as lanes), with your decisions in black and live accounts and cost per step.
+- **Pipeline:** accounts that reached each stage, from the workspace, with conversion.
+- **Cost per run, by step:** stacked by agent.
+- **Research hand-off:** the sequence of messages between you, the Coordinator, the Researchers, the Judges and the PR.
+- **Agents** and **Activity** (every run over time, coloured by outcome).
+- Click a step, agent or run for the details: in/out, hand-offs, runs, things to double-check, versions and changes.
 
-Finished runs are cached in `~/.config/agentic-sales-engine/map-cache/`, so Refresh only fetches what's new.
+The process text lives in `src/map/process.ts`; keep it in step with the skills.
