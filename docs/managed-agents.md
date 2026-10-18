@@ -39,3 +39,32 @@ bun src/managed/cli.ts status
 
 Platform IDs are kept in `~/.config/agentic-sales-engine/managed.json`. Networking is open (research reads any company
 site), so a malicious page could try to steer the agent; it can only push to its own branch.
+
+## Tested (2026-10-18, Shotlift workspace)
+
+Every skill ran once on the platform (`forget-person` excluded: it erases real personal data). All finished `done`;
+skills without the input they need (call-prep without a meeting, log-outcome without an event, import without a file)
+stopped instead of inventing it. Claude cost per run, from the API credits:
+
+| Skill | Cost | | Skill | Cost |
+|---|---|---|---|---|
+| status | $0.04–0.09 | | discover (289 candidates) | $0.16 |
+| dnc, setup, review-outcomes, log-outcome | $0.02–0.04 | | enrich-light (4 accounts) | $0.32 |
+| ways-in, draft-outreach, call-prep | $0.08–0.12 | | score (1 account) | $0.21 |
+| learn, icp-build, voice-profile, import | $0.04–0.11 | | scoring-design (diagnosis) | $0.33 |
+| shortlist (proposal + gate) | $0.08–0.19 | | refresh | $0.95 |
+| evals (offline suite) | $0.15 | | research (2 accounts) | $0.99 |
+| win-loss | $0.13 | | sync | > $1.20 (cap; re-scores after new signals) |
+| autopilot (stops at its gate) | $0.07 | | lint (before scoping the semantic pass) | > $2 (cap) |
+
+Research per account: $1.08 (first run) → $0.67 → $0.51 (one researcher per account, evidence pack for the judge).
+
+## Schedules
+
+| Skill | When (Europe/Amsterdam) | Cap per run |
+|---|---|---|
+| sync `--icp fashion-midhigh-benelux` | Monday 07:00 | $3 |
+| lint | Sunday 07:00 | $1.50 |
+| refresh `--icp fashion-midhigh-benelux` | 1st of the month, 07:00 | $3 |
+
+`inbox` turns finished scheduled runs into pull requests. Pause one in the Console (Deployments) or archive it.
