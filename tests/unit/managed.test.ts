@@ -18,12 +18,15 @@ test("agent files become managed definitions: tools mapped, MCP tools via the CL
 });
 
 test("research task: pinned engine, own branch, two applies, never pushes the base branch", () => {
-  const t = researchTask({ repo: "o/sales-workspace", branch: "managed/x", baseBranch: "master", icp: "i", domains: ["a.com", "b.nl"], budgetUsd: 1.2, approvedBy: "hein", judgeName: "ase-factor-judge", today: "2026-10-17" });
+  const t = researchTask({ repo: "o/sales-workspace", branch: "managed/x", baseBranch: "master", icp: "i", domains: ["a.com", "b.nl"], budgetUsd: 1.2, approvedBy: "hein", judgeName: "ase-factor-judge", researcherName: "ase-account-researcher", today: "2026-10-17" });
   expect(t).toContain("cd /workspace/sales-workspace && git checkout -q -b managed/x");
-  expect(t).toContain('"stage":"researched"'); // the apply format is spelled out, no source reading needed
+  expect(t).toContain("one `ase-account-researcher` subagent per account"); // each account in its own small context
   expect(t).toContain("context <domain> --icp i --mode full > .ase/tmp/evidence-<domain>.json");
   expect(t).toContain("git push -q -u origin managed/x");
   expect(t).toContain('"mode":"full","judgements"');
+  const researcher = managedDefinition(readAgentFile(PLUGIN_ROOT, "account-researcher"), "sha1").def;
+  expect(researcher.system).toContain('"stage":"researched"'); // the apply format lives in the cached system prompt
+  expect(researcher.system).toContain("context <domain> --icp <icp> --mode full");
   expect(t).toContain("Never push to `master`");
   expect(t).not.toContain("${CLAUDE_PLUGIN_ROOT}");
 });

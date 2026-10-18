@@ -76,7 +76,7 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
     const { def, hash } = managedDefinition(readAgentFile(pluginRoot, name), sha);
     const judge = s.agents["factor-judge"];
     const multiagent = name === "account-researcher" && judge
-      ? { type: "multiagent_20261001" as const, subagents: { type: "enabled" as const, inline_agents: { type: "disabled" as const }, predefined_agents: [{ type: "agent" as const, id: judge.id, version: judge.version }] } }
+      ? { type: "multiagent_20261001" as const, subagents: { type: "enabled" as const, inline_agents: { type: "disabled" as const }, predefined_agents: [{ type: "agent" as const, id: judge.id, version: judge.version }, { type: "self" as const }] } }
       : undefined;
     const prev = s.agents[name];
     // the researcher also needs a new version when it should point at a new judge version
@@ -128,7 +128,7 @@ export async function run(o: RunOptions, log: (l: string) => void = console.erro
   log(`session ${session.id} → https://platform.claude.com/sessions/${session.id}`);
 
   const stream = await c.beta.sessions.events.stream(session.id); // open before sending: it only delivers later events
-  const task = researchTask({ repo: o.repo, branch, baseBranch: o.baseBranch, icp: o.icp, domains: o.domains, budgetUsd: o.budgetUsd, approvedBy: o.approvedBy, judgeName: "ase-factor-judge", today });
+  const task = researchTask({ repo: o.repo, branch, baseBranch: o.baseBranch, icp: o.icp, domains: o.domains, budgetUsd: o.budgetUsd, approvedBy: o.approvedBy, judgeName: "ase-factor-judge", researcherName: "ase-account-researcher", today });
   await c.beta.sessions.events.send(session.id, { events: [{ type: "user.message", content: [{ type: "text", text: task }] }] });
 
   let status = "running";
