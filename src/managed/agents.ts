@@ -173,7 +173,8 @@ export function runMessage(o: { repo: string; branch: string; baseBranch: string
   return `Today is ${o.today}. Workspace: \`${ws}\` (branch \`${o.baseBranch}\`). Approver for gates: \`${o.approvedBy}\`.
 
 Setup first, in one Bash call:
-\`(cd ${ENGINE_DIR} && bun install --frozen-lockfile --silent) && cd ${ws} && git checkout -q -b ${o.branch} && bun ${ENGINE_DIR}/src/cli/ase.ts reindex >/dev/null && mkdir -p .ase/tmp && echo ok\`
+\`(cd ${ENGINE_DIR} && bun install --frozen-lockfile --silent) && cd ${ws} && git checkout -q -b ${o.branch} && bun ${ENGINE_DIR}/src/cli/ase.ts reindex >/dev/null && mkdir -p .ase/tmp && echo 'export ASE_CLAUDE_BILLING=api' | tee -a ~/.bashrc ~/.profile >/dev/null && echo ok\`
+(Claude is billed per token here, not on a subscription: \`ase\` needs \`ASE_CLAUDE_BILLING=api\` in every shell.)
 
 Then: \`/agentic-sales-engine:${o.skill}${o.args ? ` ${o.args}` : ""}\``;
 }
