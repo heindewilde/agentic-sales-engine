@@ -156,7 +156,7 @@ ${toolPreamble(ALL_OPS)}- \`sync_watchlist\` → \`${ase} sync\` (with \`--icp\`
 When the work is done, commit everything on the current branch and push it:
 \`git add -A && git commit -q -m "<skill>: <one line>" && git push -q -u origin HEAD\` (nothing to commit is fine). Never push to
 the base branch. End with a short summary for the reviewer (what changed, what to double-check, spend), then the line
-\`STATUS: done\`, or \`STATUS: failed: <reason>\` if you could not finish.`;
+\`BRANCH: <the run's branch>\`, then \`STATUS: done\`, or \`STATUS: failed: <reason>\` if you could not finish.`;
   return {
     name: "ase-operator",
     description: "Runs the agentic sales engine's skills unattended: the platform counterpart of the Claude Code session that runs the plugin.",
@@ -168,12 +168,14 @@ the base branch. End with a short summary for the reviewer (what changed, what t
 }
 
 /** The first message of a run: set up the sandbox, then the skill with its arguments. */
-export function runMessage(o: { repo: string; branch: string; baseBranch: string; skill: string; args: string; approvedBy: string; today: string }): string {
+export function runMessage(o: { repo: string; branch?: string; baseBranch: string; skill: string; args: string; approvedBy: string; today?: string }): string {
   const ws = workspaceDir(o.repo);
-  return `Today is ${o.today}. Workspace: \`${ws}\` (branch \`${o.baseBranch}\`). Approver for gates: \`${o.approvedBy}\`.
+  // scheduled runs reuse one message, so the date and a unique branch are worked out in the sandbox
+  const branch = o.branch ?? `managed/$(date +%F)-${o.skill}-$(od -An -N2 -tx1 /dev/urandom | tr -d ' \\n')`;
+  return `${o.today ? `Today is ${o.today}.` : "Today's date: run `date +%F`."} Workspace: \`${ws}\` (branch \`${o.baseBranch}\`). Approver for gates: \`${o.approvedBy}\`.
 
 Setup first, in one Bash call:
-\`(cd ${ENGINE_DIR} && bun install --frozen-lockfile --silent) && cd ${ws} && git checkout -q -b ${o.branch} && bun ${ENGINE_DIR}/src/cli/ase.ts reindex >/dev/null && mkdir -p .ase/tmp && echo 'export ASE_CLAUDE_BILLING=api' | tee -a ~/.bashrc ~/.profile >/dev/null && echo ok\`
+\`(cd ${ENGINE_DIR} && bun install --frozen-lockfile --silent) && cd ${ws} && git checkout -q -b "${branch}" && git branch --show-current && bun ${ENGINE_DIR}/src/cli/ase.ts reindex >/dev/null && mkdir -p .ase/tmp && echo 'export ASE_CLAUDE_BILLING=api' | tee -a ~/.bashrc ~/.profile >/dev/null && echo ok\`
 (Claude is billed per token here, not on a subscription: \`ase\` needs \`ASE_CLAUDE_BILLING=api\` in every shell.)
 
 Then: \`/agentic-sales-engine:${o.skill}${o.args ? ` ${o.args}` : ""}\``;
