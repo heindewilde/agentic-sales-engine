@@ -155,8 +155,10 @@ ${toolPreamble(ALL_OPS)}- \`sync_watchlist\` → \`${ase} sync\` (with \`--icp\`
 ## Finishing
 When the work is done, commit everything on the current branch and push it:
 \`git add -A && git commit -q -m "<skill>: <one line>" && git push -q -u origin HEAD\` (nothing to commit is fine). Never push to
-the base branch. End with a short summary for the reviewer (what changed, what to double-check, spend), then the line
-\`BRANCH: <the run's branch>\`, then \`STATUS: done\`, or \`STATUS: failed: <reason>\` if you could not finish.`;
+the base branch. End with a short summary for the reviewer (what changed, spend). Then put every item the reviewer should
+double-check (an unverified number, a weak source, a judgement call, a guess) on its own line starting with \`CHECK: \`,
+naming the account or file. Then the line \`BRANCH: <the run's branch>\`, then \`STATUS: done\`, or
+\`STATUS: failed: <reason>\` if you could not finish.`;
   return {
     name: "ase-operator",
     description: "Runs the agentic sales engine's skills unattended: the platform counterpart of the Claude Code session that runs the plugin.",

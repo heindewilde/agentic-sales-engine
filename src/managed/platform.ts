@@ -42,7 +42,7 @@ export function secret(name: string, required = true): string {
   return v ?? "";
 }
 
-const client = () => new Anthropic({ apiKey: secret("ASE_MANAGED_AGENTS_API_KEY") });
+export const client = () => new Anthropic({ apiKey: secret("ASE_MANAGED_AGENTS_API_KEY") });
 
 function engineSha(pluginRoot: string): string {
   const r = Bun.spawnSync(["git", "-C", pluginRoot, "rev-parse", "HEAD"]);
@@ -146,6 +146,7 @@ export interface RunResult {
   branch: string;
   status: "done" | "question" | "failed" | string;
   message: string; // the agent's last message (the question, or the summary)
+  checks: string[]; // what the agent says a reviewer should double-check
   cost_usd: number | null;
   pr: string | null;
 }
@@ -232,9 +233,10 @@ async function settle(sessionId: string, stop: string, last: string, log: (l: st
   const named = last.match(/^BRANCH:\s*(\S+)\s*$/m)?.[1]; // scheduled runs name their own branch
   if (named) meta.branch = named;
   if (status === "done" && !meta.branch) log(`no pull request: run ${sessionId} didn't report its branch`);
-  const message = last.replace(/\n?BRANCH:.*$/im, "").replace(/\n?STATUS:.*$/i, "").trim();
-  const pr = status === "done" && meta.branch ? openPullRequest(meta, sessionId, message, cost, log) : null;
-  return { session_id: sessionId, branch: meta.branch, status, message, cost_usd: cost, pr };
+  const checks = extractChecks(last);
+  const message = last.replace(/^CHECK:.*$/gim, "").replace(/\n?BRANCH:.*$/im, "").replace(/\n?STATUS:.*$/i, "").replace(/\n{3,}/g, "\n\n").trim();
+  const pr = status === "done" && meta.branch ? openPullRequest(meta, sessionId, message, checks, cost, log) : null;
+  return { session_id: sessionId, branch: meta.branch, status, message, checks, cost_usd: cost, pr };
 }
 
 /**
@@ -250,7 +252,7 @@ export async function inbox(days = 7, log: (l: string) => void = console.error, 
     const md = (s.metadata as Record<string, string> | null) ?? {};
     if (!(md.ase_run || (fallbackRepo && md.branch)) || s.archived_at) continue;
     if (s.status !== "idle") {
-      out.push({ session_id: s.id, branch: (s.metadata as Record<string, string>).branch ?? "", status: s.status, message: "", cost_usd: costOf(s), pr: null });
+      out.push({ session_id: s.id, branch: (s.metadata as Record<string, string>).branch ?? "", status: s.status, message: "", checks: [], cost_usd: costOf(s), pr: null });
       continue;
     }
     out.push(await settleFromHistory(s.id, log, fallbackRepo));
@@ -263,12 +265,12 @@ export async function inbox(days = 7, log: (l: string) => void = console.error, 
     for await (const r of c.beta.deploymentRuns.list({ deployment_id: depId } as never)) {
       if (Date.parse(r.created_at) < since) break;
       if (r.error) {
-        out.push({ session_id: r.id, branch: "", status: "failed", message: `scheduled ${known.skill}: ${JSON.stringify(r.error).slice(0, 200)}`, cost_usd: null, pr: null });
+        out.push({ session_id: r.id, branch: "", status: "failed", message: `scheduled ${known.skill}: ${JSON.stringify(r.error).slice(0, 200)}`, checks: [], cost_usd: null, pr: null });
         continue;
       }
       if (!r.session_id || out.some((x) => x.session_id === r.session_id)) continue;
       const s = await c.beta.sessions.retrieve(r.session_id);
-      if (s.status !== "idle") out.push({ session_id: s.id, branch: "", status: s.status, message: `scheduled ${known.skill}`, cost_usd: costOf(s), pr: null });
+      if (s.status !== "idle") out.push({ session_id: s.id, branch: "", status: s.status, message: `scheduled ${known.skill}`, checks: [], cost_usd: costOf(s), pr: null });
       else out.push(await settleFromHistory(s.id, log, undefined, known));
     }
   }
@@ -318,7 +320,20 @@ export async function schedule(o: Omit<RunOptions, "capUsd"> & { capUsd: number;
 }
 
 /** One pull request per finished run: the agent's summary, scores before → after for any rescored account, cost and session link. */
-function openPullRequest(m: RunMeta, sessionId: string, summary: string, cost: number | null, log: (l: string) => void): string | null {
+/**
+ * What the agent flags for review: its `CHECK:` lines. Runs from before that convention fall back to bullets and
+ * sentences that ask for a check (check / verify / unverified / caution / guess / borderline / weak).
+ */
+export function extractChecks(text: string): string[] {
+  const tagged = [...text.matchAll(/^\s*CHECK:\s*(.+)$/gim)].map((m) => m[1]!.trim());
+  if (tagged.length) return tagged;
+  const hint = /\b(double-check|check|verify|unverified|caution|guess|borderline|weak|thin evidence|not confirmed)\b/i;
+  // only list items: summaries and headings mention "check" too, but aren't items to check
+  return text.split("\n").filter((l) => /^\s*([-*•]|\d+\.)\s+/.test(l)).map((l) => l.replace(/^\s*([-*•]|\d+\.)\s+/, "").replace(/\*\*/g, "").trim())
+    .filter((l) => l.length > 15 && l.length < 300 && !l.endsWith(":") && hint.test(l)).slice(0, 12);
+}
+
+function openPullRequest(m: RunMeta, sessionId: string, summary: string, checks: string[], cost: number | null, log: (l: string) => void): string | null {
   const gh = (args: string[]) => Bun.spawnSync(["gh", ...args]);
   const existing = gh(["pr", "list", "--repo", m.repo, "--head", m.branch, "--state", "all", "--json", "url", "--jq", ".[0].url // empty"]).stdout.toString().trim();
   if (existing) return existing;
@@ -348,6 +363,7 @@ function openPullRequest(m: RunMeta, sessionId: string, summary: string, cost: n
   const body = [
     `\`${m.skill}${m.args ? ` ${m.args}` : ""}\` on Claude Managed Agents (session [${sessionId}](https://platform.claude.com/sessions/${sessionId})).`,
     "", summary,
+    ...(checks.length ? ["", "**Double-check:**", ...checks.map((c) => `- [ ] ${c}`)] : []),
     ...(rows.length ? ["", "| Account | Before | After |", "|---|---|---|", ...rows] : []),
     "", `Claude cost: ${cost === null ? "unknown" : `$${cost.toFixed(2)}`} (API credits). Merge to accept, close to discard.`,
   ].join("\n");
