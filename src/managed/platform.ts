@@ -24,6 +24,7 @@ interface State {
   vault_credentials?: string[];
   agents: Partial<Record<AgentName, Ref>>;
   skills?: Record<string, { id: string; version: string; hash: string }>;
+  deployments?: Record<string, string>; // skill → deployment id
   telemetry_destination_id?: string;
 }
 
@@ -221,13 +222,15 @@ const costOf = (session: { usage?: unknown }) => {
 };
 
 /** Turn the agent's last message into a result; a finished run gets its pull request (once). */
-async function settle(sessionId: string, stop: string, last: string, log: (l: string) => void, fallbackRepo?: string): Promise<RunResult> {
+async function settle(sessionId: string, stop: string, last: string, log: (l: string) => void, fallbackRepo?: string, known?: RunMeta): Promise<RunResult> {
   const session = await client().beta.sessions.retrieve(sessionId);
-  const meta = runMeta(session, fallbackRepo);
+  const meta = known ? { ...known } : runMeta(session, fallbackRepo);
   const cost = costOf(session);
   const marker = last.match(/STATUS:\s*(done|question|failed)(?::\s*(.*))?\s*$/i);
   const status = stop !== "end_turn" ? stop : (marker?.[1]?.toLowerCase() ?? "question"); // no marker: treat as a question to you
-  const message = last.replace(/\n?STATUS:.*$/i, "").trim();
+  const named = last.match(/^BRANCH:\s*(\S+)\s*$/m)?.[1]; // scheduled runs name their own branch
+  if (named) meta.branch = named;
+  const message = last.replace(/\n?BRANCH:.*$/im, "").replace(/\n?STATUS:.*$/i, "").trim();
   const pr = status === "done" ? openPullRequest(meta, sessionId, message, cost, log) : null;
   return { session_id: sessionId, branch: meta.branch, status, message, cost_usd: cost, pr };
 }
@@ -248,15 +251,67 @@ export async function inbox(days = 7, log: (l: string) => void = console.error, 
       out.push({ session_id: s.id, branch: (s.metadata as Record<string, string>).branch ?? "", status: s.status, message: "", cost_usd: costOf(s), pr: null });
       continue;
     }
-    let last = "";
-    let stop = "end_turn";
-    for await (const e of c.beta.sessions.events.list(s.id)) {
-      if (e.type === "agent.message") last = ((e as { content?: { text?: string }[] }).content ?? []).map((b) => b.text ?? "").join("").trim();
-      if (e.type === "session.status_idle") stop = ((e as { stop_reason?: { type?: string } }).stop_reason?.type) ?? "end_turn";
+    out.push(await settleFromHistory(s.id, log, fallbackRepo));
+  }
+  // scheduled runs: their sessions carry the deployment's details, not ours
+  for (const depId of Object.values(loadState().deployments ?? {})) {
+    const dep = await c.beta.deployments.retrieve(depId);
+    const md = (dep.metadata ?? {}) as Record<string, string>;
+    const known: RunMeta = { repo: md.repo!, base: md.base ?? "master", branch: "", skill: md.skill ?? "?", args: md.args ?? "" };
+    for await (const r of c.beta.deploymentRuns.list({ deployment_id: depId } as never)) {
+      if (Date.parse(r.created_at) < since) break;
+      if (r.error) {
+        out.push({ session_id: r.id, branch: "", status: "failed", message: `scheduled ${known.skill}: ${JSON.stringify(r.error).slice(0, 200)}`, cost_usd: null, pr: null });
+        continue;
+      }
+      if (!r.session_id || out.some((x) => x.session_id === r.session_id)) continue;
+      const s = await c.beta.sessions.retrieve(r.session_id);
+      if (s.status !== "idle") out.push({ session_id: s.id, branch: "", status: s.status, message: `scheduled ${known.skill}`, cost_usd: costOf(s), pr: null });
+      else out.push(await settleFromHistory(s.id, log, undefined, known));
     }
-    out.push(await settle(s.id, stop, last, log, fallbackRepo));
   }
   return out;
+}
+
+async function settleFromHistory(sessionId: string, log: (l: string) => void, fallbackRepo?: string, known?: RunMeta): Promise<RunResult> {
+  let last = "";
+  let stop = "end_turn";
+  for await (const e of client().beta.sessions.events.list(sessionId)) {
+    if (e.type === "agent.message") last = ((e as { content?: { text?: string }[] }).content ?? []).map((b) => b.text ?? "").join("").trim();
+    if (e.type === "session.status_idle") stop = ((e as { stop_reason?: { type?: string } }).stop_reason?.type) ?? "end_turn";
+  }
+  return settle(sessionId, stop, last, log, fallbackRepo, known);
+}
+
+/**
+ * Run a skill on a schedule (cron, Europe/Amsterdam): a platform deployment with the same setup as `run`. Each run
+ * works on its own branch; `inbox` turns finished ones into pull requests. Re-run after `sync` to pin the new versions.
+ */
+export async function schedule(o: Omit<RunOptions, "capUsd"> & { capUsd: number; cron: string; timezone?: string }, log: (l: string) => void = console.error): Promise<{ deployment_id: string; skill: string; cron: string }> {
+  const s = await sync(o.pluginRoot, log);
+  const c = client();
+  const operator = s.agents.operator!;
+  const body = {
+    name: `ase ${o.skill}`,
+    description: `${o.skill} ${o.args}`.trim().slice(0, 500),
+    agent: { type: "agent" as const, id: operator.id, version: operator.version },
+    environment_id: s.environment_id!,
+    vault_ids: s.vault_id ? [s.vault_id] : [],
+    resources: [
+      { type: "github_repository" as const, url: `https://github.com/${o.repo}`, authorization_token: secret("ASE_MANAGED_AGENTS_GITHUB_TOKEN"), checkout: { type: "branch" as const, name: o.baseBranch } },
+      { type: "github_repository" as const, url: "https://github.com/heindewilde/agentic-sales-engine", checkout: { type: "commit" as const, sha: engineSha(o.pluginRoot) } },
+    ],
+    initial_events: [{ type: "user.message" as const, content: [{ type: "text" as const, text: runMessage({ repo: o.repo, baseBranch: o.baseBranch, skill: o.skill, args: o.args, approvedBy: o.approvedBy }) }] }],
+    schedule: { type: "cron" as const, expression: o.cron, timezone: o.timezone ?? "Europe/Amsterdam" },
+    budget: { type: "limit" as const, max_list_cost: { amount: String(Math.round(o.capUsd * 100)), currency: "USD" } },
+    metadata: { ase_run: "1", skill: o.skill, args: o.args.slice(0, 500), repo: o.repo, base: o.baseBranch },
+  };
+  const prev = s.deployments?.[o.skill];
+  const d = prev ? await c.beta.deployments.update(prev, body as never) : await c.beta.deployments.create(body as never);
+  s.deployments = { ...(s.deployments ?? {}), [o.skill]: d.id };
+  saveState(s);
+  log(`${prev ? "updated" : "scheduled"} ${o.skill}: ${o.cron} (${d.id})`);
+  return { deployment_id: d.id, skill: o.skill, cron: o.cron };
 }
 
 /** One pull request per finished run: the agent's summary, scores before → after for any rescored account, cost and session link. */
