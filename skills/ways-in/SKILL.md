@@ -35,9 +35,11 @@ Per account:
    - **Suggested opener** — one sentence (a warm intro ask to the member, or a trigger → insight line). Never invent shared history.
    Mention when the team member should be asked first how well they really know the person.
 4. Write all accounts in **one** `ase apply` file (`${CLAUDE_PLUGIN_ROOT}/references/output-format.md`): per account the
-   `Ways in` section, its sources and a changelog. Writing Ways in makes the account `outreach_ready` (cold
-   trigger-based ways count). To hold one back (no usable way, or a warm intro the team member must confirm first), add
-   an open question `- [ ] … (owner: ways_in)` saying what's needed, and list it as "held" in the final reply. If the
-   warm-path picture changed the access factors (`warm_path`, `persona_reachable`…), include their new `judgements`.
+   `Ways in` section, its sources and a changelog. Writing Ways in makes the account `outreach_ready`: that is not a
+   gate (being asked to find ways in means its scores were reviewed, GATE 3; the next gate is the draft review), and
+   cold trigger-based ways count. Hold an account back only when there is no usable way at all, or the only way is a
+   warm intro the team member must confirm first: then set `"stage": "scored"`, add an open question
+   (owner `ways_in`) saying what's needed, and list it as "held" in the final reply. If the warm-path picture changed
+   the access factors (`warm_path`, `persona_reachable`…), include their new `judgements`.
 
 Finish with a table: account, tier, best way in, owner (team member to act). Nothing is sent to anyone.

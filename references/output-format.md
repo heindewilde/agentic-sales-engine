@@ -60,4 +60,4 @@ only the failed accounts and apply again with just those. Never edit account fil
   Date the event, not the article. `relevance` 0–3 for this ICP.
 - **judgements + mode:** factor scores, judged as `references/judging.md` describes. `mode: light` scores only the
   light factors, `full` all of them. Leave both out when your stage doesn't score.
-- **stage:** `researched` or `outreach_ready`, applied only when the stage contract holds.
+- **stage:** `researched` or `outreach_ready`, applied only when the stage contract holds. Ways in sets `outreach_ready` by itself; `scored` holds an account back.

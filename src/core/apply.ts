@@ -77,7 +77,7 @@ const AccountUpdate = z.object({
   judgements: z.array(z.unknown()).optional(),
   mode: z.enum(["light", "full"]).optional(),
   /** advance to this stage after writing (contracts are checked) — e.g. "researched" */
-  stage: z.enum(["researched", "outreach_ready"]).optional(),
+  stage: z.enum(["researched", "scored", "outreach_ready"]).optional(),
   changelog: z.string().optional(),
 });
 export const ApplyInput = z.object({ icp: z.string(), member: z.string().optional(), accounts: z.array(AccountUpdate).min(1) });
@@ -230,10 +230,10 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
     res.written.push(p.rel);
   }
 
-  // Writing a Ways in section for a scored account is what makes it outreach-ready, unless the update holds it back
-  // with an open question owned by ways_in (seen twice on the bench: the section written, the stage forgotten).
-  const held = (u.open_questions ?? []).some((q) => /^\s*-\s*\[ \]/.test(q) && /owner:\s*ways[_-]?in/i.test(q));
-  const stage = u.stage ?? (u.sections?.["Ways in"] && !held && company.data.icp_status?.[icp]?.stage === "scored" ? "outreach_ready" : undefined);
+  // Writing a Ways in section for a scored account is what makes it outreach-ready; `"stage": "scored"` holds it back
+  // (seen twice on the bench: the section written, the stage forgotten).
+  const current = company.data.icp_status?.[icp]?.stage;
+  const stage = u.stage === current ? undefined : (u.stage ?? (u.sections?.["Ways in"] && current === "scored" ? "outreach_ready" : undefined));
   if (stage) {
     const a = await advanceStage(ws, u.domain, icp, stage);
     if (!a.advanced) res.errors.push(...a.errors.map((e) => `stage ${stage}: ${e}`));

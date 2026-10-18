@@ -98,13 +98,13 @@ describe("context + apply", () => {
     expect(footnoteClashes(brief, {}, { b1: "About, https://delta.example/about (2026-10-01) — “our 340 staff”" }, false)).toEqual([]); // same definition
   });
 
-  test("a Ways in section makes a scored account outreach-ready, unless an open question for ways_in holds it", async () => {
+  test("a Ways in section makes a scored account outreach-ready, unless the update holds it at scored", async () => {
     const stageOf = async (w: string) => (await readDoc<Company>(join(w, "accounts/maasverhoeven.example/company.md"))).data.icp_status?.[ICP]?.stage;
     const ws = fixture();
-    const held = await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "maasverhoeven.example", sections: { "Ways in": "No usable way yet." }, open_questions: ["- [ ] Does Sam really know the CFO? (owner: ways_in)"] }] });
+    const held = await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "maasverhoeven.example", sections: { "Ways in": "No usable way yet." }, open_questions: ["- [ ] Does Sam really know the CFO? (owner: ways_in)"], stage: "scored" }] });
     expect(held.results[0]!.ok).toBe(true);
     expect(await stageOf(ws)).toBe("scored");
-    const ok = await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "maasverhoeven.example", sections: { "Ways in": "1. Trigger: new CFO, cold email." } }] });
+    const ok = await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "maasverhoeven.example", sections: { "Ways in": "1. Trigger: new CFO, cold email." }, open_questions: ["- [ ] Does anyone on the team know the CFO? (owner: ways_in)"] }] }); // an open question doesn't hold it
     expect(ok.results[0]!.errors).toEqual([]);
     expect(await stageOf(ws)).toBe("outreach_ready");
   });
