@@ -10,8 +10,6 @@ const tpl = (f: string) => readFileSync(join(PLUGIN_ROOT, "templates", f), "utf8
 
 describe("shipped templates are valid", () => {
   test.each([
-    ["company.md", "accounts/example.com/company.md"],
-    ["brief.md", "accounts/example.com/brief.md"],
     ["person.md", "people/jane-doe-1a2b3c.md"],
     ["signal.md", "accounts/example.com/signals/2026-09-30-funding.md"],
     ["icp.md", "icps/my-icp/icp.md"],

@@ -8,7 +8,7 @@ test("agent files become managed definitions: tools mapped, MCP tools via the CL
   expect(def.name).toBe("ase-account-researcher");
   expect(def.model).toBe("claude-sonnet-5-5");
   expect(def.tools[0]!.default_config).toEqual({ enabled: false, permission_policy: { type: "always_allow" } });
-  expect(def.tools[0]!.configs.map((c) => c.name).sort()).toEqual(["bash", "edit", "glob", "grep", "read", "web_fetch", "web_search", "write"]);
+  expect(def.tools[0]!.configs.map((c) => c.name).sort()).toEqual(["bash", "glob", "grep", "read", "web_fetch", "web_search", "write"]); // writes one apply file, edits nothing
   expect(def.system).toContain(`bun ${ENGINE_DIR}/src/cli/ase.ts provider search_news --input`);
   expect(def.system).not.toContain("${CLAUDE_PLUGIN_ROOT}");
   expect(managedDefinition(readAgentFile(PLUGIN_ROOT, "account-researcher"), "other-sha").hash).toBe(hash); // engine sha alone doesn't version the agent

@@ -63,15 +63,8 @@ export interface ManagedAgentDef {
   metadata: Record<string, string>;
 }
 
-/** The research apply file, spelled out so the agent never has to read engine source to find the format. */
-const APPLY_EXAMPLE = `{"icp":"<icp>","accounts":[{"domain":"a.com",
-  "facts":{"employees":{"value":45,"source_url":"https://a.com/about","confidence":0.8,"raw_ref":"raw/2026-10/abc.md"}},
-  "sections":{"Business & offering":"…[^a1]","Situation & triggers":"2026-09-01: … (dated)[^a2]","Technographics":"…","People map":"…","Risks & fit concerns":"…"},
-  "sources":{"a1":{"label":"About page","url":"https://a.com/about","date":"<today>","quote":"exact words (≤ 40) from that page","raw_ref":"raw/2026-10/abc.md"}},
-  "open_questions":["- [x] Who runs e-commerce? → Jane Doe[^a3]","- [ ] Studio in-house? (unknown after research; owner: ways-in)"],
-  "people":[{"name":"Jane Doe","title":"Head of E-commerce","linkedin_url":"https://www.linkedin.com/in/…","persona":"<persona id>","seniority":"director","source_url":"…","confidence":0.8}],
-  "signals":[{"type":"launch","title":"…","date":"2026-09-01","source_url":"…","confidence":0.8,"relevance":2,"raw_ref":"raw/…"}],
-  "stage":"researched","changelog":"managed research"}]}`;
+/** The output format, read from references/output-format.md (its one home), so an agent never has to look it up. */
+const OUTPUT_FORMAT = readFileSync(join(import.meta.dir, "../../references/output-format.md"), "utf8").replace(/^# .*\n+/, "").replaceAll("${CLAUDE_PLUGIN_ROOT}", ENGINE_DIR);
 
 /**
  * What changes for an agent on the platform: the judge writes its own output file (no caller to return JSON to) and
@@ -79,16 +72,8 @@ const APPLY_EXAMPLE = `{"icp":"<icp>","accounts":[{"domain":"a.com",
  */
 const MANAGED_EXTRA: Record<string, { tools?: ToolName[]; system?: string }> = {
   "account-researcher": {
-    system: `\n\n## In this environment\nA coordinator gives you ONE domain, the ICP and today's date. Work in the workspace directory.
-- Start with \`bun ${ENGINE_DIR}/src/cli/ase.ts context <domain> --icp <icp> --mode full\`: it digests the rules, the ICP, the factors with their evidence hints, the learnings and the account's current files. Don't read those files separately, and don't read the engine's source code.
-- Keep tool output small, because everything you read stays in your context: \`fetch_pages\` with \`max_chars\` 1500 and a \`focus\`, and \`| head\` on long output. For an exact quote, \`grep\` the saved page (its \`raw_ref\`) instead of fetching again.
-- Research with the plan above, then write \`.ase/tmp/research-<domain>.json\` in exactly this shape (no \`judgements\`, no \`mode\`):
-\`\`\`json
-${APPLY_EXAMPLE}
-\`\`\`
-  Every web source quotes the exact words (≤ 40) its statement rests on and passes its \`raw_ref\`; every number, country, role or date in a statement must be in one of its footnotes' quotes.
-- \`bun ${ENGINE_DIR}/src/cli/ase.ts apply .ase/tmp/research-<domain>.json\`; fix and re-apply until it reports ok.
-- Reply to the coordinator with one line: the top trigger, and anything a reviewer should double-check.`,
+    // only what differs here: the Judge scores, the engine path, and how to keep the context small
+    system: `\n\n## In this environment\nA coordinator gives you ONE domain, the ICP and today's date, and the Judge scores it: leave \`judgements\` and \`mode\` out of your file. The engine is at \`${ENGINE_DIR}\`; don't read its source code. Everything you read stays in your context, so pipe long output through \`| head\`, and for an exact quote \`grep\` the saved page (its \`raw_ref\`) instead of fetching again. Reply to the coordinator with one line plus anything to double-check.\n\n## The output format\n${OUTPUT_FORMAT}`,
   },
   "factor-judge": {
     tools: ["write"],

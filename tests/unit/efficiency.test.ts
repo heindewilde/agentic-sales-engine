@@ -81,6 +81,14 @@ describe("context + apply", () => {
     expect(readFileSync(join(ws, "accounts/delta.example/brief.md"), "utf8")).toContain("[^d1]: About, https://delta.example/about (2026-10-15) — “supplies packaging to 400 bakeries in Belgium”");
   });
 
+  test("an invalid judgement is reported, not silently dropped (a missing factor would skew the score)", async () => {
+    const ws = fixture();
+    await persistCandidates(ws, ICP, "r", "t", [{ name: "Delta", domain: "delta.example", source_url: "https://delta.example" }]);
+    const r = await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "delta.example", mode: "light", judgements: [{ id: "industry_fit", level: 3, confidence: 0.9, evidence: [] }] }] });
+    expect(r.results[0]!.ok).toBe(false);
+    expect(r.results[0]!.errors.join()).toContain("judgement industry_fit: a factor with a level must cite evidence");
+  });
+
   test("context is compact: auto factors flagged, light factors only", async () => {
     const ws = fixture();
     await persistCandidates(ws, ICP, "r", "t", [{ name: "Alpha", domain: "alpha.example", source_url: "https://alpha.example", employees: 320 }]);
