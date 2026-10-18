@@ -8,6 +8,8 @@ unchanged; this is for comparing runtimes. Every skill runs there, by name. Bill
 bun src/managed/cli.ts sync        # agents/*.md + skills/* → versioned agents and skills, plus the operator, environment and key vault
 bun src/managed/cli.ts run <skill> [skill args...] --repo owner/workspace-repo [--base master] [--cap 5]
 bun src/managed/cli.ts reply <session-id> "<answer>"   # a run that asked a question (gate, choice) continues
+bun src/managed/cli.ts schedule <skill> [args...] --cron "0 7 * * 1" --repo owner/workspace-repo [--cap 2]   # recurring
+bun src/managed/cli.ts inbox [days]   # finished runs nobody listened to (scheduled ones too) → pull requests; open questions
 bun src/managed/cli.ts telemetry   # platform traces → Braintrust (needs ASE_ANTHROPIC_ADMIN_KEY once; revoke it after)
 bun src/managed/cli.ts status
 ```
@@ -21,6 +23,8 @@ bun src/managed/cli.ts status
 | `skills/*/SKILL.md` | platform skills, same text (plugin root path rewritten); a changed skill → a new skill version |
 | `batch.ts` / `claude -p` | subagents: one researcher per account, enrich-light in chunks of 10 |
 | `AskUserQuestion`, gates | the run stops with a question (`status: question`); `reply` answers it |
+| cron / "run every Monday" | `schedule`: a platform deployment; each run on its own branch, `inbox` opens the pull requests |
+| reviewing what an agent did | every finished run opens a pull request: the agent's summary, scores before → after, cost, session link |
 | MCP gateway (`fetch_pages`, `search_news`, …) | the same gateway through the CLI (`ase provider <op>`), because hosted agents only take remote MCP servers |
 | Exa/Firecrawl keys | a vault: the sandbox sees a placeholder, the real key is added only on requests to api.exa.ai / api.firecrawl.dev |
 | workspace on disk | the workspace's GitHub repo, mounted in the sandbox; results are pushed to a `managed/…` branch for review, never to the base branch |
