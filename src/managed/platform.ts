@@ -222,7 +222,7 @@ function openPullRequest(m: { repo: string; base: string; branch: string; skill:
   const gh = (args: string[]) => Bun.spawnSync(["gh", ...args]);
   const cmp = gh(["api", `repos/${m.repo}/compare/${m.base}...${encodeURIComponent(m.branch)}`, "--jq", "[.ahead_by, ([.files[].filename] | join(\"\\n\"))] | @tsv"]);
   if (cmp.exitCode !== 0) {
-    log(`no pull request: branch ${m.branch} not found (${cmp.stderr.toString().trim().slice(0, 200)})`);
+    log(/Not Found|404/.test(cmp.stderr.toString()) ? "no pull request: nothing changed (the run pushed no branch)" : `no pull request: ${cmp.stderr.toString().trim().slice(0, 200)}`);
     return null;
   }
   const [ahead, files = ""] = cmp.stdout.toString().trim().split("\t");
