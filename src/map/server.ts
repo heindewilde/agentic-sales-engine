@@ -54,6 +54,7 @@ export async function serve(port = 4317, log: (l: string) => void = console.erro
   const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
   const server = Bun.serve({
     hostname: "127.0.0.1",
+    idleTimeout: 255, // a refresh reads every run and skill version from the platform, which takes longer than the 10 s default
     port,
     async fetch(req) {
       const url = new URL(req.url);
