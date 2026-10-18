@@ -1,5 +1,7 @@
 // Runs: start one (here on your subscription, or in the cloud on API credits), watch it live, review cloud results, schedules.
-import { $, day, empty, esc, get, me, money, openSheet, post, toast } from "./ui.js";
+import { icon } from "./icons.js";
+import { $, card, day, empty, esc, get, me, money, openSheet, post, stat, toast } from "./ui.js";
+import { refreshBadges } from "./shell.js";
 
 const STATUS = { running: "running", done: "done", failed: "failed", question: "needs an answer", interrupted: "interrupted", idle: "done", terminated: "stopped" };
 let streaming = null;
@@ -8,33 +10,42 @@ export async function runsPage(view, { query, state }) {
   const r = await get("/api/runs");
   const skills = r.skills;
   const pre = { skill: query.get("skill") ?? "", icp: query.get("icp") ?? state.icp, domains: query.get("domains") ?? "" };
+  const week = r.jobs.filter((j) => Date.parse(j.started) > Date.now() - 7 * 86_400_000);
   view.innerHTML = `
-    <section class="intro"><div><h1>Runs</h1><p>Start a step of the engine and follow it live. <b>Here</b> uses your Claude subscription on this Mac; <b>cloud</b> runs on Managed Agents from your API credits and comes back as a pull request to review.</p></div></section>
-    <section class="panel">
-      <h3>Start a run</h3>
-      <div class="form-row">
-        <label>Step<select id="r-skill">${Object.entries(skills).map(([k, s]) => `<option value="${k}" ${k === pre.skill ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
-        <label>ICP<select id="r-icp">${state.icps.map((i) => `<option ${i === pre.icp ? "selected" : ""}>${esc(i)}</option>`).join("")}</select></label>
-        <label class="grow" id="r-dom-wrap">Accounts <span class="muted">(empty = all that are ready for this step)</span><input id="r-domains" placeholder="a.com, b.com" value="${esc(pre.domains.replace(/,/g, ", "))}"></label>
-        <label class="narrow">Budget, $<input id="r-budget" type="number" min="0.1" step="0.5" value="3"></label>
-      </div>
-      <div class="form-row">
-        <div class="seg" id="r-where"><button data-w="local" class="on">Here · subscription</button><button data-w="cloud">Cloud · API credits</button></div>
-        <span class="grow muted" id="r-plan"></span>
-        <button class="btn" id="r-check">Check plan</button><button class="btn primary" id="r-start">Start</button>
-      </div>
-    </section>
-    <div id="live"></div>
-    <h3 class="section">Recent runs</h3><div id="jobs"></div>
-    <h3 class="section">Cloud results <button class="link small" id="c-load">_check now</button></h3><div id="cloud"><p class="muted">Finished cloud runs and their pull requests. Check now to load them.</p></div>
-    <h3 class="section">Schedules</h3><div id="scheds"><p class="muted">Loading…</p></div>`;
+    <header class="ph"><div><span class="ph-eyebrow">${icon("runs", 14)} Work · runs</span><h1>Runs</h1>
+      <p class="sub">Start a step of the engine and follow it live: here on this Mac with your Claude subscription, or in the cloud on Managed Agents, where the result comes back as a pull request to review.</p></div></header>
+    <div class="stats">
+      ${stat("activity", "Runs this week", week.length, `${week.filter((j) => j.where === "cloud").length} in the cloud`)}
+      ${stat("play", "Running now", r.jobs.filter((j) => j.status === "running").length, r.busy ? "a local run is going" : "nothing local going", r.busy ? "good" : "")}
+      ${stat("zap", "Model cost this week", money(week.reduce((a, j) => a + (j.cost ?? 0), 0)), "API-equivalent for local runs")}
+      ${stat("alert", "Failed this week", week.filter((j) => j.status === "failed").length, "open a run to see why")}
+    </div>
+    <div class="grid2"><div>
+      ${card("plus", "Start a run", `
+        <div class="form-grid">
+          <label>Step<select id="r-skill">${Object.entries(skills).map(([k, s]) => `<option value="${k}" ${k === pre.skill ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
+          <label>ICP<select id="r-icp">${state.icps.map((i) => `<option ${i === pre.icp ? "selected" : ""}>${esc(i)}</option>`).join("")}</select></label>
+          <label id="r-dom-wrap">Accounts <span class="muted">(empty = all ready for this step)</span><input id="r-domains" placeholder="a.com, b.com" value="${esc(pre.domains.replace(/,/g, ", "))}"></label>
+          <label>Budget, $<input id="r-budget" type="number" min="0.1" step="0.5" value="3"></label>
+        </div>
+        <div class="where" id="r-where">
+          <button data-w="local" class="on"><span class="tile run">${icon("laptop", 16)}</span><span><b>Here, on this Mac</b><small>your Claude subscription · one at a time</small></span></button>
+          <button data-w="cloud"><span class="tile outcomes">${icon("cloud", 16)}</span><span><b>In the cloud</b><small>Managed Agents · API credits · ends as a pull request</small></span></button>
+        </div>
+        <div class="run-bar"><span class="grow" id="r-plan"></span><button class="btn" id="r-check">Check plan</button><button class="btn primary" id="r-start">${icon("play", 12)} Start</button></div>`)}
+      <div id="live"></div>
+      ${card("activity", "Recent runs", `<div id="jobs"></div>`, { flush: true })}
+    </div><div>
+      ${card("clock", "Schedules", `<div id="scheds"><p class="muted">Loading…</p></div>`, { flush: true })}
+      ${card("merge", "Cloud results", `<div id="cloud"><div class="card-b"><p class="muted" style="margin:0 0 12px">Finished cloud runs and their pull requests. Checking opens pull requests for runs that just finished.</p><button class="btn sm" id="c-load">${icon("refresh", 12)} Check now</button></div></div>`, { flush: true })}
+    </div></div>`;
   let where = "local";
   const form = () => ({ where, skill: $("#r-skill").value, icp: $("#r-icp").value, domains: $("#r-domains").value.split(/[\s,]+/).filter(Boolean), budget: Number($("#r-budget").value), by: me() });
   const sync = () => {
     const s = skills[$("#r-skill").value];
-    $("#r-dom-wrap").style.display = s.perAccount ? "" : "none";
+    $("#r-dom-wrap").style.visibility = s.perAccount ? "visible" : "hidden";
     $("#r-where [data-w=cloud]").disabled = !s.cloud;
-    $("#r-plan").textContent = where === "local" && r.busy ? "A local run is going; a new one here waits until it ends." : "";
+    $("#r-plan").textContent = where === "local" && r.busy ? "A local run is going; start this one in the cloud or wait." : "";
   };
   $("#r-skill").onchange = sync;
   $("#r-where").onclick = (e) => {
@@ -46,7 +57,7 @@ export async function runsPage(view, { query, state }) {
   };
   $("#r-check").onclick = async () => {
     const p = await post("/api/runs/plan", form());
-    $("#r-plan").textContent = p.error ? p.error : p.where === "cloud" ? p.note : p.accounts != null ? `${p.accounts} account${p.accounts === 1 ? "" : "s"} in ${p.chunks} session${p.chunks === 1 ? "" : "s"} · ${p.billing === "subscription" ? "on your subscription" : "billed per token"} · stops at $${p.budget}` : `one session · ${p.billing === "subscription" ? "on your subscription" : "billed per token"} · stops at $${p.budget}`;
+    $("#r-plan").textContent = p.error ? p.error : p.where === "cloud" ? p.note : p.accounts != null ? `${p.accounts} account${p.accounts === 1 ? "" : "s"} in ${p.chunks} session${p.chunks === 1 ? "" : "s"} · ${p.billing === "subscription" ? "on your subscription" : "billed per token"} · stops at $${p.budget}` : `One session · ${p.billing === "subscription" ? "on your subscription" : "billed per token"} · stops at $${p.budget}`;
   };
   $("#r-start").onclick = async (e) => {
     e.target.disabled = true;
@@ -54,24 +65,25 @@ export async function runsPage(view, { query, state }) {
     e.target.disabled = false;
     if (j.error) return toast(j.error, "err");
     toast(where === "local" ? "Started here" : "Started in the cloud");
-    watch(j.id, view, state);
+    watch(j.id, view);
     jobs(view);
+    refreshBadges();
   };
   sync();
   await jobs(view);
-  const running = (await get("/api/runs")).jobs.find((j) => j.status === "running");
-  if (running) watch(running.id, view, state);
+  const running = r.jobs.find((j) => j.status === "running");
+  if (running) watch(running.id, view);
   $("#c-load").onclick = () => cloud(view, true);
   schedules(view);
 }
 
 async function jobs(view) {
   const { jobs } = await get("/api/runs");
-  $("#jobs", view).innerHTML = jobs.length ? `<table class="grid-table"><thead><tr><th>Started</th><th>Step</th><th>Where</th><th>Status</th><th>Result</th><th class="r">Cost</th></tr></thead><tbody>${jobs.slice(0, 20).map((j) => `<tr data-job="${esc(j.id)}" class="clickable">
-    <td>${day(j.started)} ${new Date(j.started).toTimeString().slice(0, 5)}</td><td><b>${esc(j.skill)}</b><small>${esc([j.icp, (j.domains ?? []).join(", ")].filter(Boolean).join(" · "))}</small></td>
-    <td>${j.where === "local" ? "here" : "cloud"}</td><td><span class="st ${esc(j.status)}">${esc(STATUS[j.status] ?? j.status)}</span></td>
-    <td class="clip">${esc((j.summary ?? "").split("\n")[0])}${j.pr ? ` <a href="${esc(j.pr)}" target="_blank" rel="noopener">PR ↗</a>` : ""}</td><td class="r num">${j.cost != null ? money(j.cost) : "–"}</td></tr>`).join("")}</tbody></table>`
-    : empty("No runs from the app yet", "Start one above; runs from the terminal and schedules show under cloud results and in each step's history.");
+  $("#jobs", view).innerHTML = jobs.length ? `<table class="tbl"><thead><tr><th>Step</th><th>Where</th><th>Status</th><th>Result</th><th class="r">Cost</th></tr></thead><tbody>${jobs.slice(0, 20).map((j) => `<tr data-job="${esc(j.id)}" class="clickable">
+    <td><b>${esc(j.skill)}</b><small>${day(j.started)} ${new Date(j.started).toTimeString().slice(0, 5)}${j.icp ? ` · ${esc(j.icp)}` : ""}${(j.domains ?? []).length ? ` · ${esc(j.domains.join(", "))}` : ""}</small></td>
+    <td><span class="pill">${icon(j.where === "local" ? "laptop" : "cloud", 12)} ${j.where === "local" ? "here" : "cloud"}</span></td><td><span class="st ${esc(j.status)}">${esc(STATUS[j.status] ?? j.status)}</span></td>
+    <td class="clip">${esc((j.summary ?? "").split("\n")[0])}</td><td class="r num">${j.cost != null ? money(j.cost) : "–"}</td></tr>`).join("")}</tbody></table>`
+    : empty("No runs from the app yet", "Start one above. Scheduled and terminal runs show under cloud results.", "runs");
   $("#jobs", view).onclick = (e) => { const tr = e.target.closest("[data-job]"); if (tr) watch(tr.dataset.job, view); };
 }
 
@@ -79,7 +91,7 @@ async function jobs(view) {
 function watch(id, view) {
   streaming?.close();
   const live = $("#live", view);
-  live.innerHTML = `<section class="panel live"><div class="live-head"><h3>Run <span class="muted">${esc(id)}</span></h3><span class="st running" id="l-st">running</span></div><pre class="log" id="log"></pre><div id="l-res"></div></section>`;
+  live.innerHTML = card("terminal", "Run", `<pre class="log" id="log"></pre><div id="l-res"></div>`).replace('<h3>', `<h3 data-run="${esc(id)}">`).replace("</h3>", ` <span class="st running" id="l-st">running</span></h3>`);
   const log = $("#log", live);
   const es = new EventSource(`/api/runs/${encodeURIComponent(id)}/stream`);
   streaming = es;
@@ -92,25 +104,23 @@ function watch(id, view) {
     es.close();
     $("#l-st", live).className = `st ${j.status}`;
     $("#l-st", live).textContent = STATUS[j.status] ?? j.status;
-    $("#l-res", live).innerHTML = `${j.summary ? `<p>${esc(j.summary)}</p>` : ""}${j.checks?.length ? `<h4>Flagged to double-check</h4><ul class="checks">${j.checks.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}${j.pr ? `<p><button class="btn" data-pr="${esc(j.pr)}">Review the pull request</button></p>` : ""}`;
+    $("#l-res", live).innerHTML = `${j.summary ? `<p style="margin:14px 0 0">${esc(j.summary)}</p>` : ""}${j.checks?.length ? `<h4 style="margin-top:14px">Flagged to double-check</h4><ul class="checks">${j.checks.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}${j.pr ? `<p><button class="btn" data-pr="${esc(j.pr)}">${icon("merge", 14)} Review the pull request</button></p>` : ""}`;
     jobs(view);
+    refreshBadges();
   });
   es.onerror = () => es.close();
 }
 
 async function cloud(view, fresh) {
   const el = $("#cloud", view);
-  el.innerHTML = `<p class="muted">Asking the platform… (this opens pull requests for runs that finished)</p>`;
+  el.innerHTML = `<div class="card-b"><p class="muted" style="margin:0">Asking the platform…</p></div>`;
   try {
     const { runs } = await get(`/api/cloud${fresh ? "?fresh=1" : ""}`);
-    el.innerHTML = runs.length ? `<table class="grid-table"><thead><tr><th>Status</th><th>Summary</th><th class="r">Cost</th><th></th></tr></thead><tbody>${runs.map((c) => `<tr>
-      <td><span class="st ${esc(c.status)}">${esc(STATUS[c.status] ?? c.status)}</span></td>
-      <td class="why">${esc((c.message ?? "").split("\n")[0].slice(0, 180))}${c.checks?.length ? `<small>${c.checks.length} point${c.checks.length === 1 ? "" : "s"} to double-check</small>` : ""}</td>
-      <td class="r num">${c.cost_usd != null ? money(c.cost_usd) : "–"}</td>
-      <td class="r">${c.pr ? `<button class="btn" data-pr="${esc(c.pr)}">Review</button>` : `<span class="muted">${c.status === "question" ? "waiting for an answer" : "no changes"}</span>`}</td></tr>`).join("")}</tbody></table>`
-      : empty("No cloud runs in the last two weeks", "Scheduled runs and cloud runs started here appear once they finish.");
+    el.innerHTML = runs.length ? `<div class="list pad">${runs.map((c) => `<div class="item"><span class="t"><span class="st ${esc(c.status)}">${esc(STATUS[c.status] ?? c.status)}</span> ${c.cost_usd != null ? `<span class="muted">· ${money(c.cost_usd)}</span>` : ""}<small>${esc((c.message ?? "").split("\n")[0].slice(0, 120))}</small></span>
+      ${c.pr ? `<button class="btn sm" data-pr="${esc(c.pr)}">Review</button>` : `<span class="muted">${c.status === "question" ? "needs an answer" : "no changes"}</span>`}</div>`).join("")}</div>`
+      : empty("No cloud runs in two weeks", "Results appear once cloud runs finish.", "cloud");
   } catch (e) {
-    el.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+    el.innerHTML = `<div class="card-b"><p class="muted" style="margin:0">${esc(e.message)}</p></div>`;
   }
 }
 
@@ -119,12 +129,12 @@ async function review(pr, view) {
   const s = openSheet(`<p class="muted">Loading the pull request…</p>`);
   try {
     const d = await get(`/api/cloud/pr?url=${encodeURIComponent(pr)}`);
-    s.innerHTML = `<div class="sheet-top"><span class="who">Cloud run · pull request</span><button class="x" data-close aria-label="Close">×</button></div>
+    s.innerHTML = `<div class="sheet-top"><span class="who">${icon("merge", 14)} Cloud run · pull request</span><button class="x" data-close aria-label="Close">${icon("x", 18)}</button></div>
       <h2>${esc(d.title)}</h2><div class="path"><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)} ↗</a></div>
-      <div class="meta"><span>${esc(d.state.toLowerCase())}</span><span>+${d.additions} −${d.deletions}</span><span>${d.files.length} files</span></div>
-      ${d.state === "OPEN" ? `<p><button class="btn primary" id="merge">Merge into your workspace</button></p>` : ""}
+      <div class="meta"><span class="pill ${d.state === "OPEN" ? "accent" : d.state === "MERGED" ? "good" : ""}">${esc(d.state.toLowerCase())}</span><span>+${d.additions} −${d.deletions}</span><span>${d.files.length} files</span></div>
+      ${d.state === "OPEN" ? `<p><button class="btn primary" id="merge">${icon("merge", 14)} Merge into your workspace</button></p>` : ""}
       <h4>Files</h4><div class="list">${d.files.map((f) => `<div class="item"><span class="t">${esc(f.path)}</span><span class="n">+${f.additions} −${f.deletions}</span></div>`).join("")}</div>
-      <h4 style="margin-top:20px">Summary</h4><div class="prose">${window.marked ? `<div class="md">${window.marked.parse(d.body ?? "")}</div>` : esc(d.body)}</div>`;
+      <h4 style="margin-top:20px">Summary</h4><div class="prose"><div class="md">${window.marked.parse(d.body ?? "")}</div></div>`;
     $("#merge", s)?.addEventListener("click", async (e) => {
       e.target.disabled = true;
       const r = await post("/api/cloud/merge", { pr });
@@ -134,19 +144,17 @@ async function review(pr, view) {
       review(pr, view);
     });
   } catch (e) {
-    s.innerHTML = `<div class="sheet-top"><span></span><button class="x" data-close>×</button></div><p class="empty-note">${esc(e.message)}</p>`;
+    s.innerHTML = `<div class="sheet-top"><span></span><button class="x" data-close>${icon("x", 18)}</button></div><p class="empty-note">${esc(e.message)}</p>`;
   }
 }
 
 async function schedules(view) {
   const el = $("#scheds", view);
   const { schedules } = await get("/api/schedules");
-  el.innerHTML = schedules.length ? `<table class="grid-table"><thead><tr><th>What</th><th>When</th><th>Next run</th><th class="r">Cap</th><th></th></tr></thead><tbody>${schedules.map((s) => `<tr>
-    <td><b>${esc(s.skill)}</b><small>${esc(s.args)}</small></td><td>${esc(cronText(s.cron))}<small>${esc(s.timezone)}</small></td>
-    <td>${s.paused ? `<span class="muted">paused</span>` : s.next_run ? `${day(s.next_run)} ${new Date(s.next_run).toTimeString().slice(0, 5)}` : "–"}</td>
-    <td class="r num">${s.cap_usd != null ? money(s.cap_usd) : "–"}</td>
-    <td class="r"><button class="btn ghost" data-sched="${esc(s.id)}" data-act="${s.paused ? "unpause" : "pause"}">${s.paused ? "Resume" : "Pause"}</button><button class="btn" data-sched="${esc(s.id)}" data-act="run">Run now</button></td></tr>`).join("")}</tbody></table>`
-    : empty("No schedules", "Schedules are created with the managed CLI; they show up here to pause, resume or run.");
+  el.innerHTML = schedules.length ? `<div class="list pad">${schedules.map((s) => `<div class="item"><span class="co"><span class="tile ${s.paused ? "" : "outcomes"}" style="width:32px;height:32px">${icon(s.paused ? "pause" : "clock", 15)}</span><span class="t">${esc(s.skill)} <span class="muted">${esc(s.args.replace(/--icp \S+/, "").trim())}</span>
+      <small>${esc(cronText(s.cron))} · ${s.paused ? "paused" : s.next_run ? `next ${day(s.next_run)} ${new Date(s.next_run).toTimeString().slice(0, 5)}` : ""}${s.cap_usd != null ? ` · cap ${money(s.cap_usd)}` : ""}</small></span></span>
+      <span style="display:flex;gap:4px"><button class="btn sm ghost" data-sched="${esc(s.id)}" data-act="${s.paused ? "unpause" : "pause"}" title="${s.paused ? "Resume" : "Pause"}">${icon(s.paused ? "play" : "pause", 13)}</button><button class="btn sm" data-sched="${esc(s.id)}" data-act="run">Run now</button></span></div>`).join("")}</div>`
+    : empty("No schedules", "They're created with the managed CLI and show up here.", "clock");
   el.onclick = async (e) => {
     const b = e.target.closest("[data-sched]");
     if (!b) return;
@@ -158,7 +166,7 @@ async function schedules(view) {
   };
 }
 
-/** The three cron shapes the engine uses, in words; anything else as written. */
+/** The cron shapes the engine uses, in words; anything else as written. */
 function cronText(c) {
   const [m, h, dom, , dow] = c.split(" ");
   const t = `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
