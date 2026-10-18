@@ -10,6 +10,7 @@ import { runBatch } from "../src/core/batch.ts";
 import { loadCredentials } from "../src/core/credentials.ts";
 import { readSeedCsv } from "../src/core/importers.ts";
 import { readLedger } from "../src/core/ledger.ts";
+import { rank } from "../src/core/scorefile.ts";
 import { approveShortlist } from "../src/core/shortlist.ts";
 import { initTracing, shutdownTracing, withSpan } from "../src/core/tracing.ts";
 import { runLlm } from "../src/evals/llm.ts";
@@ -50,7 +51,7 @@ initTracing("bench", { exporter: spans, alsoTargets: true }); // in-memory for t
 const log = (l: string) => process.stderr.write(`${l}\n`);
 
 // one trace for the whole run, so pushed scores can be attached to it (Langfuse requires a trace)
-const { light, appr, research, offline, llm, traceId } = await withSpan("bench", { "ase.experiment": label }, async (span) => {
+const { light, appr, research, waysIn, drafts, offline, llm, traceId } = await withSpan("bench", { "ase.experiment": label }, async (span) => {
   const { candidates } = readSeedCsv(ws, join(ws, "imports/seeds/bench.csv"));
   await persistCandidates(ws, ICP, "bench", "import:imports/seeds/bench.csv", candidates);
 
@@ -68,10 +69,19 @@ const { light, appr, research, offline, llm, traceId } = await withSpan("bench",
   log("research…");
   const research = await runBatch({ ws, skill: "research", icp: ICP, pluginRoot: ROOT, budgetUsd: 4, domains: appr.approved, log });
 
+  // outreach, so draft_rules and draft_quality are measured too: ways in for every scored account (whatever the tier,
+  // so the workload stays fixed), then drafts for those that became outreach-ready
+  log("ways in…");
+  const scored = (await rank(ws, ICP, { stage: "scored" })).map((r) => r.domain);
+  const waysIn = await runBatch({ ws, skill: "ways-in", icp: ICP, pluginRoot: ROOT, budgetUsd: 2, domains: scored, log });
+  log("drafts…");
+  const ready = (await rank(ws, ICP, { stage: "outreach_ready" })).map((r) => r.domain);
+  const drafts = ready.length ? await runBatch({ ws, skill: "draft-outreach", icp: ICP, pluginRoot: ROOT, budgetUsd: 2, domains: ready, log }) : { advanced: 0 };
+
   log("evals…");
   const offline = await runOffline(ws);
   const llm = await runLlm(ws, { budgetUsd: 0.6, sample: 2 });
-  return { light, appr, research, offline, llm, traceId: span.spanContext().traceId };
+  return { light, appr, research, waysIn, drafts, offline, llm, traceId: span.spanContext().traceId };
 });
 const finished = spans.getFinishedSpans(); // read before shutdown: shutting down clears the in-memory exporter
 await shutdownTracing();
@@ -92,9 +102,11 @@ const result = {
     total_pipeline: sum((e) => e.op !== "eval:llm"),
     per_light_account: Math.round((sum((e) => e.op === "batch:enrich-light") / 10) * 10000) / 10000,
     per_research_account: Math.round((sum((e) => e.op === "batch:research") / Math.max(1, appr.approved.length)) * 10000) / 10000,
+    ways_in_model: sum((e) => e.op === "batch:ways-in"),
+    drafts_model: sum((e) => e.op === "batch:draft-outreach"),
   },
-  sessions: { light: sess("enrich-light"), research: sess("research") },
-  advanced: { light: light.advanced, research: research.advanced },
+  sessions: { light: sess("enrich-light"), research: sess("research"), ways_in: sess("ways-in"), drafts: sess("draft-outreach") },
+  advanced: { light: light.advanced, research: research.advanced, ways_in: waysIn.advanced, drafts: drafts.advanced },
   quality: Object.fromEntries([...Object.entries(offline.summary), ...Object.entries(llm.summary)].map(([k, v]) => [k, v.mean])),
 };
 // --push: send both suites to every connected observability backend as experiment "<label>"
