@@ -1,0 +1,54 @@
+{
+  "label": "simplify-2",
+  "ran_at": "2026-10-18T20:38:32.939Z",
+  "workspace": "/var/folders/4h/tstcx78d6b7_gcvh_7bl126h0000gn/T/ase-bench-simplify-2-zPLq3S/ws",
+  "cost": {
+    "light_model": 0.0225,
+    "research_model": 1.0751,
+    "providers": 0.22,
+    "total_pipeline": 1.5922,
+    "per_light_account": 0.0023,
+    "per_research_account": 0.215,
+    "ways_in_model": 0.0361,
+    "drafts_model": 0
+  },
+  "sessions": {
+    "light": {
+      "sessions": 1,
+      "turns": 8,
+      "output_tokens": 15086
+    },
+    "research": {
+      "sessions": 3,
+      "turns": 57,
+      "output_tokens": 20596
+    },
+    "ways_in": {
+      "sessions": 1,
+      "turns": 22,
+      "output_tokens": 23813
+    },
+    "drafts": {
+      "sessions": 0,
+      "turns": 0,
+      "output_tokens": 0
+    }
+  },
+  "advanced": {
+    "light": 10,
+    "research": 5,
+    "ways_in": 0,
+    "drafts": 0
+  },
+  "quality": {
+    "citation_faithfulness": 1,
+    "brief_grounding": 0.885,
+    "snapshot_coverage": 1,
+    "handoff_completeness": 0.926,
+    "research_trajectory": 1,
+    "light_full_agreement": 0.11,
+    "source_quotes": 1,
+    "claim_support": 0.556,
+    "judge_stability": 0.667
+  }
+}
