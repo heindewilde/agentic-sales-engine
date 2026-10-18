@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ase-token" content="__ASE_TOKEN__">
+<title>Sales engine</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/today" data-link><b>_ase</b><span>sales engine</span></a>
+  <div class="area" role="tablist">
+    <a href="/today" data-link data-area="work">Work</a>
+    <a href="/process" data-link data-area="system">System</a>
+  </div>
+  <nav id="subnav"></nav>
+  <div class="top-right">
+    <label class="sel" id="icp-pick" hidden><span>icp</span><select id="icp"></select></label>
+    <label class="sel"><span>you</span><select id="me"></select></label>
+    <button id="refresh" class="link">_refresh</button>
+  </div>
+</header>
+<div id="system-band" class="system-band" hidden>System · how the engine works, read-only</div>
+<main id="view" class="page"></main>
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <article class="sheet-body" role="dialog" aria-modal="true"></article>
+</div>
+<script src="/vendor/marked.js"></script>
+<script type="module" src="/js/shell.js"></script>
+</body>
+</html>

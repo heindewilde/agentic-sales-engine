@@ -1,6 +1,6 @@
 /**
  * The process the agent map draws: every step, every block in it (who does what), and per block what it uses and
- * produces. Which files a block reads is NOT listed here: it's derived from the skill and agent text (src/map/brain.ts),
+ * produces. Which files a block reads is NOT listed here: it's derived from the skill and agent text (src/app/brain.ts),
  * so it can't drift. Keep the blocks in step with the skills when a workflow changes.
  */
 

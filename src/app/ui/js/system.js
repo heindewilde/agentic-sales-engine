@@ -1,9 +1,6 @@
-// Sales engine map: /process (steps left to right, actors as rows, details below) and /brain (every file behind it).
-const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const money = (x) => `$${(x ?? 0).toFixed(2)}`;
-const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
-const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+// System: /process (steps left to right, actors as rows, details below) and /brain (every file behind it).
+import { $, esc, money, k, day } from "./ui.js";
+import { go } from "./shell.js";
 const COLORS = { you: "#0a0a0a", operator: "var(--s1)", "account-researcher": "var(--s2)", "factor-judge": "var(--s3)", "wiki-linter": "var(--s4)", "icp-analyst": "var(--s5)" };
 const CATS = [["instructions", "Agent instructions", "var(--c1)"], ["playbook", "Playbook", "var(--c2)"], ["method", "Rules & method", "var(--c3)"], ["knowledge", "Your knowledge", "var(--c4)"], ["data", "Company data", "var(--c5)"]];
 const LAYERS = { knowledge: "Your knowledge", method: "Rules & method", template: "Template", playbook: "Playbook", agent: "Agent", data: "Company data" };
@@ -33,34 +30,45 @@ const lanes = () => [...P.actors].sort((a, b) => LANE_ORDER.indexOf(a.id) - LANE
 /** Hand-off order across the funnel (the parallel maintenance step stands apart). */
 const sequence = () => P.steps.filter((s) => !s.parallel).flatMap((s) => s.blocks.map((b) => ({ ...b, step: s })));
 
-// ---------- routing ----------
+// ---------- pages ----------
+const PROCESS_HTML = `
+  <section class="intro">
+    <div>
+      <h1>How a company moves through the engine</h1>
+      <p>Left to right, from your ICP to meetings. Each row is who does the work; black blocks are decisions you make. Click a block to see what it does, what it reads and what it costs.</p>
+    </div>
+    <div id="actors" class="legend"></div>
+  </section>
+  <div id="funnel" class="funnel"></div>
+  <div class="map-wrap"><div id="map" class="map"></div></div>
+  <div class="map-foot"><div id="ctx-legend" class="legend"></div><span class="muted">Scroll sideways for later steps</span></div>
+  <section id="detail" class="detail" hidden></section>`;
+const BRAIN_HTML = `
+  <section class="intro">
+    <div>
+      <h1>The brain</h1>
+      <p>Every file behind the process: your knowledge and the engine's rules feed the playbooks and agents, which run the steps. Hover to trace a chain, click a file to read it.</p>
+    </div>
+    <div id="brain-stats" class="kpis"></div>
+  </section>
+  <div id="brain" class="brain"></div>`;
 const page = () => (location.pathname.startsWith("/brain") ? "brain" : "process");
-function go(path, push = true) {
-  if (push) history.pushState(null, "", path);
-  route();
-}
-function route() {
-  const p = page();
-  $("#page-process").hidden = p !== "process";
-  $("#page-brain").hidden = p !== "brain";
-  document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("on", a.dataset.nav === p));
-  document.title = p === "brain" ? "The brain · sales engine" : "Process · sales engine";
-  if (!P) return;
-  if (p === "process") {
-    const q = new URLSearchParams(location.search);
-    sel = { block: q.get("block"), tab: q.get("tab") ?? "overview" };
-    renderProcess();
-    const at = q.get("step") ?? (sel.block && blockById(sel.block)?.step.id);
-    if (at) requestAnimationFrame(() => scrollToStep(at));
-  } else renderBrain();
+
+export async function processPage(view, { query }) {
+  view.innerHTML = PROCESS_HTML;
+  P = await (await fetch("/api/process")).json();
+  sel = { block: query.get("block"), tab: query.get("tab") ?? "overview" };
+  renderProcess();
+  const at = query.get("step") ?? (sel.block && blockById(sel.block)?.step.id);
+  if (at) requestAnimationFrame(() => scrollToStep(at));
+  if (!M) M = await fetch("/api/model").then((r) => r.json()).catch(() => null);
+  if (page() === "process" && document.getElementById("map")) { renderFunnel(); renderMap(); renderDetail(); }
 }
 
-async function load(fresh = false) {
+export async function brainPage(view) {
+  view.innerHTML = BRAIN_HTML;
   P = await (await fetch("/api/process")).json();
-  route();
-  const m = await (await fetch(fresh ? "/api/refresh" : "/api/model")).json();
-  M = m;
-  if (page() === "process") { renderFunnel(); renderMap(); renderDetail(); }
+  renderBrain();
 }
 
 // ---------- process ----------
@@ -136,7 +144,12 @@ function renderMap() {
       }
     }
   });
-  $("#map").innerHTML = html + "</div>";
+  const map = $("#map");
+  const x = map.scrollLeft; // a re-render when live data arrives keeps your place
+  map.innerHTML = html + "</div>";
+  map.style.scrollBehavior = "auto";
+  map.scrollLeft = x;
+  map.style.scrollBehavior = "";
   markSelection();
   requestAnimationFrame(drawLinks);
 }
@@ -424,8 +437,7 @@ function lightNode(id) {
 
 // ---------- events ----------
 document.addEventListener("click", (e) => {
-  const nav = e.target.closest("a[data-nav]");
-  if (nav) { e.preventDefault(); closeSheet(); return go(nav.getAttribute("href")); }
+  if (document.body.dataset.area !== "system") return;
   if (e.target.closest("[data-close]")) return closeSheet();
   if (e.target.closest("[data-close-detail]")) return selectBlock(null);
   const gb = e.target.closest("[data-goblock]");
@@ -446,14 +458,15 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
+  if (e.key !== "Escape" || document.body.dataset.area !== "system") return;
   if (!$("#sheet").hidden) return closeSheet();
   if (page() === "process") selectBlock(null);
 });
 document.addEventListener("mouseover", (e) => { const n = e.target.closest?.("#brain [data-node]"); if (n) lightNode(n.dataset.node); });
 document.addEventListener("mouseout", (e) => { if (e.target.closest?.("#brain [data-node]") && !e.relatedTarget?.closest?.("#brain [data-node]")) lightNode(null); });
-window.addEventListener("popstate", () => route());
-$("#refresh").addEventListener("click", () => load(true));
 let rt;
-window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => (page() === "process" ? drawLinks() : renderBrain()), 120); });
-load();
+window.addEventListener("resize", () => {
+  if (document.body.dataset.area !== "system" || !P) return;
+  clearTimeout(rt);
+  rt = setTimeout(() => (page() === "process" ? drawLinks() : page() === "brain" ? renderBrain() : null), 120);
+});

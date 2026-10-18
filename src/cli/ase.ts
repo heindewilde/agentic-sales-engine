@@ -55,6 +55,8 @@ const { values: flags, positionals } = parseArgs({
     budget: { type: "string" },
     "approved-by": { type: "string" },
     body: { type: "string" },
+    port: { type: "string" },
+    "no-open": { type: "boolean" },
     reason: { type: "string" },
     note: { type: "string" },
     days: { type: "string" },
@@ -148,6 +150,7 @@ const HELP = `ase <command>
   import connections <Connections.csv> --member <id>   LinkedIn export → local copy + warm-matches.yaml
   connections match                       recompute every member's warm matches (after discovery)
   accounts --icp <s> [--stage <stage>]    list account domains for an ICP (optionally at one stage)
+  app [--port 4317] [--no-open]            open the local app (today, accounts, gates, drafts, process, brain)
   icp approve --icp <s> --approved-by <member>        GATE 1: approve an ICP (validated)
   shortlist propose --icp <s> [--pct N] [--max N]     GATE 2 proposal with cost estimate
   shortlist approve --icp <s> --file <lists/.../shortlist.md> --approved-by <member>
@@ -659,6 +662,14 @@ switch (cmd) {
     if (positionals[0] !== "approve") fail("usage: icp approve --icp <slug> --approved-by <member>");
     const { approveIcp } = await import("../core/gates.ts");
     out(await approveIcp(ws(), (flags.icp as string) ?? fail("--icp is required"), (flags["approved-by"] as string) ?? fail("--approved-by <member> is required")));
+    break;
+  }
+  case "app": {
+    // the local app: today, accounts, gates, drafts, and how the engine works (process, brain)
+    const { serve } = await import("../app/server.ts");
+    const { url } = await serve({ port: Number(flags.port ?? 4317), workspace: ws() });
+    if (process.platform === "darwin" && !flags["no-open"]) Bun.spawn(["open", url]);
+    await new Promise(() => {}); // keep serving until stopped
     break;
   }
   case "contracts":

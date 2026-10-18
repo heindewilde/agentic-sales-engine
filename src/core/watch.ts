@@ -27,7 +27,7 @@ export function loadWatchlist(ws: string): Watchlist {
 }
 
 export function saveWatchlist(ws: string, wl: Watchlist): void {
-  writeFileSync(watchlistPath(ws), `# Accounts monitored by \`ase sync\` / the sync skill. Edit freely.\n${stringifyYaml(wl)}`);
+  writeFileSync(watchlistPath(ws), `# Accounts monitored by \`ase sync\` / the refresh skill. Edit freely.\n${stringifyYaml(wl)}`);
 }
 
 export async function addWatch(ws: string, domainRaw: string, icp: string, opts: { pages?: string[]; news_query?: string; by?: string } = {}) {
