@@ -7,6 +7,7 @@ import { buildBrain, newestMatch, readBrainFile, type Brain } from "./brain.ts";
 import { buildModel, type AgentVersion, type MapModel } from "./data.ts";
 import { compactDiff, lineDiff } from "./diff.ts";
 import { ACTORS } from "./process.ts";
+import { Runs, SKILLS, type RunDeps } from "./runs.ts";
 
 /**
  * The sales engine app, bound to localhost: Work (today, accounts, gates, drafts) and System (process, brain).
@@ -49,7 +50,7 @@ export function writeAllowed(req: Request, token: string, port: number): boolean
   return !origin || origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
 }
 
-export interface ServeOptions { port?: number; log?: (l: string) => void; workspace?: string; platform?: boolean }
+export interface ServeOptions { port?: number; log?: (l: string) => void; workspace?: string; platform?: boolean; runDeps?: RunDeps }
 
 export async function serve(portOrOpts: number | ServeOptions = 4317, log: (l: string) => void = console.error, workspace?: string) {
   const o: ServeOptions = typeof portOrOpts === "number" ? { port: portOrOpts, log, workspace } : portOrOpts;
@@ -81,6 +82,10 @@ export async function serve(portOrOpts: number | ServeOptions = 4317, log: (l: s
   const needWs = () => ws ?? (() => { throw new Error("no workspace: start the app with --workspace <dir>"); })();
   const index = () => readFileSync(join(UI, "index.html"), "utf8").replace("__ASE_TOKEN__", token);
   const port = o.port ?? 4317;
+  const runs = ws ? new Runs(ws, ROOT, o.runDeps) : null;
+  const needRuns = () => runs ?? (() => { throw new Error("no workspace: start the app with --workspace <dir>"); })();
+  // finished cloud runs (with their pull requests): asked on demand, cached for a minute
+  let cloud: { at: number; data: unknown } | null = null;
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -98,6 +103,20 @@ export async function serve(portOrOpts: number | ServeOptions = 4317, log: (l: s
           const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
           if (p === "/api/refresh") return json(await load(true));
           if (p.startsWith("/api/act/")) return json(await work.act(needWs(), p.slice("/api/act/".length), body));
+          if (p === "/api/runs/plan") return json(await needRuns().plan(body as never));
+          if (p === "/api/runs/start") return json({ ...needRuns().start(body as never), lines: [] });
+          if (p === "/api/cloud/merge") {
+            const { mergeRun } = await import("../managed/platform.ts");
+            cloud = null;
+            return json(await mergeRun(String(body.pr ?? ""), needWs(), say));
+          }
+          const sa = /^\/api\/schedules\/([\w-]+)\/(pause|unpause|run)$/.exec(p);
+          if (sa) {
+            const { scheduleAction } = await import("../managed/platform.ts");
+            await scheduleAction(sa[1]!, sa[2] as "pause");
+            model = null;
+            return json({ ok: true });
+          }
           return json({ error: "not found" }, 404);
         }
         if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
@@ -155,6 +174,29 @@ export async function serve(portOrOpts: number | ServeOptions = 4317, log: (l: s
         if (p === "/api/scores") return json(await work.scoresToReview(needWs(), q("icp")));
         if (p === "/api/drafts") return json(await work.drafts(needWs()));
         if (p === "/api/draft") return json(await work.draft(needWs(), q("path")));
+        if (p === "/api/outcomes") return json(await work.outcomes(needWs(), q("icp")));
+        if (p === "/api/runs") return json({ skills: SKILLS, jobs: needRuns().list(), busy: needRuns().localBusy()?.id ?? null });
+        const rm = /^\/api\/runs\/([\w-]+)(\/stream)?$/.exec(p);
+        if (rm) {
+          if (rm[2]) return needRuns().stream(rm[1]!);
+          const j = needRuns().get(rm[1]!);
+          return j ? json(j) : json({ error: "no such run" }, 404);
+        }
+        if (p === "/api/cloud") {
+          if (!cloud || Date.now() - cloud.at > 60_000 || q("fresh")) {
+            const { inbox } = await import("../managed/platform.ts");
+            cloud = { at: Date.now(), data: await inbox(14, say) };
+          }
+          return json({ runs: cloud.data });
+        }
+        if (p === "/api/cloud/pr") {
+          const { prDetails } = await import("../managed/platform.ts");
+          return json(prDetails(q("url")));
+        }
+        if (p === "/api/schedules") {
+          const m = await load();
+          return json({ schedules: m?.schedules ?? [] });
+        }
 
         // ---- static ----
         if (p === "/vendor/marked.js") return new Response(Bun.file(join(ROOT, "node_modules/marked/lib/marked.umd.js")));

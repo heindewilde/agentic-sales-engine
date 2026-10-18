@@ -26,7 +26,7 @@ export interface SkillNode {
   runs: number; cost_total: number; outcomes: Record<string, number>; checks: { session_id: string; created_at: string; text: string }[]; schedule: string | null;
 }
 export interface DocNode { key: string; kind: "doc"; path: string; scope: "engine" | "workspace"; referenced_by: string[] }
-export interface ScheduleNode { key: string; kind: "schedule"; skill: string; id: string; cron: string; timezone: string; cap_usd: number | null; operator_version: number | null; description: string; paused: boolean }
+export interface ScheduleNode { key: string; kind: "schedule"; skill: string; args: string; id: string; cron: string; timezone: string; cap_usd: number | null; operator_version: number | null; description: string; paused: boolean; next_run: string | null; last_run: string | null }
 export interface Funnel { icp: string; stages: Record<string, number>; gates: string[] }
 export interface MapModel {
   generated_at: string;
@@ -186,11 +186,14 @@ export async function buildModel(log: (l: string) => void = () => {}, workspace?
 
   // schedules
   const schedules: ScheduleNode[] = [];
-  for (const [skill, id] of Object.entries(state.deployments ?? {})) {
+  for (const [key, id] of Object.entries(state.deployments ?? {})) {
     const d = await c.beta.deployments.retrieve(id);
-    const dd = d as unknown as { schedule?: { expression?: string; timezone?: string }; budget?: { max_list_cost?: { amount?: string } }; agent?: { version?: number }; description?: string; status?: string; paused_at?: string | null };
+    const dd = d as unknown as { schedule?: { expression?: string; timezone?: string; upcoming_runs_at?: string[]; last_run_at?: string | null }; budget?: { max_list_cost?: { amount?: string } }; agent?: { version?: number }; description?: string; status?: string; paused_at?: string | null; metadata?: Record<string, string> };
+    // state keys are "skill args" (one deployment per skill + arguments); the deployment's metadata has both
+    const skill = dd.metadata?.skill ?? key.split(" ")[0]!;
     schedules.push({
-      key: `schedule:${skill}`, kind: "schedule", skill, id, cron: dd.schedule?.expression ?? "", timezone: dd.schedule?.timezone ?? "",
+      key: `schedule:${key}`, kind: "schedule", skill, args: dd.metadata?.args ?? "", id, cron: dd.schedule?.expression ?? "", timezone: dd.schedule?.timezone ?? "",
+      next_run: dd.schedule?.upcoming_runs_at?.[0] ?? null, last_run: dd.schedule?.last_run_at ?? null,
       cap_usd: dd.budget?.max_list_cost?.amount ? Number(dd.budget.max_list_cost.amount) / 100 : null, operator_version: dd.agent?.version ?? null,
       description: dd.description ?? skill, paused: Boolean(dd.paused_at) || dd.status === "paused",
     });

@@ -7,7 +7,7 @@ import { health } from "../../core/doctor.ts";
 import { parseDoc, readDoc } from "../../core/frontmatter.ts";
 import { approveIcp, awaitingReview, reviewScores } from "../../core/gates.ts";
 import { readLedger } from "../../core/ledger.ts";
-import { EVENT_TYPES, REASONS, accountStates, logEvent, openItems, readEvents } from "../../core/outcomes.ts";
+import { EVENT_TYPES, REASONS, accountStates, logEvent, openItems, outcomeStats, readEvents, winLossCases } from "../../core/outcomes.ts";
 import type { Company, ScoreFile } from "../../core/schemas.ts";
 import { loadScoring, rank } from "../../core/scorefile.ts";
 import { approveShortlist, proposedDomains, tickedDomains } from "../../core/shortlist.ts";
@@ -215,6 +215,21 @@ export async function draft(ws: string, rel: string) {
   const pp = pid ? join(ws, "people", `${pid}.md`) : "";
   const person = pp && existsSync(pp) ? parseDoc<{ name?: string; title?: string }>(readFileSync(pp, "utf8")).data : null;
   return { path: rel, data: doc.data, body: doc.body, ways_in: ways, person: person ? { name: person.name, title: person.title } : null };
+}
+
+/** The weekly review (one question per open account), conversion by tier, and what was won and lost. */
+export async function outcomes(ws: string, icp: string) {
+  const open = icp ? openItems(accountStates(readEvents(ws, icp))) : [];
+  const names = new Map<string, string>();
+  for (const o of open) {
+    const p = paths.company(ws, o.account);
+    if (existsSync(p)) names.set(o.account, (await readDoc<Company>(p)).data.name ?? o.account);
+  }
+  return {
+    open: open.map((o) => ({ account: o.account, name: names.get(o.account) ?? o.account, status: o.status, prompt: o.prompt, urgency: o.urgency, last_touch: o.last_touch, channels: o.channels })),
+    stats: icp ? await outcomeStats(ws, icp) : null,
+    cases: icp ? await winLossCases(ws, icp) : [],
+  };
 }
 
 export const meta = async (ws: string) => {
