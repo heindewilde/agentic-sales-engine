@@ -20,7 +20,7 @@ import { appendLedger, currentRun, newRunId, readLedger, spentForRun, spentToday
 import { lint } from "../core/lint.ts";
 import { normalizeDomain } from "../core/normalize.ts";
 import { Stage, type Company } from "../core/schemas.ts";
-import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, removeCredentials, saveCredential } from "../core/credentials.ts";
+import { KEYS, credentialsFileMode, keyStatus, credentialsPath, loadCredentials, mask, parseEnv, removeCredentials, saveCredential } from "../core/credentials.ts";
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
 import { accountStates, logEvent, migrateLegacy, openItems, outcomeStats, readEvents, winLossCases, type EventType, type OutcomeEvent } from "../core/outcomes.ts";
@@ -611,7 +611,10 @@ switch (cmd) {
       out({
         file: credentialsPath(),
         file_mode: credentialsFileMode(),
-        keys: Object.fromEntries(KEYS.map((k) => [k, { set: Boolean(process.env[k]), value: mask(process.env[k]), from: keyOrigin[k] ?? null }])),
+        keys: {
+          ...Object.fromEntries(KEYS.map((k) => [k, { set: Boolean(process.env[k]), value: mask(process.env[k]), from: keyOrigin[k] ?? null }])),
+          ...Object.fromEntries(Object.entries(keyStatus()).filter(([k]) => !(KEYS as readonly string[]).includes(k))),
+        },
         tier: tier(),
       });
     }

@@ -5,6 +5,8 @@
  * callProvider(): budget check before the call, actual cost into the ledger after it, immutable raw
  * snapshots for citation, do-not-contact filtering on results.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { tier } from "../core/doctor.ts";
@@ -21,7 +23,9 @@ import { findWorkspace, loadConfig } from "../core/workspace.ts";
 initTracing("mcp-gateway", { immediate: true });
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void shutdownTracing().finally(() => process.exit(0)));
 
-const server = new McpServer({ name: "ase", version: "0.10.0" });
+// the plugin's own version, so the two never drift apart
+const VERSION = (JSON.parse(readFileSync(join(import.meta.dir, "../../.claude-plugin/plugin.json"), "utf8")) as { version: string }).version;
+const server = new McpServer({ name: "ase", version: VERSION });
 
 const text = (data: unknown, isError = false) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], isError });
 

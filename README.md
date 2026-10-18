@@ -93,6 +93,12 @@ For headless batch runs on your machine, store them once with
 `npx firecrawl-cli login --browser` followed by `ase keys pull-firecrawl`.
 </details>
 
+## The app
+
+Prefer screens over a terminal? `bun src/cli/ase.ts app` opens a local app with everything waiting for you, your
+accounts, the gates, drafts, runs (on your Mac or in the cloud) and outcomes, plus how the engine works and where it
+runs. See [docs/app.md](docs/app.md).
+
 ## How it works
 
 <p align="center">
