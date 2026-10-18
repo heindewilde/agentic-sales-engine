@@ -90,4 +90,10 @@ export function closeSheet() {
 export const STAGES = ["discovered", "light_scored", "shortlisted", "researched", "scored", "outreach_ready"];
 export const STAGE_NAME = { discovered: "Found", light_scored: "Quick-scanned", shortlisted: "Shortlisted", researched: "Researched", scored: "Scored", outreach_ready: "Ready for outreach", excluded: "Excluded" };
 export const tierPill = (t) => (t ? `<span class="tier t${esc(t)}">${esc(t)}</span>` : `<span class="tier">–</span>`);
-export const empty = (title, text) => `<div class="empty"><b>${esc(title)}</b><p>${esc(text)}</p></div>`;
+export const empty = (title, text, ic = "info") => `<div class="empty">${iconFn(ic, 22)}<b>${esc(title)}</b><p>${esc(text)}</p></div>`;
+import { icon as iconFn } from "./icons.js";
+/** A stat card: icon, label, the number, and a line under it. */
+export const stat = (ic, label, value, sub = "", tone = "", href = "") => `<${href ? `a href="${href}" data-link` : "div"} class="stat"><span class="stat-h"><span class="stat-ic ${tone}">${iconFn(ic, 14)}</span>${esc(label)}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ""}</${href ? "a" : "div"}>`;
+/** A card with an icon header and an optional link on the right. */
+export const card = (ic, title, body, { count = "", link = "", linkText = "", flush = false } = {}) => `<section class="card"><div class="card-h"><h3>${iconFn(ic, 16)}${esc(title)}${count !== "" ? ` <span class="count">${esc(String(count))}</span>` : ""}</h3>${link ? `<a href="${link}" data-link>${esc(linkText)} ${iconFn("arrow", 13)}</a>` : ""}</div><div class="card-b ${flush ? "flush" : ""}">${body}</div></section>`;
+export const initials = (name) => String(name ?? "?").replace(/^(the|de|het)\s+/i, "").trim().slice(0, 1).toUpperCase();

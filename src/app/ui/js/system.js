@@ -1,6 +1,7 @@
 // System: /process (steps left to right, actors as rows, details below) and /brain (every file behind it).
 import { $, esc, money, k, day } from "./ui.js";
-import { go } from "./shell.js";
+import { closeModal, go, openModal } from "./shell.js";
+import { icon } from "./icons.js";
 const COLORS = { you: "#0a0a0a", operator: "var(--s1)", "account-researcher": "var(--s2)", "factor-judge": "var(--s3)", "wiki-linter": "var(--s4)", "icp-analyst": "var(--s5)" };
 const CATS = [["instructions", "Agent instructions", "var(--c1)"], ["playbook", "Playbook", "var(--c2)"], ["method", "Rules & method", "var(--c3)"], ["knowledge", "Your knowledge", "var(--c4)"], ["data", "Company data", "var(--c5)"]];
 const LAYERS = { knowledge: "Your knowledge", method: "Rules & method", template: "Template", playbook: "Playbook", agent: "Agent", data: "Company data" };
@@ -32,26 +33,18 @@ const sequence = () => P.steps.filter((s) => !s.parallel).flatMap((s) => s.block
 
 // ---------- pages ----------
 const PROCESS_HTML = `
-  <section class="intro">
-    <div>
+  <header class="ph"><div><span class="ph-eyebrow">${icon("process", 14)} System · the process</span>
       <h1>How a company moves through the engine</h1>
-      <p>Left to right, from your ICP to meetings. Each row is who does the work; black blocks are decisions you make. Click a block to see what it does, what it reads and what it costs.</p>
-    </div>
-    <div id="actors" class="legend"></div>
-  </section>
-  <div id="funnel" class="funnel"></div>
-  <div class="map-wrap"><div id="map" class="map"></div></div>
-  <div class="map-foot"><div id="ctx-legend" class="legend"></div><span class="muted">Scroll sideways for later steps</span></div>
-  <section id="detail" class="detail" hidden></section>`;
+      <p class="sub">Read it left to right, from your ICP to meetings. Each row is who does the work, numbers show the hand-off order within a step, and black diamonds are decisions only you make. Click any block for the details.</p></div>
+    <div id="actors" class="actor-legend" hidden></div></header>
+  <div class="card map-card"><div class="map-wrap"><div id="map" class="map"></div></div>
+    <div class="map-foot"><div id="ctx-legend" class="legend"></div><span class="muted">${icon("arrow", 13)} scroll sideways for later steps</span></div></div>`;
 const BRAIN_HTML = `
-  <section class="intro">
-    <div>
-      <h1>The brain</h1>
-      <p>Every file behind the process: your knowledge and the engine's rules feed the playbooks and agents, which run the steps. Hover to trace a chain, click a file to read it.</p>
-    </div>
-    <div id="brain-stats" class="kpis"></div>
-  </section>
-  <div id="brain" class="brain"></div>`;
+  <header class="ph"><div><span class="ph-eyebrow">${icon("brain", 14)} System · the brain</span>
+      <h1>Every file behind the process</h1>
+      <p class="sub">Your knowledge and the engine's rules feed the playbooks and agents, which run the steps. Hover a file to trace where it goes; click it to read it.</p></div></header>
+  <div id="brain-stats" class="stats"></div>
+  <div class="card"><div id="brain" class="brain"></div></div>`;
 const page = () => (location.pathname.startsWith("/brain") ? "brain" : "process");
 
 export async function processPage(view, { query }) {
@@ -62,7 +55,7 @@ export async function processPage(view, { query }) {
   const at = query.get("step") ?? (sel.block && blockById(sel.block)?.step.id);
   if (at) requestAnimationFrame(() => scrollToStep(at));
   if (!M) M = await fetch("/api/model").then((r) => r.json()).catch(() => null);
-  if (page() === "process" && document.getElementById("map")) { renderFunnel(); renderMap(); renderDetail(); }
+  if (page() === "process" && document.getElementById("map")) { renderMap(); if (sel.block) renderDetail(); }
 }
 
 export async function brainPage(view) {
@@ -73,11 +66,10 @@ export async function brainPage(view) {
 
 // ---------- process ----------
 function renderProcess() {
-  $("#actors").innerHTML = lanes().map((a) => `<span><i style="background:${COLORS[a.id]}"></i>${esc(a.name)}</span>`).join("");
-  $("#ctx-legend").innerHTML = `<span><i class="sq" style="background:var(--ink)"></i>Your decision</span><span class="muted">Arrows are hand-offs; dashed ones go to the next step.</span>`;
-  renderFunnel();
+  $("#actors").innerHTML = lanes().map((a) => `<span class="av-chip"><i class="av" style="--a:${COLORS[a.id]}">${esc(a.name[0])}</i>${esc(a.name)}</span>`).join("");
+  $("#ctx-legend").innerHTML = `<span><i class="gate-mark"></i>Your decision</span><span><svg width="26" height="8"><path d="M1 4H22" stroke="var(--ink-2)" stroke-width="1.4"/><path d="M20 1l4 3-4 3" fill="none" stroke="var(--ink-2)" stroke-width="1.4"/></svg>hand-off</span><span><svg width="26" height="8"><path d="M1 4H22" stroke="var(--ink-2)" stroke-width="1.4" stroke-dasharray="3 3"/></svg>on to the next step</span>`;
   renderMap();
-  renderDetail();
+  if (sel.block) renderDetail();
 }
 
 /** Accounts that reached a step (or got past it), from the live funnel. */
@@ -91,15 +83,8 @@ function reach(s) {
 }
 const stepRuns = (s) => (M ? M.runs.filter((r) => s.blocks.some((b) => (b.runIn ?? b.skills ?? []).includes(r.skill))) : []);
 
-function renderFunnel() {
-  const max = Math.max(1, ...P.steps.map((s) => reach(s) ?? 0));
-  $("#funnel").innerHTML = P.steps.map((s) => {
-    const n = reach(s);
-    const gated = s.blocks.some((b) => b.gate);
-    return `<button data-step="${esc(s.id)}" title="${esc(s.title)}${gated ? " · needs your decision" : ""}"><span class="fr"><span class="fn">${esc(String(s.n))}</span><span class="ft">${esc(s.short)}</span>${gated ? '<i class="gate"></i>' : ""}<span class="fv">${n ?? ""}</span></span>
-      <span class="fbar"><i style="width:${n != null ? (100 * n) / max : 0}%"></i></span></button>`;
-  }).join("");
-}
+/** Steps grouped into the phases a person thinks in. */
+const PHASES = [["Define", ["icp"]], ["Find & qualify", ["discover", "light", "shortlist"]], ["Research", ["research"]], ["Engage", ["ways-in", "drafts"]], ["Learn", ["outcomes"]], ["Keep fresh", ["maintenance"]]];
 
 /** Columns: each step gets one column per hand-off (parallel steps: per block of the same actor). */
 function layout() {
@@ -125,22 +110,28 @@ function blockOut(b) {
 function renderMap() {
   const { cols, total } = layout();
   const rows = lanes();
-  let html = `<div class="grid" style="grid-template-columns: 150px repeat(${total}, auto); grid-template-rows: auto repeat(${rows.length}, auto)">`;
-  html += `<div class="corner" style="grid-row:1;grid-column:1"></div>`;
+  let html = `<div class="grid" style="grid-template-columns: 148px repeat(${total}, auto); grid-template-rows: auto auto repeat(${rows.length}, auto)">`;
+  html += `<div class="corner" style="grid-row:1 / span 2;grid-column:1"><span>who</span><span>step →</span></div>`;
+  PHASES.forEach(([name, ids], pi) => {
+    const mine = cols.filter((c) => ids.includes(c.s.id));
+    if (!mine.length) return;
+    const start = Math.min(...mine.map((c) => c.start)), end = Math.max(...mine.map((c) => c.start + c.width));
+    html += `<div class="phase p${pi % 2}" style="grid-row:1;grid-column:${start + 2} / ${end + 2}"><span>${esc(name)}</span></div>`;
+  });
   for (const { s, start, width } of cols) {
     const n = reach(s), runs = stepRuns(s);
     const cost = runs.length ? `${money(runs.reduce((a, r) => a + r.cost, 0) / runs.length)} / run` : "";
     const gated = s.blocks.some((b) => b.gate);
-    html += `<div class="step-head ${gated ? "gated" : ""}" id="step-${esc(s.id)}" style="grid-row:1;grid-column:${start + 2} / span ${width}">
+    html += `<div class="step-head ${gated ? "gated" : ""}" id="step-${esc(s.id)}" style="grid-row:2;grid-column:${start + 2} / span ${width}">
       <span class="sn"><span class="num">${esc(String(s.n))}</span><b>${esc(s.short)}</b></span>
-      <span class="muted">${[n != null ? `${n} accounts` : "", cost].filter(Boolean).join(" · ") || esc(s.title)}</span></div>`;
+      <span class="step-meta">${n != null ? `<span>${icon("accounts", 12)}${n}</span>` : ""}${cost ? `<span>${cost}</span>` : ""}${!n && !cost ? esc(s.title) : ""}</span></div>`;
   }
   rows.forEach((a, r) => {
-    html += `<div class="lane-name" style="grid-row:${r + 2};grid-column:1" title="${esc(a.role)}"><b><i style="background:${COLORS[a.id]}"></i>${esc(a.name)}</b></div>`;
+    html += `<div class="lane-name" style="grid-row:${r + 3};grid-column:1" title="${esc(a.role)}"><i class="av" style="--a:${COLORS[a.id]}">${esc(a.name[0])}</i><span><b>${esc(a.name)}</b></span></div>`;
     for (const { s, start, width, place } of cols) {
       for (let i = 0; i < width; i++) {
         const here = place.filter((p) => p.i === i && p.b.by === a.id);
-        html += `<div class="cell ${i === 0 ? "first" : ""} ${here.length ? "" : "empty"}" style="grid-row:${r + 2};grid-column:${start + i + 2}">${here.map((p) => blockHtml({ ...p.b, step: s })).join("")}</div>`;
+        html += `<div class="cell ${i === 0 ? "first" : ""} ${r % 2 ? "odd" : ""}" style="grid-row:${r + 3};grid-column:${start + i + 2}">${here.map((p) => blockHtml({ ...p.b, step: s }, s.parallel ? null : s.blocks.indexOf(p.b) + 1)).join("")}</div>`;
       }
     }
   });
@@ -154,8 +145,10 @@ function renderMap() {
   requestAnimationFrame(drawLinks);
 }
 
-function blockHtml(b) {
-  return `<div class="blk ${b.gate ? "gate" : ""}" data-block="${esc(b.id)}" style="--a:${COLORS[b.by]}"><div class="l">${esc(b.label)}</div><div class="m">${esc(blockOut(b))}</div></div>`;
+function blockHtml(b, order) {
+  return `<div class="blk ${b.gate ? "gate" : ""}" data-block="${esc(b.id)}" style="--a:${COLORS[b.by]}">
+    <div class="blk-top">${order ? `<span class="ord">${order}</span>` : `<span class="ord par">${icon("refresh", 10)}</span>`}${b.gate ? icon("gate", 11, "gm") : ""}</div>
+    <div class="l">${esc(b.label)}</div><div class="m">${esc(blockOut(b))}</div></div>`;
 }
 
 /** Arrows between consecutive blocks: right edge to left edge, dashed where a step ends. */
@@ -167,7 +160,7 @@ function drawLinks() {
   svg.setAttribute("class", "links");
   svg.setAttribute("width", host.scrollWidth);
   svg.setAttribute("height", host.scrollHeight);
-  svg.innerHTML = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--line-2)"/></marker></defs>`;
+  svg.innerHTML = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9b9b97"/></marker><marker id="ahx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>`;
   const base = host.getBoundingClientRect();
   const box = (id) => {
     const r = host.querySelector(`[data-block="${id}"]`).getBoundingClientRect();
@@ -178,7 +171,7 @@ function drawLinks() {
     const p = box(seq[i - 1].id), q = box(seq[i].id);
     const mx = p.r + (q.l - p.r) / 2;
     const d = Math.abs(p.cy - q.cy) < 2 ? `M${p.r},${p.cy} H${q.l - 2}` : `M${p.r},${p.cy} H${mx} V${q.cy} H${q.l - 2}`;
-    svg.insertAdjacentHTML("beforeend", `<path class="${seq[i - 1].step !== seq[i].step ? "x" : ""}" d="${d}" marker-end="url(#ah)"/>`);
+    svg.insertAdjacentHTML("beforeend", `<path class="${seq[i - 1].step !== seq[i].step ? "x" : ""}" data-from="${esc(seq[i - 1].id)}" data-to="${esc(seq[i].id)}" d="${d}" marker-end="url(#ah)"/><circle cx="${p.r}" cy="${p.cy}" r="2.5" class="dot-start"/>`);
   }
   host.prepend(svg);
 }
@@ -200,7 +193,7 @@ function selectBlock(id, tab = "overview") {
   sel = { block: id, tab };
   markSelection();
   renderDetail();
-  if (id && fresh) $("#detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  void fresh;
 }
 
 // ---------- details ----------
@@ -208,10 +201,9 @@ const blockRuns = (b) => (M ? M.runs.filter((r) => (b.runIn ?? b.skills ?? []).i
 const actorCost = (r, by) => (by === "operator" ? r.cost : r.threads.filter((t) => t.agent === by).reduce((a, t) => a + t.cost, 0));
 
 function renderDetail() {
-  const el = $("#detail");
   const b = sel.block && blockById(sel.block);
-  if (!b) { el.hidden = true; return; }
-  el.hidden = false;
+  if (!b) { closeModal(); return; }
+  const el = openModal("", true);
   const a = actor(b.by);
   const runs = blockRuns(b);
   const tabs = b.gate
@@ -224,8 +216,8 @@ function renderDetail() {
       <div class="kpi"><b>${avg == null ? "–" : money(avg)}</b><span>${b.by === "operator" ? "cost per run" : `${esc(a.name)} cost per run`}</span></div>
       <div class="kpi"><b>${last ? day(last.created_at) : "–"}</b><span>last run${last ? ` · <span class="st ${esc(last.status)}">${esc(last.status.replace("_", " "))}</span>` : ""}</span></div>
     </div>`;
-  el.innerHTML = `<div class="d-head"><div><div class="who"><i style="background:${COLORS[b.by]}"></i>${esc(a.name)} · step ${esc(String(b.step.n))}, ${esc(b.step.title)}</div>
-      <h2>${esc(b.label)}</h2><p>${esc(b.detail)}</p></div><button class="x" data-close-detail aria-label="Close">×</button></div>
+  el.innerHTML = `<div class="d-head"><div><div class="who"><i class="av sm" style="--a:${COLORS[b.by]}">${esc(a.name[0])}</i>${esc(a.name)} · step ${esc(String(b.step.n))}, ${esc(b.step.title)}${b.gate ? ` · <b>your decision</b>` : ""}</div>
+      <h2>${esc(b.label)}</h2><p>${esc(b.detail)}</p></div></div>
     ${kpis}
     <div class="tabs">${tabs.map(([t, l, c]) => `<button data-tab="${t}" class="${sel.tab === t ? "on" : ""}">${l}${c ? `<span class="c">${c}</span>` : ""}</button>`).join("")}</div>
     <div class="d-body" id="d-body"></div>`;
@@ -375,8 +367,8 @@ function renderBrain() {
   const g = P.graph;
   const counts = [0, 1, 2, 3, 4].map((c) => g.nodes.filter((n) => n.col === c).length);
   const tok = (c) => g.nodes.filter((n) => n.col === c).reduce((a, n) => a + (n.tokens ?? 0), 0);
-  $("#brain-stats").innerHTML = [["Your knowledge", counts[0], "files"], ["Rules & method", counts[1], "files"], ["Playbooks", counts[2], ""], ["Agents", counts[3], ""], ["Connections", g.edges.length, ""]]
-    .map(([l, n]) => `<div class="kpi"><b>${n}</b><span>${l}</span></div>`).join("");
+  $("#brain-stats").innerHTML = [["Your knowledge", counts[0], "user"], ["Rules & method", counts[1], "file"], ["Playbooks", counts[2], "process"], ["Agents", counts[3], "users"], ["Connections", g.edges.length, "activity"]]
+    .map(([l, n, ic]) => `<div class="stat"><span class="stat-h"><span class="stat-ic">${icon(ic, 14)}</span>${l}</span><b>${n}</b></div>`).join("");
   void tok;
   const host = $("#brain");
   const W = Math.max(980, host.clientWidth - 42), NW = Math.min(214, (W - 40) / 5 - 40), ROW = 32, TOP = 36, H0 = 23;
@@ -439,7 +431,7 @@ function lightNode(id) {
 document.addEventListener("click", (e) => {
   if (document.body.dataset.area !== "system") return;
   if (e.target.closest("[data-close]")) return closeSheet();
-  if (e.target.closest("[data-close-detail]")) return selectBlock(null);
+  if (e.target.closest("[data-close-modal]") && page() === "process") { sel = { block: null, tab: "overview" }; history.replaceState(null, "", "/process"); return markSelection(); }
   const gb = e.target.closest("[data-goblock]");
   if (gb) { closeSheet(); if (page() !== "process") go(`/process?block=${gb.dataset.goblock}`); else selectBlock(gb.dataset.goblock); return; }
   const f = e.target.closest("[data-file]");
@@ -448,8 +440,8 @@ document.addEventListener("click", (e) => {
   if (t) return selectBlock(sel.block, t.dataset.tab);
   const b = e.target.closest("#map [data-block]");
   if (b) return selectBlock(b.dataset.block === sel.block ? null : b.dataset.block);
-  const st = e.target.closest("#funnel [data-step]");
-  if (st) return scrollToStep(st.dataset.step);
+  const ph = e.target.closest("#map .step-head");
+  if (ph) return scrollToStep(ph.id.replace(/^step-/, ""));
   const n = e.target.closest("#brain [data-node]");
   if (n) {
     const node = P.graph.nodes.find((x) => x.id === n.dataset.node);
@@ -458,9 +450,16 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape" || document.body.dataset.area !== "system") return;
-  if (!$("#sheet").hidden) return closeSheet();
-  if (page() === "process") selectBlock(null);
+  // the shell closes the top-most layer and marks the key handled; only then is the modal's block cleared here
+  if (e.key !== "Escape" || document.body.dataset.area !== "system" || e.defaultPrevented) return;
+  if (page() === "process" && sel.block) selectBlock(null);
+});
+// hovering a block lights its hand-offs in and out
+document.addEventListener("mouseover", (e) => {
+  const b = e.target.closest?.("#map [data-block]");
+  document.querySelectorAll("#map svg.links path.hl").forEach((p) => p.classList.remove("hl"));
+  if (!b) return;
+  document.querySelectorAll(`#map svg.links path[data-from="${CSS.escape(b.dataset.block)}"], #map svg.links path[data-to="${CSS.escape(b.dataset.block)}"]`).forEach((p) => p.classList.add("hl"));
 });
 document.addEventListener("mouseover", (e) => { const n = e.target.closest?.("#brain [data-node]"); if (n) lightNode(n.dataset.node); });
 document.addEventListener("mouseout", (e) => { if (e.target.closest?.("#brain [data-node]") && !e.relatedTarget?.closest?.("#brain [data-node]")) lightNode(null); });
