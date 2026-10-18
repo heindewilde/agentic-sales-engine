@@ -19,8 +19,10 @@ Learnings live in two files that every skill reads before starting:
 - `learnings/preferences.md` — how the team wants things done (sources to trust/avoid, segments to skip, tone, format).
 
 Steps:
-1. Decide which file it belongs to. If it corrects a specific fact, **also fix the fact** at its source file
-   (with `source_url: user:<member>` and today's date) so the knowledge base and the lesson agree.
+1. Decide which file it belongs to. If it corrects something about an account, **also fix it there** so the knowledge
+   base and the lesson agree: one `ase apply` file (`${CLAUDE_PLUGIN_ROOT}/references/output-format.md`) with the
+   corrected `facts` (`source_url: user:<member>`) and/or the affected brief section rewritten, its footnote a
+   `user:<member>` source, and a changelog line. Never edit account files by hand.
 2. Generalize one level: "Acme is a reseller" → also note *how to tell* ("check the About page; directories mislabel resellers").
    Don't over-generalize from one example — say what it applies to.
 3. Append one bullet: `- <YYYY-MM-DD> (<member>) [<scope: icp/account/stage>]: <lesson> — <why>`.
