@@ -15,7 +15,7 @@
 ## 3. Balancing test
 - People are contacted in their professional capacity, about topics related to their role.
 - Every first message identifies us and offers an easy opt-out; opt-outs go into `dnc.yaml` immediately.
-- Erasure requests are executed with `/agentic-sales-engine:forget-person` (removes the person file, warm-path matches and redacts raw snapshots).
+- Erasure requests are executed with `/agentic-sales-engine:privacy forget` (removes the person file, warm-path matches and redacts raw snapshots).
 - Data is refreshed or removed when stale (`ttl_days` in `ase.config.yaml`).
 
 ## 4. Decision

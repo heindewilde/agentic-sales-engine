@@ -35,7 +35,7 @@ test("operator: every provider op via the CLI, research and enrich-light recipes
 test("skills convert to platform skills: same body with the engine path, plugin-only frontmatter dropped", () => {
   const names = listSkills(PLUGIN_ROOT);
   expect(names).toContain("research");
-  expect(names.length).toBeGreaterThan(20);
+  expect(names.length).toBe(17);
   for (const n of names) {
     const s = convertSkill(PLUGIN_ROOT, n);
     expect(s.content).not.toContain("${CLAUDE_PLUGIN_ROOT}");

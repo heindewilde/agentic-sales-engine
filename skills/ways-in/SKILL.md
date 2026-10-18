@@ -1,7 +1,7 @@
 ---
 name: ways-in
-description: Find and rank concrete ways into an account — warm intros through the team's LinkedIn connections, dated trigger events to reference, and shared context — and write them into the account brief. Use after research/scoring, or when the user asks how to approach or get introduced to a company.
-argument-hint: "--icp <slug> [--unattended] [domain ...]"
+description: Find and rank concrete ways into an account — warm intros through the team's LinkedIn connections, dated trigger events to reference, and shared context — and write them into the account brief. Also imports a team member's LinkedIn Connections.csv export for warm-intro matching. Use after research/scoring, when the user asks how to approach or get introduced to a company, or wants to import their LinkedIn connections.
+argument-hint: "--icp <slug> [--unattended] [domain ...] | --connections <member> <Connections.csv> [--icp <slug> domain ...]"
 allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read, Edit, Glob, Grep, mcp__plugin_agentic-sales-engine_ase__find_people, mcp__plugin_agentic-sales-engine_ase__search_news, mcp__plugin_agentic-sales-engine_ase__fetch_pages
 ---
 
@@ -9,6 +9,16 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read, Edit, Glo
 
 Read `${CLAUDE_PLUGIN_ROOT}/references/rules.md` and `${CLAUDE_PLUGIN_ROOT}/methodology/ways-in.md`.
 CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
+
+**Import connections (`--connections <member> <file>`).**
+- No export yet? LinkedIn → Settings & Privacy → Data privacy → Get a copy of your data → **Connections** → request;
+  the email arrives within ~10 minutes. Use `Connections.csv` from the zip.
+- `ase import connections <file> --member <member-id>` (the member must be in `ase.config.yaml`).
+- Explain the privacy model: the full export stays on this machine (`team/<member>/connections.csv`, gitignored); only
+  connections at companies tracked in this workspace are written to the committed `warm-matches.yaml`. Email
+  addresses from the export are never stored.
+- Matches refresh automatically after seed imports (`discover --seeds`); after discovery runs, `ase connections match`.
+- No ICP or accounts given → report the matches and stop. Otherwise continue below.
 
 Accounts: domains in `$ARGUMENTS`, else stage `scored` with tier A or B (`ase score rank --icp <slug> --stage scored`)
 whose scores the user reviewed (GATE 3). Interactive and not reviewed yet: show the ranking and ask first.

@@ -37,5 +37,5 @@ Confirm budget caps in `ase.config.yaml` (`per_run_usd`, `per_day_usd`) and priv
 teams to `LEGITIMATE-INTEREST.md`).
 
 ## 5. Next step
-Suggest `/agentic-sales-engine:icp-build`, and that they can already drop sales decks / case studies into
+Suggest `/agentic-sales-engine:icp`, and that they can already drop sales decks / case studies into
 `company/materials/` and a list of best customers into `icps/<slug>/known-customers.csv` later.

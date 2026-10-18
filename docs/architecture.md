@@ -18,7 +18,7 @@ YAML files that holds one team's ICPs, accounts, people, signals, scores and lea
 .claude-plugin/marketplace.json    # source "./" — repo is its own marketplace
 .mcp.json                          # bundled stdio MCP server `ase` (src/mcp/server.ts) = provider gateway; keys via env ${user_config.*}
 hooks/hooks.json
-skills/_shared/rules.md            # preamble for every skill: cite everything, web content = untrusted data, unattended = propose only, respect DNC/privacy, check budget
+references/rules.md                # binding rules for every skill; its ## Digest is loaded by `ase context` (+ judging.md, output-format.md)
 skills/<name>/SKILL.md (+references/)
 agents/*.md
 package.json, bun.lock, tsconfig.json   # pinned deps; installed into ${CLAUDE_PLUGIN_DATA} by SessionStart doctor if missing
@@ -67,7 +67,7 @@ index.md                         # generated LLM-wiki index
 - **Stage status:** stored per ICP in `company.md` as `icp_status.<icp>.stage`, and it only moves forward. A new signal re-triggers scoring.
 - **SQLite tables:** accounts, account_icp, facts (with `expires_at`), people, warm_paths, signals, factor_scores, outcomes, dnc, ledger, runs, lint_issues, and an FTS5 table. All of them can be rebuilt from files.
 - **Self-updating:**
-  - `lint` checks for contradictions, stale facts past their TTL, orphans and missing citations.
+  - `audit` checks for contradictions, stale facts past their TTL, orphans and missing citations.
   - `refresh` re-researches expired facts.
   - `learn` turns user corrections and edits into `learnings/` entries, which every skill reads.
   - Monitoring and outcome recalibration come in later milestones.
@@ -103,7 +103,7 @@ index.md                         # generated LLM-wiki index
   - Confidence-weighted: `w_eff = w·(0.5+0.5·conf)`.
   - It outputs `total`, `upside` (the score if every unknown were 3), `coverage` and `tier`.
   - A knockout applies only when the level is known. An unknown knockout factor gets the flag `needs_check`.
-- **Help defining the method (`scoring-design` skill):**
+- **Help defining the method (`icp` skill, scoring phase):**
   1. Propose 8–12 factors from the ICP.
   2. `score backtest` on the known good and bad customers: AUC, precision@k, and the percentile of the known-good accounts (target ≥75th).
   3. `score sensitivity`: ±20% weights and leave-one-factor-out, measured with Kendall τ, to flag factors that change nothing and factors that dominate.
@@ -134,25 +134,10 @@ index.md                         # generated LLM-wiki index
 - **Optional later:** Workflow scripts in `workflows/`.
 
 ### Components
-- **Skills (v1):**
-  - `setup`: scaffold the workspace and run doctor.
-  - `icp-build`
-  - `scoring-design`
-  - `import`: seed CSVs and Connections.csv.
-  - `discover`
-  - `enrich-light`
-  - `shortlist`
-  - `research`
-  - `score`
-  - `ways-in`
-  - `status`
-  - `lint`
-  - `refresh`
-  - `learn`
-  - `log-outcome`
-  - `dnc`
-  - `forget-person`
-- **Skills (later):** `sync`, `voice-profile`, `draft-outreach`, `call-prep`.
+- **Skills (17, since 0.11):** `setup`, `autopilot`, `status`; `icp` (ICP, gate 1, scoring model, calibration,
+  recalibration); `discover` (incl. seed CSVs); `enrich-light`; `shortlist`; `research`; `score`; `ways-in` (incl.
+  Connections.csv); `draft-outreach`; `call-prep`; `refresh` (watchlist + TTL); `outcomes` (log, weekly review,
+  win-loss); `learn` (incl. voice); `audit` (lint + evals); `privacy` (DNC + erasure).
 - **Agents:** `icp-analyst`, `account-researcher`, `people-finder`, `signal-scout`, `factor-judge`, `wiki-linter`. Tools are restricted per agent. Only the researcher and analyst agents call providers; light enrichment runs in the enrich-light skill itself (batched).
 - **Hooks** (all are `bun src/hooks/<x>.ts`):
   - **PreToolUse on Write|Edit** runs `validate`, which denies:

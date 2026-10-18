@@ -1,6 +1,6 @@
 # Scheduling the sales engine
 
-Monitoring (`sync`) and freshness (`refresh`) are most useful on a schedule. Scheduled runs are **unattended**:
+`refresh` (new triggers on watched accounts, facts past their TTL) is most useful on a schedule. Scheduled runs are **unattended**:
 they never pass a human gate, never send anything, and stop at the run budget.
 
 ## Option 1 — your machine (simplest)
@@ -9,7 +9,7 @@ Keys come from `~/.config/agentic-sales-engine/credentials.env` (`ase keys statu
 
 ```bash
 # crontab -e  → every Monday 07:00
-0 7 * * 1 cd ~/sales-workspace && claude -p "/agentic-sales-engine:sync --unattended" \
+0 7 * * 1 cd ~/sales-workspace && claude -p "/agentic-sales-engine:refresh --unattended" \
   --permission-mode dontAsk --max-budget-usd 2 \
   --allowedTools "Read,Write,Edit,Glob,Grep,Bash(bun *),mcp__plugin_agentic-sales-engine_ase" \
   >> .ase/sync.log 2>&1
@@ -46,7 +46,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           plugin_marketplaces: heindewilde/agentic-sales-engine
           plugins: agentic-sales-engine@agentic-sales-engine
-          prompt: "/agentic-sales-engine:sync --unattended"
+          prompt: "/agentic-sales-engine:refresh --unattended"
           claude_args: "--max-budget-usd 2"
       - name: Commit results
         run: |

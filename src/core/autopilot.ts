@@ -132,8 +132,8 @@ export async function startAutopilot(ws: string, opts: { icp: string; budgetUsd?
   const icpFile = paths.icp(ws, opts.icp);
   if (!existsSync(icpFile)) throw new Error(`ICP ${opts.icp} does not exist`);
   const { data } = await readDoc<{ status?: string }>(icpFile);
-  if (data.status !== "approved") throw new Error(`ICP ${opts.icp} is not approved (gate 1) — run icp-build first`);
-  if (!existsSync(paths.scoring(ws, opts.icp))) throw new Error(`ICP ${opts.icp} has no scoring model — run scoring-design first`);
+  if (data.status !== "approved") throw new Error(`ICP ${opts.icp} is not approved (gate 1) — run /agentic-sales-engine:icp first`);
+  if (!existsSync(paths.scoring(ws, opts.icp))) throw new Error(`ICP ${opts.icp} has no scoring model — run /agentic-sales-engine:icp first`);
   // On a subscription Claude usage isn't billed, so the budget only caps Exa/Firecrawl and defaults from the config.
   const billing = claudeBilling(cfg.claude_billing);
   if (opts.budgetUsd === undefined && billing === "api") throw new Error("--budget is required: Claude is billed per token with your API key");
