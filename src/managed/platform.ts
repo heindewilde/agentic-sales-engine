@@ -123,16 +123,19 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
 
   // skills removed or renamed in the repo leave the operator and the platform (a rename would otherwise leave orphans)
   const current = new Set(listSkills(pluginRoot));
-  for (const [name, ref] of Object.entries(s.skills)) {
+  for (const name of Object.keys(s.skills)) if (!current.has(name)) delete s.skills[name];
+  saveState(s);
+  for (const [name, k] of existing) {
     if (current.has(name)) continue;
-    delete s.skills[name];
-    saveState(s);
     try {
-      for await (const v of c.beta.skills.versions.list(ref.id)) await c.beta.skills.versions.delete(v.id, { skill_id: ref.id });
-      await c.beta.skills.delete(ref.id);
+      await c.beta.skills.delete(k.id).catch(async () => {
+        // a skill with several versions: drop all but the latest, then the skill (its last version can't go on its own)
+        for await (const v of c.beta.skills.versions.list(k.id)) if (v.id !== k.latest_version_id) await c.beta.skills.versions.delete(v.id, { skill_id: k.id });
+        await c.beta.skills.delete(k.id);
+      });
       log(`skill ${name}: removed (no longer in the repo)`);
     } catch (e) {
-      log(`skill ${name}: dropped from the operator; the platform kept it (${(e as Error).message.slice(0, 120)})`);
+      log(`skill ${name}: dropped from the operator; the platform kept it (${(e as Error).message.slice(0, 160)})`);
     }
   }
 
@@ -326,9 +329,11 @@ export async function schedule(o: Omit<RunOptions, "capUsd"> & { capUsd: number;
     budget: { type: "limit" as const, max_list_cost: { amount: String(Math.round(o.capUsd * 100)), currency: "USD" } },
     metadata: { ase_run: "1", skill: o.skill, args: o.args.slice(0, 500), repo: o.repo, base: o.baseBranch },
   };
-  const prev = s.deployments?.[o.skill];
+  // one deployment per skill + arguments: refresh runs weekly for news and monthly in full
+  const key = `${o.skill} ${o.args}`.trim();
+  const prev = s.deployments?.[key];
   const d = prev ? await c.beta.deployments.update(prev, body as never) : await c.beta.deployments.create(body as never);
-  s.deployments = { ...(s.deployments ?? {}), [o.skill]: d.id };
+  s.deployments = { ...(s.deployments ?? {}), [key]: d.id };
   saveState(s);
   log(`${prev ? "updated" : "scheduled"} ${o.skill}: ${o.cron} (${d.id})`);
   return { deployment_id: d.id, skill: o.skill, cron: o.cron };
