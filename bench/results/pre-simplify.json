@@ -1,0 +1,59 @@
+{
+  "label": "pre-simplify",
+  "ran_at": "2026-10-18T20:10:40.621Z",
+  "workspace": "/var/folders/4h/tstcx78d6b7_gcvh_7bl126h0000gn/T/ase-bench-pre-simplify-HUV3in/ws",
+  "cost": {
+    "light_model": 0.0206,
+    "research_model": 1.2227,
+    "providers": 0.246,
+    "total_pipeline": 3.7074,
+    "per_light_account": 0.0021,
+    "per_research_account": 0.2445,
+    "ways_in_model": 0.0314,
+    "drafts_model": 0
+  },
+  "sessions": {
+    "light": {
+      "sessions": 1,
+      "turns": 6,
+      "output_tokens": 13828
+    },
+    "research": {
+      "sessions": 3,
+      "turns": 60,
+      "output_tokens": 23703
+    },
+    "ways_in": {
+      "sessions": 1,
+      "turns": 19,
+      "output_tokens": 21207
+    },
+    "drafts": {
+      "sessions": 0,
+      "turns": 0,
+      "output_tokens": 0
+    }
+  },
+  "advanced": {
+    "light": 10,
+    "research": 5,
+    "ways_in": 1,
+    "drafts": 1
+  },
+  "quality": {
+    "citation_faithfulness": 1,
+    "brief_grounding": 0.61,
+    "snapshot_coverage": 1,
+    "handoff_completeness": 0.917,
+    "research_trajectory": 1,
+    "light_full_agreement": 0.35,
+    "source_quotes": 1,
+    "claim_support": 0.75,
+    "judge_stability": 0.714,
+    "draft_rules": 1,
+    "draft_quality": 0.625
+  },
+  "notes": [
+    "ways-in wrote the section but set no stage; hanos.nl advanced by hand (contract held), drafts + draft evals run afterwards on the same workspace"
+  ]
+}
