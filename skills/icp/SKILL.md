@@ -45,8 +45,8 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (below: `ase`). One-line progres
    code × size band, or sample `discover_companies` queries and extrapolate). Record `market_size` with method and
    verdict; suggest how to adjust if off.
 6. **GATE 1.** One-screen summary: segment, size, geographies, personas, triggers, exclusions, market size, top
-   assumptions. Ask to approve, edit or reject. On approval set `status: approved`, `approved_by: <member id>`,
-   `approved_at: <today>` (the hook refuses approval without an approver). Add existing customers / competitors to the
+   assumptions. Ask to approve, edit or reject. On approval run `ase icp approve --icp <slug> --approved-by <member id>`
+   (it validates the ICP and records who approved it and when). Add existing customers / competitors to the
    do-not-contact list if not yet there (`/agentic-sales-engine:privacy`). Continue to Model — the lookalike research
    is reused there.
 

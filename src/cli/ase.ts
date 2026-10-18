@@ -14,12 +14,12 @@ import { CONTRACTS, checkAccount } from "../core/contracts.ts";
 import { reindexAll } from "../core/db.ts";
 import { formatBrief, health, tier } from "../core/doctor.ts";
 import { forgetPerson } from "../core/forget.ts";
-import { parseYaml, readDoc, stringifyYaml } from "../core/frontmatter.ts";
+import { readDoc } from "../core/frontmatter.ts";
 import { claudeBilling } from "../core/billing.ts";
 import { appendLedger, currentRun, newRunId, readLedger, spentForRun, spentToday, subscriptionUsage, sumSpend } from "../core/ledger.ts";
 import { lint } from "../core/lint.ts";
-import { normalizeDomain, normalizeLinkedIn } from "../core/normalize.ts";
-import { DncEntry, Stage, type Company } from "../core/schemas.ts";
+import { normalizeDomain } from "../core/normalize.ts";
+import { Stage, type Company } from "../core/schemas.ts";
 import { KEYS, credentialsFileMode, credentialsPath, loadCredentials, mask, parseEnv, removeCredentials, saveCredential } from "../core/credentials.ts";
 import { advanceStage, staleFacts, waysIn } from "../core/waysin.ts";
 import { addWatch, estimateSync, loadWatchlist, removeWatch, runSync } from "../core/watch.ts";
@@ -33,7 +33,7 @@ import { applyUpdates, readApplyFile } from "../core/apply.ts";
 import { initTracing, setAttrs, shutdownTracing, withSpan } from "../core/tracing.ts";
 import { runLlm } from "../evals/llm.ts";
 import { compare, formatReport, latestResult, saveResult } from "../evals/report.ts";
-import { listDrafts, markDraft, markLearned, pendingEdits, snapshotOriginal } from "../core/drafts.ts";
+import { listDrafts, markDraft, markLearned, pendingEdits, saveDraft, snapshotOriginal } from "../core/drafts.ts";
 import { dncMatcher, findWorkspace, loadConfig, loadDnc, paths, relPath, requireWorkspace, today } from "../core/workspace.ts";
 import { validateContent } from "../core/validate.ts";
 import { callProvider, estimateCall } from "../core/providers/gateway.ts";
@@ -54,6 +54,7 @@ const { values: flags, positionals } = parseArgs({
     icp: { type: "string" },
     budget: { type: "string" },
     "approved-by": { type: "string" },
+    body: { type: "string" },
     reason: { type: "string" },
     note: { type: "string" },
     days: { type: "string" },
@@ -129,6 +130,7 @@ const HELP = `ase <command>
   score backtest --icp <s> [--mode light|full]     rank known good vs bad customers (AUC, percentile)
   score sensitivity --icp <s> [--mode ...]        weight ±20% / drop-one stability per factor
   score rank --icp <s> [--stage <stage>] [--limit N]
+  score review --icp <s> --approved-by <member> [domain ...]   GATE 3: record who reviewed the full scores (default: all awaiting)
   score recalibrate --icp <s>                      propose weights from logged outcomes (never applied)
   score recompute --icp <s>                        re-score all files from stored judgements (after weight edits)
   score reconcile --icp <s> [--account d | --stage s] [--limit N]   second opinion on full scores (judge twice, a third settles)
@@ -146,6 +148,7 @@ const HELP = `ase <command>
   import connections <Connections.csv> --member <id>   LinkedIn export → local copy + warm-matches.yaml
   connections match                       recompute every member's warm matches (after discovery)
   accounts --icp <s> [--stage <stage>]    list account domains for an ICP (optionally at one stage)
+  icp approve --icp <s> --approved-by <member>        GATE 1: approve an ICP (validated)
   shortlist propose --icp <s> [--pct N] [--max N]     GATE 2 proposal with cost estimate
   shortlist approve --icp <s> --file <lists/.../shortlist.md> --approved-by <member>
   stage advance <domain> --icp <s> --to <stage> [--reason ...]   move forward only if the contract holds
@@ -155,6 +158,7 @@ const HELP = `ase <command>
   watch list | watch remove <domain> [--icp <s>]
   sync [--icp <s>] [--account <d>] [--estimate]   poll news + watched pages → sync/<date>.md for review
   drafts list [--status s] [--account d] | snapshot <file> | mark <file> <draft|edited|sent|discarded>
+  drafts save <file> [--body <file>]      save an edited draft (stdin by default); keeps the engine's original
   drafts edits                            original vs human-final pairs not yet learned from
   drafts learned <file> [...]             mark edit pairs as absorbed into the voice profile
   eval run [--suite offline|llm] [--budget usd] [--sample n] [--model m] [--min 0.9] [--no-save] [--push [--experiment <label>]]
@@ -283,6 +287,13 @@ switch (cmd) {
     const mode = ((flags.mode as string) ?? "full") as "light" | "full";
     if (mode !== "light" && mode !== "full") fail("--mode must be light or full");
     try {
+      if (sub === "review") {
+        // GATE 3: record who reviewed these full scores (named accounts, or all awaiting review)
+        const { awaitingReview, reviewScores } = await import("../core/gates.ts");
+        const domains = positionals.slice(1).length ? positionals.slice(1).map((d) => normalizeDomain(d) ?? d) : await awaitingReview(w, icp);
+        out(await reviewScores(w, icp, domains, (flags["approved-by"] as string) ?? fail("--approved-by <member> is required")));
+        break;
+      }
       if (sub === "compute") {
         const src = flags.judgements as string | undefined;
         const text = src && src !== "-" ? readFileSync(resolve(src), "utf8") : await Bun.stdin.text();
@@ -462,7 +473,11 @@ switch (cmd) {
         out(await markDraft(w, relPath(w, positionals[1] ?? "") ?? fail("file outside workspace"), status, { member: (flags.member as string[] | undefined)?.[0], date: flags.date as string | undefined }));
       } else if (sub === "edits") out(await pendingEdits(w));
       else if (sub === "learned") out(await markLearned(w, positionals.slice(1).map((p) => relPath(w, p) ?? fail(`${p} outside workspace`))));
-      else fail("usage: drafts list|snapshot|mark|edits|learned");
+      else if (sub === "save") {
+        const file = relPath(w, positionals[1] ?? fail("usage: drafts save <file> [--body <file>|stdin]")) ?? fail("file outside workspace");
+        const src = flags.body as string | undefined;
+        out(await saveDraft(w, file, src ? readFileSync(resolve(src), "utf8") : await Bun.stdin.text()));
+      } else fail("usage: drafts list|snapshot|mark|save|edits|learned");
     } catch (e) {
       fail((e as Error).message, 2);
     }
@@ -640,34 +655,26 @@ switch (cmd) {
     }
     break;
   }
+  case "icp": {
+    if (positionals[0] !== "approve") fail("usage: icp approve --icp <slug> --approved-by <member>");
+    const { approveIcp } = await import("../core/gates.ts");
+    out(await approveIcp(ws(), (flags.icp as string) ?? fail("--icp is required"), (flags["approved-by"] as string) ?? fail("--approved-by <member> is required")));
+    break;
+  }
   case "contracts":
     out(CONTRACTS.map((c) => ({ stage: c.stage, requires: c.description })));
     break;
   case "dnc": {
     const w = ws();
-    const f = paths.dnc(w);
-    const doc = (existsSync(f) ? parseYaml<{ entries?: unknown[] }>(readFileSync(f, "utf8")) : null) ?? { entries: [] };
-    doc.entries ??= [];
+    const { addDnc, checkDnc, listDnc, removeDnc } = await import("../core/dnc.ts");
     const [sub, a, b] = positionals;
-    if (sub === "list" || !sub) out(doc);
+    if (sub === "list" || !sub) out(listDnc(w));
     else if (sub === "add") {
-      const kind = a as "domain" | "email" | "linkedin";
       const raw = b ?? fail("usage: dnc add <domain|email|linkedin> <value> --reason <reason>");
-      const value = kind === "domain" ? normalizeDomain(raw) : kind === "linkedin" ? normalizeLinkedIn(raw) : raw.trim().toLowerCase();
-      const entry = DncEntry.parse({ kind, value: value ?? fail(`cannot normalize ${raw}`), reason: flags.reason ?? "other", note: flags.note, added: today() });
-      doc.entries.push(entry);
-      writeFileSync(f, stringifyYaml(doc));
-      out({ added: entry });
-    } else if (sub === "remove") {
-      const before = doc.entries.length;
-      doc.entries = doc.entries.filter((e) => (e as { value: string }).value !== a);
-      writeFileSync(f, stringifyYaml(doc));
-      out({ removed: before - doc.entries.length });
-    } else if (sub === "check") {
-      const m = dncMatcher(await loadDnc(w));
-      const v = a ?? fail("usage: dnc check <value>");
-      out({ value: v, blocked: m.domain(v) || m.email(v) || m.linkedin(v) });
-    } else fail(`unknown dnc subcommand ${sub}`);
+      out(addDnc(w, raw, { kind: a as "domain" | "email" | "linkedin", reason: (flags.reason ?? "other") as never, note: flags.note as string | undefined }));
+    } else if (sub === "remove") out(removeDnc(w, a ?? fail("usage: dnc remove <value>")));
+    else if (sub === "check") out(await checkDnc(w, a ?? fail("usage: dnc check <value>")));
+    else fail(`unknown dnc subcommand ${sub}`);
     break;
   }
   case "forget-person": {

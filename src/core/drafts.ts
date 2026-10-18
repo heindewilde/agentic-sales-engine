@@ -77,6 +77,26 @@ export async function markDraft(ws: string, rel: string, status: "draft" | "edit
   return { path: rel, status, event };
 }
 
+/**
+ * Save a person's edit of a draft: the engine's original is frozen first (so learning keeps its baseline), the
+ * new text is validated like any write, and the draft becomes `edited`.
+ */
+export async function saveDraft(ws: string, rel: string, body: string) {
+  if (!/^accounts\/[^/]+\/drafts\/[^/]+\.md$/.test(rel)) throw new Error(`${rel} is not a draft`);
+  const abs = join(ws, rel);
+  if (!existsSync(abs)) throw new Error(`${rel} not found`);
+  snapshotOriginal(ws, rel);
+  const { data } = await readDoc<Draft>(abs);
+  if (data.status === "sent") throw new Error(`${rel} was already sent; it can't be edited any more`);
+  data.status = "edited";
+  const content = stringifyDoc(data, body.endsWith("\n") ? body : `${body}\n`);
+  const { validateContent } = await import("./validate.ts");
+  const errors = validateContent(rel, content, { privacyMode: true });
+  if (errors.length) throw new Error(errors.join("; "));
+  writeFileSync(abs, content);
+  return { path: rel, status: "edited" as const };
+}
+
 /** Pairs of (engine original, human final) for edited/sent drafts not yet learned from. */
 export async function pendingEdits(ws: string) {
   const rows = (await listDrafts(ws)).filter((r) => (r.status === "edited" || r.status === "sent") && !r.learned && r.has_original);

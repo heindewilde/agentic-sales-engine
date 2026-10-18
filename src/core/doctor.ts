@@ -89,6 +89,11 @@ export async function health(ws: string): Promise<Health> {
   }
   for (const [icp, s] of Object.entries(stages)) {
     if ((s.light_scored ?? 0) > 0) gates.push(`GATE 2 pending: ${s.light_scored} light-scored accounts for "${icp}" await shortlist approval (/agentic-sales-engine:shortlist)`);
+    if ((s.scored ?? 0) > 0) {
+      const { awaitingReview } = await import("./gates.ts");
+      const waiting = await awaitingReview(ws, icp);
+      if (waiting.length) gates.push(`GATE 3 pending: ${waiting.length} scored tier A/B accounts for "${icp}" await your score review (ase score review)`);
+    }
   }
   const { accountStates, openItems, readEvents } = await import("./outcomes.ts");
   const outcomes: Health["outcomes"] = {};

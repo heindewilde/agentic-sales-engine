@@ -49,6 +49,9 @@ export const IcpStatus = z.object({
   scoring_version: z.number().int().nullable().optional(),
   run_id: z.string().optional(),
   approved_by: z.string().optional(),
+  /** GATE 3: who reviewed the full score, and when (clears the account for ways in) */
+  reviewed_by: z.string().optional(),
+  reviewed_at: isoDate.optional(),
   excluded_reason: z.string().optional(),
   updated: isoDate,
 });
