@@ -1,6 +1,6 @@
 {
   "name": "agentic-sales-engine",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "description": "Agentic B2B sales engine for Claude Code: ICP definition, prospect discovery, transparent scoring, ways in, outreach and call prep.",
   "license": "MIT",

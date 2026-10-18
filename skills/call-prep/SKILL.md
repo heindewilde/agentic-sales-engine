@@ -29,5 +29,5 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
    6. **Likely objections** — 3–4, each with a response grounded in our materials (cite the case study) or a question
       to turn it around. Include the competitor/incumbent if known.
    7. **Desired outcome & next step** — what a good call ends with; a fallback.
-4. Add a Changelog line to the brief, and show the prep. After the call, suggest `/agentic-sales-engine:log-outcome`
+4. Add a Changelog line to the brief, and show the prep. After the call, suggest `/agentic-sales-engine:outcomes <domain> <event>`
    and adding notes to `accounts/<d>/notes.md`.

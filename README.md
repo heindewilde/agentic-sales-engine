@@ -63,7 +63,7 @@ Then open Claude Code in an empty folder and run:
 
 ```text
 /agentic-sales-engine:setup       # creates your workspace (its own git repo)
-/agentic-sales-engine:icp-build   # learns from your site and best customers, asks what's missing
+/agentic-sales-engine:icp         # learns from your site and best customers, asks what's missing
 ```
 
 From there `/agentic-sales-engine:status` always tells you the next step. Or let it run hands-off:
@@ -112,7 +112,7 @@ done when its *handoff contract* holds: the files the next stage relies on exist
 **A knowledge base you can trust.** One markdown file per company, person and signal, with every structured fact
 stored as `{value, source_url, retrieved_at, confidence}`. Claude Code hooks guard every write: unsourced facts,
 do-not-contact entities, non-business personal data and edits to source snapshots are rejected before they land.
-A SQLite index is rebuilt from the files for fast queries. Facts expire, and `refresh` and `sync` keep them current.
+A SQLite index is rebuilt from the files for fast queries. Facts expire, and `refresh` keeps them current.
 
 **Deterministic where it matters.** Anything that must be exactly right is code with tests (160+), not prompt
 instructions: score maths, back-tests, budgets, deduplication, privacy rules and stage contracts. The LLM does what it's
@@ -194,35 +194,41 @@ cover Claude too; on a subscription they only cap the data providers and the eng
 ## All commands
 
 <details>
-<summary>25 skills, all invoked as <code>/agentic-sales-engine:&lt;name&gt;</code></summary>
+<summary>17 skills, all invoked as <code>/agentic-sales-engine:&lt;name&gt;</code></summary>
 
 | Stage | Skill | What it does |
 |---|---|---|
 | Start | `setup` | Create or check a workspace |
 |  | `autopilot` | Run the whole funnel hands-off, pausing at your three gates and the draft review |
 |  | `status` | Funnel, gates, spend, outcomes and the next action |
-| Define | `icp-build` | ICP from your site, materials and best customers; market-size check; **gate 1** |
-|  | `scoring-design` | Fit × Intent × Access rubric, back-test, sensitivity, versioning |
-| Funnel | `import` | Seed lists (Apollo, Sales Navigator, trade fairs) or a LinkedIn connections export |
-|  | `discover` | Find companies matching the ICP, deduplicated, DNC-filtered |
+| Define | `icp` | ICP from your site, materials and best customers (**gate 1**), then the Fit × Intent × Access scoring model, back-test and sensitivity. `--scoring` revises the model, `--recalibrate` learns weights from outcomes |
+| Funnel | `discover` | Find companies matching the ICP, deduplicated, DNC-filtered; `--seeds <file.csv>` imports a seed list |
 |  | `enrich-light` | Cited snapshot + light score per account (batched) |
 |  | `shortlist` | Proposal with cost estimate; **gate 2** |
 |  | `research` | Deep research: triggers, buying committee, systems, risks → full score |
-|  | `score` | Re-score; `--explain` says what drives a score; **gate 3** (review before engaging) |
-| Engage | `ways-in` | Rank warm intros and trigger hooks |
-|  | `voice-profile` | Learn your writing voice from samples and from your edits |
+|  | `score` | Rescore after new signals or a model change; `--explain` says what drives a score; **gate 3** (review before engaging) |
+| Engage | `ways-in` | Rank warm intros and trigger hooks; `--connections <member> <file.csv>` imports a LinkedIn connections export |
 |  | `draft-outreach` | Email, LinkedIn or intro-request drafts, grounded and cited, never sent |
 |  | `call-prep` | One page: why now, attendees, SPIN questions, MEDDICC gaps, objections |
-| Stay current | `sync` | Watch accounts for new triggers and page changes ([schedule it](docs/scheduling.md)) |
-|  | `refresh` | Re-verify facts past their TTL |
-| Learn | `log-outcome` | Replies, meetings, deals, wins, losses, with reason codes |
-|  | `review-outcomes` | Weekly pass: one multiple-choice question per open account |
-|  | `win-loss` | What converts, with error bars; proposed ICP, rubric and weight changes |
-|  | `learn` | Teach a correction or preference every skill will follow |
-| Quality | `evals` | Measure the engine's own output: sourcing, claim support, handoffs, drafts, judge stability |
-| Hygiene | `lint` | Unsourced, stale, duplicate or contradictory knowledge |
-|  | `dnc` | Do-not-contact list |
-|  | `forget-person` | GDPR erasure across files, matches and snapshots |
+| Stay current | `refresh` | New triggers and page changes on watched accounts, facts past their TTL, one rescore ([schedule it](docs/scheduling.md)) |
+| Learn | `outcomes` | `outcomes <domain> <event>` logs a reply, meeting, win or loss; no arguments runs the weekly review; `outcomes analyze` shows what converts, with error bars |
+|  | `learn` | Teach a correction or preference every skill will follow; `--voice` learns your writing voice from samples or your edits |
+| Quality | `audit` | Unsourced, stale, duplicate or contradictory knowledge plus offline quality checks; `--deep` adds the semantic pass and LLM evals |
+|  | `privacy` | Do-not-contact list (`block`, `unblock`, `check`, `list`) and GDPR erasure (`forget`) |
+
+**Upgrading from 0.10:** skills were merged in 0.11. The `ase` CLI commands are unchanged.
+
+| 0.10 | 0.11 |
+|---|---|
+| `icp-build` | `icp` |
+| `scoring-design` | `icp --scoring` (revise) · `icp --recalibrate` (from outcomes) |
+| `import seeds <file>` | `discover --seeds <file>` |
+| `import connections <file> --member <id>` | `ways-in --connections <id> <file>` |
+| `voice-profile` · `voice-profile --learn` | `learn --voice` · `learn --voice --from-edits` |
+| `sync` · `refresh` | `refresh` (both; `--watch-only`, `--ttl-only`, `refresh watch add\|list\|remove`) |
+| `log-outcome <d> <event>` · `review-outcomes` · `win-loss` | `outcomes <d> <event>` · `outcomes` · `outcomes analyze` |
+| `lint` · `lint --mechanical` · `evals` · `evals --llm` | `audit --deep` · `audit` · `audit` · `audit --deep` |
+| `dnc add\|remove\|check\|list` · `forget-person` | `privacy block\|unblock\|check\|list` · `privacy forget` |
 </details>
 
 ## FAQ
@@ -244,7 +250,7 @@ export. That export stays on your machine; only matches against tracked accounts
 <summary><b>What about GDPR?</b></summary>
 
 Privacy mode is on by default. Only business-relevant personal data is stored, personal mailboxes and special-category
-data are rejected by the write hook, every person carries a lawful basis, `forget-person` erases someone everywhere,
+data are rejected by the write hook, every person carries a lawful basis, `privacy forget` erases someone everywhere,
 and the do-not-contact list is enforced in every step. A legitimate-interest assessment template ships with each
 workspace. This isn't legal advice: have your DPO look at it.
 </details>
@@ -269,7 +275,7 @@ sessions run through Claude Code's own headless mode (`claude -p`). With an API 
 <details>
 <summary><b>Can it run unattended?</b></summary>
 
-Yes. `autopilot` runs the whole funnel, and `batch.ts` and scheduled `sync` runs work headless too (see
+Yes. `autopilot` runs the whole funnel, and `batch.ts` and scheduled `refresh` runs work headless too (see
 [docs/scheduling.md](docs/scheduling.md)). Unattended runs never pass a human gate, never send anything, and stop at
 their budget.
 </details>

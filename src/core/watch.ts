@@ -12,7 +12,7 @@ import { paths, today } from "./workspace.ts";
 /**
  * Signal monitoring by polling. Each watched account gets (a) a dated news search since the last check
  * and (b) a content hash of chosen pages (careers, team, news) — a changed hash produces a diff. New items
- * land in sync/<date>.md for the sync skill to judge: real trigger → signal file + rescore; noise → dropped.
+ * land in sync/<date>.md for the refresh skill to judge: real trigger → signal file + rescore; noise → dropped.
  * Polling instead of provider-side monitors: no webhook endpoint needed, works with any configured provider.
  */
 
@@ -210,7 +210,7 @@ export async function runSync(ws: string, opts: { icp?: string; account?: string
       abs,
       stringifyDoc(
         { synced_at: new Date().toISOString(), checked: res.checked, items: res.items.length, actionable: actionable.length, status: actionable.length ? "pending_review" : "reviewed", cost_usd: Math.round(res.cost_usd * 1000) / 1000 },
-        `# Sync ${today()}\n\nItems below are candidates, not facts. The sync skill turns real trigger events into signal files and drops noise.\n\n${lines.join("\n\n")}\n`,
+        `# Sync ${today()}\n\nItems below are candidates, not facts. The refresh skill turns real trigger events into signal files and drops noise.\n\n${lines.join("\n\n")}\n`,
       ),
     );
     res.run_file = rel;

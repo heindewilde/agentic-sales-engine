@@ -42,7 +42,7 @@ site), so a malicious page could try to steer the agent; it can only push to its
 
 ## Tested (2026-10-18, Shotlift workspace)
 
-Every skill ran once on the platform (`forget-person` excluded: it erases real personal data). All finished `done`;
+Every skill ran once on the platform (with the 0.10 skill names; 0.11 merged them, see the README) (`forget-person` excluded: it erases real personal data). All finished `done`;
 skills without the input they need (call-prep without a meeting, log-outcome without an event, import without a file)
 stopped instead of inventing it. Claude cost per run, from the API credits:
 
@@ -63,9 +63,9 @@ Research per account: $1.08 (first run) → $0.67 → $0.51 (one researcher per 
 
 | Skill | When (Europe/Amsterdam) | Cap per run |
 |---|---|---|
-| sync `--icp fashion-midhigh-benelux` | Monday 07:00 | $3 |
-| lint `--mechanical` (plain code, no semantic pass) | Sunday 07:00 | $0.50 (a run costs ~$0.05) |
-| refresh `--icp fashion-midhigh-benelux` | 1st of the month, 07:00 | $3 |
+| refresh `--watch-only --icp fashion-midhigh-benelux` (news on watched accounts) | Monday 07:00 | $3 |
+| audit `--unattended` (mechanical checks + offline evals, no semantic pass) | Sunday 07:00 | $0.50 |
+| refresh `--icp fashion-midhigh-benelux` (watchlist + facts past their TTL) | 1st of the month, 07:00 | $3 |
 
 `inbox` turns finished scheduled runs into pull requests. Pause one in the Console (Deployments) or archive it.
 

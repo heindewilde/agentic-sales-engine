@@ -68,8 +68,8 @@ export async function health(ws: string): Promise<Health> {
         const { data } = await readDoc<{ status?: string }>(p);
         const hasScoring = existsSync(paths.scoring(ws, slug));
         icps.push({ slug, status: data.status ?? "draft", hasScoring });
-        if (data.status !== "approved") gates.push(`GATE 1 pending: ICP "${slug}" is ${data.status ?? "draft"} — review and approve it (/agentic-sales-engine:icp-build)`);
-        else if (!hasScoring) gates.push(`ICP "${slug}" has no scoring model yet (/agentic-sales-engine:scoring-design)`);
+        if (data.status !== "approved") gates.push(`GATE 1 pending: ICP "${slug}" is ${data.status ?? "draft"} — review and approve it (/agentic-sales-engine:icp)`);
+        else if (!hasScoring) gates.push(`ICP "${slug}" has no scoring model yet (/agentic-sales-engine:icp --scoring)`);
       } catch {
         problems.push(`icps/${slug}/icp.md has unreadable frontmatter`);
       }
@@ -117,7 +117,7 @@ export function formatBrief(h: Health): string {
   const lines = [`Sales engine workspace — provider tier ${h.tier.tier} (${h.tier.detail}).`];
   lines.push(h.claudeBilling === "api" ? "Claude: API key — billed per token; budgets cover Claude and data providers." : "Claude: your subscription — no per-token cost (plan usage limits apply); budgets only cap Exa/Firecrawl, don't ask for one.");
   lines.push(`${h.claudeBilling === "api" ? "Spend" : "Provider spend"} today: $${h.spentToday.toFixed(2)} of $${h.dayBudget.toFixed(2)}.` + (h.run ? ` Active run: ${h.run.run_id} (budget $${h.run.budget_usd}).` : ""));
-  if (h.icps.length === 0) lines.push("No ICP defined yet — start with /agentic-sales-engine:icp-build.");
+  if (h.icps.length === 0) lines.push("No ICP defined yet — start with /agentic-sales-engine:icp.");
   else lines.push(`ICPs: ${h.icps.map((i) => `${i.slug} [${i.status}${i.hasScoring ? ", scoring ✓" : ""}]`).join(", ")}.`);
   for (const [icp, s] of Object.entries(h.stages)) {
     lines.push(`Funnel ${icp}: ${Object.entries(s).map(([k, v]) => `${k} ${v}`).join(", ")}.`);
@@ -125,8 +125,8 @@ export function formatBrief(h: Health): string {
   for (const [icp, o] of Object.entries(h.outcomes)) {
     lines.push(
       `Outcomes ${icp}: ${o.accounts} ${o.accounts === 1 ? "account" : "accounts"} in outreach, ${o.resolved} resolved, ${o.engaged} engaged.` +
-        (o.needs_review ? ` ${o.needs_review} ${o.needs_review === 1 ? "needs" : "need"} a status update — run /agentic-sales-engine:review-outcomes.` : "") +
-        (o.resolved >= 30 ? " Enough for recalibration; consider /agentic-sales-engine:win-loss." : ""),
+        (o.needs_review ? ` ${o.needs_review} ${o.needs_review === 1 ? "needs" : "need"} a status update — run /agentic-sales-engine:outcomes.` : "") +
+        (o.resolved >= 30 ? " Enough for recalibration; consider /agentic-sales-engine:outcomes analyze." : ""),
     );
   }
   if (h.staleFacts) lines.push(`${h.staleFacts} facts are past their TTL (/agentic-sales-engine:refresh).`);

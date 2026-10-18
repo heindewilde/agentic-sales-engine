@@ -8,7 +8,7 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read, Write, Ed
 # Draft outreach (never sends)
 
 Read first: `${CLAUDE_PLUGIN_ROOT}/references/rules.md`, `${CLAUDE_PLUGIN_ROOT}/methodology/outreach.md`,
-`company/voice/profile.md` (if missing, suggest `/agentic-sales-engine:voice-profile` first — or draft with the
+`company/voice/profile.md` (if missing, suggest `/agentic-sales-engine:learn --voice` first — or draft with the
 methodology defaults and say so), `company/profile.md` (proof points), `learnings/*.md`, the ICP (persona pains).
 CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 
@@ -28,5 +28,5 @@ Per account:
 
 Finish with a table: account, person, channel, way in, file. Remind the user: edit freely, then
 `ase drafts mark <file> sent --member <id>` once sent (this starts outcome tracking; silence counts as no response
-after 21 days) or `edited` — the engine learns from their changes via `voice-profile --learn`.
+after 21 days) or `edited` — the engine learns from their changes via `/agentic-sales-engine:learn --voice --from-edits`.
 If the user explicitly asks for Gmail drafts and a Gmail tool is available, create drafts there too — never send.

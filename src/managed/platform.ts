@@ -121,6 +121,21 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
     }
   }
 
+  // skills removed or renamed in the repo leave the operator and the platform (a rename would otherwise leave orphans)
+  const current = new Set(listSkills(pluginRoot));
+  for (const [name, ref] of Object.entries(s.skills)) {
+    if (current.has(name)) continue;
+    delete s.skills[name];
+    saveState(s);
+    try {
+      for await (const v of c.beta.skills.versions.list(ref.id)) await c.beta.skills.versions.delete(v.id, { skill_id: ref.id });
+      await c.beta.skills.delete(ref.id);
+      log(`skill ${name}: removed (no longer in the repo)`);
+    } catch (e) {
+      log(`skill ${name}: dropped from the operator; the platform kept it (${(e as Error).message.slice(0, 120)})`);
+    }
+  }
+
   // the operator: every skill, the plugin's agents as subagents, and itself (for parallel chunks)
   const op = operatorDefinition();
   const skills = Object.values(s.skills).map((k) => ({ type: "custom" as const, skill_id: k.id, version: k.version }));

@@ -16,6 +16,6 @@ allowed-tools: Bash(bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts *), Read
    - Outcomes per ICP (if any): `ase outcomes stats --icp <slug>` → in flight vs resolved, engaged rate by tier with
      intervals, the tier signal; and `ase outcomes open` → how many accounts need a status update.
 3. End with **one** recommended next action and the command for it. Priority: problems → pending gates →
-   missing scoring model → accounts needing a status update (`/agentic-sales-engine:review-outcomes`) → stale facts on
+   missing scoring model → accounts needing a status update (`/agentic-sales-engine:outcomes`) → stale facts on
    shortlisted accounts → win-loss review when ≥ 10 new outcomes since the last
    review (or tier B outconverts A) → next funnel stage.
