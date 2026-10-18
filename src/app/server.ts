@@ -193,6 +193,8 @@ export async function serve(portOrOpts: number | ServeOptions = 4317, log: (l: s
           const { prDetails } = await import("../managed/platform.ts");
           return json(prDetails(q("url")));
         }
+        if (p === "/api/stack") return json(await (await import("./api/stack.ts")).stack(ws));
+        if (p === "/api/stack/check") return json(await (await import("./api/stack.ts")).check(q("name")));
         if (p === "/api/schedules") {
           const m = await load();
           return json({ schedules: m?.schedules ?? [] });

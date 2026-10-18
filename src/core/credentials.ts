@@ -19,6 +19,22 @@ export const KEYS = [
   "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS",
 ] as const;
 
+/**
+ * Keys only the credentials file holds, never the environment: the Managed Agents ones (an ANTHROPIC_API_KEY would
+ * switch the plugin to API billing). Reported by status as set or not; `keys set` doesn't write them.
+ */
+export const FILE_ONLY_KEYS = ["ASE_MANAGED_AGENTS_API_KEY", "ASE_MANAGED_AGENTS_GITHUB_TOKEN", "ASE_ANTHROPIC_ADMIN_KEY"] as const;
+
+/** Set or not, with the last 4 characters: never the value. */
+export function keyStatus(): Record<string, { set: boolean; value: string | null; from: "env" | "file" | null }> {
+  const file = credentialFileValues();
+  const out: Record<string, { set: boolean; value: string | null; from: "env" | "file" | null }> = {};
+  for (const k of KEYS) out[k] = { set: Boolean(process.env[k] || file[k]), value: mask(process.env[k] || file[k]), from: process.env[k] ? (file[k] === process.env[k] ? "file" : "env") : file[k] ? "file" : null };
+  const all = existsSync(credentialsPath()) ? parseEnv(readFileSync(credentialsPath(), "utf8")) : {};
+  for (const k of FILE_ONLY_KEYS) out[k] = { set: Boolean(all[k]), value: mask(all[k]), from: all[k] ? "file" : null };
+  return out;
+}
+
 export function credentialsPath(): string {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
   return join(base, "agentic-sales-engine", "credentials.env");

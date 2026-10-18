@@ -72,3 +72,24 @@ describe("drafts", () => {
     await expect(saveDraft(ws, "accounts/maasverhoeven.example/brief.md", "x")).rejects.toThrow("not a draft");
   });
 });
+
+describe("key status", () => {
+  test("the Managed Agents keys are reported as set or not, masked, never in full", async () => {
+    const { keyStatus } = await import("../../src/core/credentials.ts");
+    const prev = process.env.XDG_CONFIG_HOME;
+    const dir = mkdtempSync(join(tmpdir(), "ase-keys-"));
+    process.env.XDG_CONFIG_HOME = dir;
+    try {
+      const { mkdirSync } = await import("node:fs");
+      mkdirSync(join(dir, "agentic-sales-engine"), { recursive: true });
+      writeFileSync(join(dir, "agentic-sales-engine", "credentials.env"), "ASE_MANAGED_AGENTS_API_KEY=sk-ant-secret-value-1234\n");
+      const s = keyStatus();
+      expect(s.ASE_MANAGED_AGENTS_API_KEY).toEqual({ set: true, value: "…1234", from: "file" });
+      expect(s.ASE_ANTHROPIC_ADMIN_KEY!.set).toBe(false);
+      expect(JSON.stringify(s)).not.toContain("secret-value");
+    } finally {
+      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = prev;
+    }
+  });
+});
