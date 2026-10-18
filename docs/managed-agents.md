@@ -64,7 +64,7 @@ Research per account: $1.08 (first run) → $0.67 → $0.51 (one researcher per 
 | Skill | When (Europe/Amsterdam) | Cap per run |
 |---|---|---|
 | sync `--icp <icp>` | Monday 07:00 | $3 |
-| lint | Sunday 07:00 | $1.50 |
+| lint `--mechanical` (plain code, no semantic pass) | Sunday 07:00 | $0.50 (a run costs ~$0.05) |
 | refresh `--icp <icp>` | 1st of the month, 07:00 | $3 |
 
 `inbox` turns finished scheduled runs into pull requests. Pause one in the Console (Deployments) or archive it.
