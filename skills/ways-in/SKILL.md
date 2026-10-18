@@ -20,8 +20,10 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 - Matches refresh automatically after seed imports (`discover --seeds`); after discovery runs, `ase connections match`.
 - No ICP or accounts given → report the matches and stop. Otherwise continue below.
 
-Accounts: domains in `$ARGUMENTS`, else stage `scored` with tier A or B (`ase score rank --icp <slug> --stage scored`)
-whose scores the user reviewed (GATE 3). Interactive and not reviewed yet: show the ranking and ask first.
+Accounts: domains in `$ARGUMENTS` → exactly those; naming them is the GATE 3 approval (autopilot and batches name only
+accounts whose scores were confirmed), so work them through and don't hold them for GATE 3. No domains: interactive →
+show the tier A/B ranking (`ase score rank --icp <slug> --stage scored`) and ask which to take; unattended → stop and
+say GATE 3 is needed.
 Run `ase connections match` once first so new accounts get their warm matches.
 
 Per account:
@@ -36,7 +38,7 @@ Per account:
    Mention when the team member should be asked first how well they really know the person.
 4. Write all accounts in **one** `ase apply` file (`${CLAUDE_PLUGIN_ROOT}/references/output-format.md`): per account the
    `Ways in` section, its sources and a changelog. Writing Ways in makes the account `outreach_ready`: that is not a
-   gate (being asked to find ways in means its scores were reviewed, GATE 3; the next gate is the draft review), and
+   gate (GATE 3 is behind it, see Accounts; the next gate is the draft review), and
    cold trigger-based ways count. Hold an account back only when there is no usable way at all, or the only way is a
    warm intro the team member must confirm first: then set `"stage": "scored"`, add an open question
    (owner `ways_in`) saying what's needed, and list it as "held" in the final reply. If the warm-path picture changed
