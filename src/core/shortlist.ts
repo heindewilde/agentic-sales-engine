@@ -81,14 +81,33 @@ export function tickedDomains(text: string): string[] {
 }
 
 /** GATE 2: record the human approval on each ticked account and move it to `shortlisted`. */
-export async function approveShortlist(ws: string, icp: string, shortlistRel: string, by: string) {
+/** Every domain row in a shortlist file, ticked or not. */
+export function proposedDomains(text: string): string[] {
+  return [...new Set([...text.matchAll(/^\|\s*\[[ xX]\]\s*\|\s*([a-z0-9.-]+\.[a-z]{2,})\s*\|/gm)].map((m) => m[1]!))];
+}
+
+/** Tick exactly these rows (the app's choice, written back so the file records what was approved). */
+export function setTicks(text: string, chosen: string[]): string {
+  return text.replace(/^(\|\s*)\[[ xX]\](\s*\|\s*)([a-z0-9.-]+\.[a-z]{2,})(\s*\|)/gm, (_, a, b, d, c) => `${a}[${chosen.includes(d) ? "x" : " "}]${b}${d}${c}`);
+}
+
+/** GATE 2. `only`: approve exactly these proposed rows instead of the ticked ones (they must be in the proposal). */
+export async function approveShortlist(ws: string, icp: string, shortlistRel: string, by: string, only?: string[]) {
   const abs = join(ws, shortlistRel);
   if (!existsSync(abs)) throw new Error(`${shortlistRel} not found`);
   const cfg = await loadConfig(ws).catch(() => null);
   if (cfg && cfg.members.length && !cfg.members.some((m) => m.id === by)) {
     throw new Error(`"${by}" is not a member in ase.config.yaml — approvals must name a team member`);
   }
-  const { data, body } = await readDoc<Record<string, unknown>>(abs);
+  const doc0 = await readDoc<Record<string, unknown>>(abs);
+  const data = doc0.data;
+  let body = doc0.body;
+  if (only) {
+    const rows = proposedDomains(body);
+    const extra = only.filter((d) => !rows.includes(d));
+    if (extra.length) throw new Error(`not in this shortlist: ${extra.join(", ")}`);
+    body = setTicks(body, only);
+  }
   const domains = tickedDomains(body);
   const approved: string[] = [];
   const skipped: { domain: string; reason: string }[] = [];

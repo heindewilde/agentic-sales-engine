@@ -35,7 +35,7 @@ try {
   else if (cmd === "status") out(managedState());
   else if (cmd === "telemetry") out(await connectTelemetry());
   else if (cmd === "map") {
-    const { serve } = await import("../map/server.ts");
+    const { serve } = await import("../app/server.ts");
     // the local workspace gives the live funnel (accounts per stage); remembered for next time
     const { managedState: st } = await import("./platform.ts");
     const ws = f.workspace ?? (st() as { map_workspace?: string }).map_workspace;
@@ -45,7 +45,7 @@ try {
       const p = join(credentialsPath(), "..", "managed.json");
       writeFileSync(p, `${JSON.stringify({ ...JSON.parse(readFileSync(p, "utf8")), map_workspace: f.workspace }, null, 2)}\n`, { mode: 0o600 });
     }
-    const url = await serve(Number(f.port ?? 4317), console.error, ws);
+    const { url } = await serve(Number(f.port ?? 4317), console.error, ws);
     if (process.platform === "darwin") Bun.spawn(["open", url]);
     await new Promise(() => {}); // keep serving until stopped
   } else if (cmd === "inbox") out((await inbox(Number(params[0] ?? 7), console.error, f.repo)).map((r) => ({ ...r, message: r.message.slice(0, 300) })));

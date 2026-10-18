@@ -87,5 +87,5 @@ A local, read-only view of how the engine works:
   actually use it); select a block above and its chain lights up here. Click a node to read the file: markdown is
   rendered, and a scoring model shows as a table of factors and levels.
 
-Which files a block reads is derived from the skill and agent text (`src/map/brain.ts`); the blocks themselves are
-described in `src/map/process.ts`.
+Which files a block reads is derived from the skill and agent text (`src/app/brain.ts`); the blocks themselves are
+described in `src/app/process.ts`.

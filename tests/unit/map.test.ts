@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { deflateRawSync } from "node:zlib";
 import { extractChecks } from "../../src/managed/platform.ts";
-import { extractRefs, normalizeWorkspacePath, skillMdFromZip, type AgentVersion } from "../../src/map/data.ts";
-import { compactDiff, lineDiff } from "../../src/map/diff.ts";
-import { configChanges } from "../../src/map/server.ts";
+import { extractRefs, normalizeWorkspacePath, skillMdFromZip, type AgentVersion } from "../../src/app/data.ts";
+import { compactDiff, lineDiff } from "../../src/app/diff.ts";
+import { configChanges } from "../../src/app/server.ts";
 
 /** A one-file zip (deflated), like the platform returns for a skill version. */
 function zipOf(name: string, text: string): Buffer {
@@ -59,7 +59,7 @@ describe("agent map", () => {
 
 describe("the brain", () => {
   test("every engine file in a layer; each block's context derived from its playbooks and agent", async () => {
-    const { buildBrain } = await import("../../src/map/brain.ts");
+    const { buildBrain } = await import("../../src/app/brain.ts");
     const b = buildBrain(null);
     const layers = new Set(b.files.map((f) => f.layer));
     expect([...layers].sort()).toEqual(["agent", "method", "playbook", "template"]);
@@ -81,7 +81,7 @@ describe("the brain", () => {
 });
 
 test("brain flow: knowledge → method → playbooks → agents → steps, only real references", async () => {
-  const { buildBrain } = await import("../../src/map/brain.ts");
+  const { buildBrain } = await import("../../src/app/brain.ts");
   const g = buildBrain(null).graph;
   const col = (id: string) => g.nodes.find((n) => n.id === id)?.col;
   expect(col("p:research")).toBe(2);
