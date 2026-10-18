@@ -11,8 +11,8 @@ import { tier } from "../core/doctor.ts";
 import { claudeBilling } from "../core/billing.ts";
 import { currentRun, spentForRun, spentToday } from "../core/ledger.ts";
 import { callProvider, estimateCall, INPUT_SCHEMAS } from "../core/providers/gateway.ts";
-import { OPS, ProviderError, type CompanyHit, type Op } from "../core/providers/types.ts";
-import { persistCandidates } from "../core/accounts.ts";
+import { OPS, ProviderError, type Op } from "../core/providers/types.ts";
+import { persistDiscovery } from "../core/discovery.ts";
 import { runSync } from "../core/watch.ts";
 import { initTracing, shutdownTracing } from "../core/tracing.ts";
 import { z } from "zod";
@@ -74,21 +74,7 @@ for (const op of Object.keys(TOOLS) as Op[]) {
     if (!ws) return text({ error: "No sales-engine workspace found (ase.config.yaml). Run /agentic-sales-engine:setup." }, true);
     try {
       const res = await callProvider(op, args, { ws });
-      if (op === "discover_companies" && typeof args.icp === "string") {
-        const hits = res.results as CompanyHit[];
-        const runId = (args.run_id as string | undefined) ?? `${new Date().toISOString().slice(0, 10)}-discover`;
-        const saved = await persistCandidates(ws, args.icp, runId, `exa: "${String(args.query)}"`, hits.map((h) => ({
-          name: h.name, domain: h.domain, url: h.url, description: h.description, employees: h.employees ?? null,
-          hq_country: h.hq_country, hq_city: h.hq_city, founded: h.founded ?? null,
-          source_url: h.url, confidence: 0.6, method: "exa" as const, raw_ref: h.raw_ref ?? res.raw_ref,
-        })));
-        return text({
-          provider: res.provider, cost_usd: res.cost_usd, budget: res.budget, raw_ref: res.raw_ref, dropped_dnc: res.dropped_dnc,
-          returned: hits.length, created: saved.created, added_to_icp: saved.added_to_icp, already_known: saved.already_in_icp.length,
-          skipped_no_domain: saved.skipped_no_domain.length, run_id: saved.run_id,
-          new_share: hits.length ? Math.round((saved.created.length / hits.length) * 100) / 100 : 0,
-        });
-      }
+      if (op === "discover_companies" && typeof args.icp === "string") return text(await persistDiscovery(ws, args, res));
       return text(res);
     } catch (e) {
       const code = e instanceof ProviderError ? e.code : "provider_failed";

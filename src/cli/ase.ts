@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import { parseArgs } from "node:util";
+import { persistDiscovery } from "../core/discovery.ts";
 import { CONTRACTS, checkAccount } from "../core/contracts.ts";
 import { reindexAll } from "../core/db.ts";
 import { formatBrief, health, tier } from "../core/doctor.ts";
@@ -262,7 +263,13 @@ switch (cmd) {
     }
     const opts = { ws: ws(), provider: flags.provider as ProviderName | undefined };
     try {
-      out(flags.estimate ? await estimateCall(op, input, opts) : await callProvider(op, input, opts));
+      if (flags.estimate) out(await estimateCall(op, input, opts));
+      else {
+        const res = await callProvider(op, input, opts);
+        const args = input as Record<string, unknown>;
+        // same as the MCP tool: discovery with an icp saves the hits as candidates
+        out(op === "discover_companies" && typeof args?.icp === "string" ? await persistDiscovery(opts.ws, args, res) : res);
+      }
     } catch (e) {
       out({ error: (e as Error).message, code: e instanceof ProviderError ? e.code : "provider_failed" });
       process.exitCode = 3;
