@@ -62,7 +62,7 @@ export async function serve(port = 4317, log: (l: string) => void = console.erro
         if (url.pathname === "/api/refresh") return json(await load(true));
         if (url.pathname === "/api/process") {
           brain = buildBrain(workspace); // cheap: local files only, so always fresh
-          return json({ steps: brain.steps, files: brain.files, actors: ACTORS, workspace: brain.workspace });
+          return json({ steps: brain.steps, files: brain.files, graph: brain.graph, actors: ACTORS, workspace: brain.workspace });
         }
         if (url.pathname === "/api/file") {
           const f = readBrainFile(brain ?? (brain = buildBrain(workspace)), url.searchParams.get("id") ?? "");

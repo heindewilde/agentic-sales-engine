@@ -4,7 +4,18 @@ import { RULES_DIGEST } from "../core/context.ts";
 import { parseDoc } from "../core/frontmatter.ts";
 import { operatorDefinition } from "../managed/agents.ts";
 import { extractRefs } from "./data.ts";
-import { PROCESS, type Block } from "./process.ts";
+import { ACTORS, PROCESS, type Block } from "./process.ts";
+
+/** A short name for a file, the way you'd say it. */
+function friendly(f: { path: string; title: string }): string {
+  const names: [RegExp, string][] = [
+    [/icps\/[^/]+\/icp\.md$/, "ICP"], [/icps\/[^/]+\/scoring\.yaml$/, "Scoring model"], [/icps\/[^/]+\/calibration\.md$/, "Calibration"],
+    [/learnings\/corrections\.md$/, "Corrections"], [/learnings\/preferences\.md$/, "Preferences"], [/company\/profile\.md$/, "Company profile"],
+    [/company\/voice\//, "Writing voice"], [/^ase\.config\.yaml$/, "Settings"], [/^dnc\.yaml$/, "Do-not-contact list"],
+    [/references\/rules\.md$/, "Operating rules"], [/references\/judging\.md$/, "Judging rules"],
+  ];
+  return names.find(([re]) => re.test(f.path))?.[1] ?? f.title.replace(/\s*\(.*?\)\s*$/, "").replace(/:.*$/, "");
+}
 
 /**
  * "The brain": every file that shapes what the agents do, and per process block the context it gets.
@@ -28,7 +39,11 @@ export interface BrainFile {
 export type Category = "instructions" | "playbook" | "method" | "knowledge" | "data";
 export interface ContextItem { id: string; label: string; category: Category; tokens: number; note?: string }
 export interface ResolvedBlock extends Block { context: ContextItem[]; tokens: Record<Category, number> }
-export interface Brain { files: BrainFile[]; steps: (Omit<(typeof PROCESS)[number], "blocks"> & { blocks: ResolvedBlock[] })[]; workspace: string | null }
+export interface GNode { id: string; col: 0 | 1 | 2 | 3 | 4; label: string; sub: string; tokens: number; ref: string | null }
+export interface GEdge { from: string; to: string }
+/** The brain as a flow: your knowledge → rules & method → playbooks → agents → process steps. */
+export interface Graph { nodes: GNode[]; edges: GEdge[] }
+export interface Brain { files: BrainFile[]; steps: (Omit<(typeof PROCESS)[number], "blocks"> & { blocks: ResolvedBlock[] })[]; graph: Graph; workspace: string | null }
 
 const tok = (s: string) => Math.round(s.length / 4);
 const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
@@ -150,7 +165,63 @@ export function buildBrain(workspace?: string | null): Brain {
       return { ...b, context, tokens };
     }),
   }));
-  return { files, steps, workspace: workspace ?? null };
+  return { files, steps, graph: buildGraph(files, steps), workspace: workspace ?? null };
+}
+
+/**
+ * Every line is a real reference: a playbook's or agent's text naming a file (or the context digest it calls), a block
+ * where an agent runs a playbook, or a block in a step. Templates fold into their playbook; unused files are left out.
+ */
+function buildGraph(files: BrainFile[], steps: Brain["steps"]): Graph {
+  const nodes = new Map<string, GNode>();
+  const edges = new Map<string, GEdge>();
+  const byId = new Map(files.map((f) => [f.id, f]));
+  const fileNode = (f: BrainFile) => {
+    const col = f.layer === "knowledge" ? 0 : 1;
+    const id = `f:${f.id}`;
+    if (!nodes.has(id)) nodes.set(id, { id, col, label: friendly(f), sub: f.path, tokens: f.tokens, ref: f.id });
+    return id;
+  };
+  const link = (from: string, to: string) => edges.set(`${from}>${to}`, { from, to });
+  const refsInto = (to: string, text: string, viaDigest: boolean) => {
+    const r = extractRefs(text);
+    for (const rel of r.engine) {
+      const f = byId.get(`engine:${rel}`);
+      if (f && f.layer === "method") link(fileNode(f), to);
+    }
+    const ws = new Set(r.workspace);
+    if (viaDigest) for (const p of ["icps/*/icp.md", "icps/*/scoring.yaml", "learnings/*.md"]) ws.add(p);
+    for (const p of ws) for (const f of files.filter((x) => x.layer === "knowledge" && patternRe(p).test(x.path))) link(fileNode(f), to);
+    if (viaDigest) {
+      const rules = byId.get("engine:references/rules.md");
+      if (rules) link(fileNode(rules), to);
+    }
+  };
+  const blocks = steps.flatMap((s) => s.blocks.map((b) => ({ b, s })));
+  const digestSkills = new Set(blocks.filter(({ b }) => b.uses?.includes("ase-context") || b.uses?.includes("evidence-pack")).flatMap(({ b }) => b.skills ?? []));
+  for (const { b, s } of blocks) {
+    if (b.gate && !b.skills) continue;
+    const step = `s:${s.id}`;
+    if (!nodes.has(step)) nodes.set(step, { id: step, col: 4, label: `${s.n} · ${s.short}`, sub: s.title, tokens: 0, ref: null });
+    const agent = b.agent ? `a:${b.agent}` : null;
+    if (agent && !nodes.has(agent)) {
+      const ref = b.agent === "operator" ? "virtual:operator" : `engine:agents/${b.agent}.md`;
+      const f = byId.get(ref);
+      nodes.set(agent, { id: agent, col: 3, label: ACTORS.find((a) => a.id === b.agent)?.name ?? b.agent!, sub: ref.replace(/^\w+:/, ""), tokens: f?.tokens ?? 0, ref });
+      if (b.agent !== "operator") refsInto(agent, read(join(ENGINE, "agents", `${b.agent}.md`)), false);
+    }
+    if (agent) link(agent, step);
+    for (const sk of b.skills ?? []) {
+      const id = `p:${sk}`;
+      const ref = `engine:skills/${sk}/SKILL.md`;
+      if (!nodes.has(id)) {
+        nodes.set(id, { id, col: 2, label: sk, sub: byId.get(ref)?.title ?? "", tokens: byId.get(ref)?.tokens ?? 0, ref });
+        refsInto(id, read(join(ENGINE, "skills", sk, "SKILL.md")), digestSkills.has(sk));
+      }
+      link(id, agent ?? step); // your own blocks (logging outcomes) follow a playbook without an agent
+    }
+  }
+  return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
 /** Text of a brain file or a workspace example, only for paths the brain knows or account-level outputs. */

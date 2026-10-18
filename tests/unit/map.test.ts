@@ -77,3 +77,18 @@ describe("the brain", () => {
     expect(b.files.find((f) => f.id === "engine:references/judging.md")!.used_by).toContain("research-judge");
   });
 });
+
+test("brain flow: knowledge → method → playbooks → agents → steps, only real references", async () => {
+  const { buildBrain } = await import("../../src/map/brain.ts");
+  const g = buildBrain(null).graph;
+  const col = (id: string) => g.nodes.find((n) => n.id === id)?.col;
+  expect(col("p:research")).toBe(2);
+  expect(col("a:account-researcher")).toBe(3);
+  expect(col("s:research")).toBe(4);
+  const has = (from: string, to: string) => g.edges.some((e) => e.from === from && e.to === to);
+  expect(has("a:account-researcher", "s:research")).toBe(true); // the Researcher works in step 4
+  expect(has("p:research", "a:account-researcher")).toBe(true); // following the research playbook
+  expect(has("f:engine:references/judging.md", "a:factor-judge")).toBe(true); // the Judge's instructions name the judging rules
+  expect(g.edges.every((e) => (col(e.from) ?? 9) < (col(e.to) ?? -1))).toBe(true); // lines only flow left to right
+  expect(g.nodes.some((n) => n.ref?.startsWith("engine:templates/"))).toBe(false); // templates fold into playbooks
+});
