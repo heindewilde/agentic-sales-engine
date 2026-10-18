@@ -423,3 +423,34 @@ export async function connectTelemetry(): Promise<{ id: string; endpoint: string
 }
 
 export const managedState = loadState;
+
+/** What a cloud run's pull request changes, for review in the app. */
+export function prDetails(pr: string) {
+  const r = Bun.spawnSync(["gh", "pr", "view", pr, "--json", "title,state,additions,deletions,files,body,mergeable,url,headRefName"]);
+  if (r.exitCode !== 0) throw new Error(r.stderr.toString().trim().slice(0, 300) || "gh pr view failed");
+  return JSON.parse(r.stdout.toString()) as { title: string; state: string; additions: number; deletions: number; files: { path: string; additions: number; deletions: number }[]; body: string; mergeable: string; url: string; headRefName: string };
+}
+
+/** Accept a cloud run: squash-merge its pull request, then pull it into the local workspace and reindex. */
+export async function mergeRun(pr: string, workspace: string, log: (l: string) => void = console.error) {
+  const m = Bun.spawnSync(["gh", "pr", "merge", pr, "--squash", "--delete-branch"]);
+  if (m.exitCode !== 0 && !/already merged/i.test(m.stderr.toString())) throw new Error(m.stderr.toString().trim().slice(0, 300) || "merge failed");
+  log(`merged ${pr}`);
+  const dirty = Bun.spawnSync(["git", "-C", workspace, "status", "--porcelain"]).stdout.toString().trim();
+  if (dirty) return { merged: true, pulled: false, note: "merged on GitHub; your local workspace has uncommitted changes, so pull it yourself after committing them" };
+  const p = Bun.spawnSync(["git", "-C", workspace, "pull", "--ff-only"]);
+  if (p.exitCode !== 0) return { merged: true, pulled: false, note: p.stderr.toString().trim().slice(0, 300) };
+  const { reindexAll } = await import("../core/db.ts");
+  await reindexAll(workspace);
+  return { merged: true, pulled: true, note: "merged and pulled into your workspace" };
+}
+
+/** Pause, resume or start a scheduled run now. */
+export async function scheduleAction(depId: string, action: "pause" | "unpause" | "run") {
+  const known = Object.values(loadState().deployments ?? {});
+  if (!known.includes(depId)) throw new Error("not one of this engine's schedules");
+  const c = client();
+  if (action === "pause") return c.beta.deployments.pause(depId);
+  if (action === "unpause") return c.beta.deployments.unpause(depId);
+  return c.beta.deployments.run(depId);
+}

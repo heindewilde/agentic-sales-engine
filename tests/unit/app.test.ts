@@ -77,3 +77,31 @@ describe("app work API", () => {
     expect(bad.error).toContain("not a member");
   });
 });
+
+describe("run manager", () => {
+  test("a local run streams its lines, finishes, allows one local run at a time, and is remembered", async () => {
+    const { Runs } = await import("../../src/app/runs.ts");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const fakeBatch = (async (o: { log?: (l: string) => void; dryRun?: boolean }) => {
+      if (o.dryRun) return { accounts: 2, chunks: 1, model: "haiku", claude_billing: "subscription" };
+      o.log?.("[1/1] ways-in a.example, b.example");
+      await gate;
+      return { advanced: 2, processed: 2, not_advanced: [], spent_usd: 0.04, stopped: null };
+    }) as never;
+    const runs = new Runs(ws, PLUGIN_ROOT, { batch: fakeBatch });
+    expect((await runs.plan({ where: "local", skill: "ways-in", icp: ICP, budget: 1, by: "hein" })).accounts).toBe(2);
+    const job = runs.start({ where: "local", skill: "ways-in", icp: ICP, budget: 1, by: "hein" });
+    expect(() => runs.start({ where: "local", skill: "research", icp: ICP, budget: 1, by: "hein" })).toThrow("already going");
+    expect(() => runs.start({ where: "local", skill: "nope", budget: 1, by: "hein" })).toThrow("not a skill");
+    const res = runs.stream(job.id);
+    release();
+    const text = await res.text();
+    expect(text).toContain("ways-in a.example, b.example");
+    expect(text).toContain("event: end");
+    expect(runs.get(job.id)!.status).toBe("done");
+    expect(runs.get(job.id)!.summary).toContain("2 of 2 accounts moved on");
+    // a new manager (the app restarted) still lists it
+    expect(new Runs(ws, PLUGIN_ROOT).list().some((j) => j.id === job.id && j.status === "done")).toBe(true);
+  });
+});
