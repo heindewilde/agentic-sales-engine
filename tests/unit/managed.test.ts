@@ -26,7 +26,8 @@ test("operator: every provider op via the CLI, research and enrich-light recipes
   expect(op.system).toContain("STATUS: question");
   expect(op.system).toContain("STATUS: done");
   const m = runMessage({ repo: "o/shotlift-sales", branch: "managed/x", baseBranch: "master", skill: "ways-in", args: "acme.com --icp i", approvedBy: "hein", today: "2026-10-18" });
-  expect(m).toContain("git checkout -q -b managed/x");
+  expect(m).toContain('git checkout -q -b "managed/x"');
+  expect(runMessage({ repo: "o/r", baseBranch: "master", skill: "sync", args: "", approvedBy: "hein" })).toContain("managed/$(date +%F)-sync-"); // scheduled: branch made in the sandbox
   expect(m).toContain("/agentic-sales-engine:ways-in acme.com --icp i");
   expect(m).toContain("Approver for gates: `hein`");
 });
