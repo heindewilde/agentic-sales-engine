@@ -15,7 +15,7 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
 - **Only weights/tiers changed** since the last score: `ase score recompute --icp <slug>` (no judging needed). Done.
 - **Otherwise:** `ase context <domains…> --icp <slug> --mode full`, judge every factor in `factors` per `judging.md`
   (auto factors are computed by the engine), write `{"icp":…,"accounts":[{"domain":…,"judgements":[…],"mode":"full"}]}`
-  (see `${CLAUDE_PLUGIN_ROOT}/references/output-format.md`) to `.ase/tmp/score-<first-domain>.json` and run
+  to `.ase/tmp/score-<first-domain>.json` (each judgement shaped as `judging.md` ends) and run
   `ase apply <file>`. For an independent second opinion on a disputed score, use the `factor-judge` agent on that one account.
 - **--explain <domain>:** read `accounts/<d>/scores/<slug>.md` and explain the total in plain language: which factors
   carry it, which unknowns cap it (upside vs total), and the one piece of evidence that would move it most.
