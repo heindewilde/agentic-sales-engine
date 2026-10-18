@@ -18,21 +18,13 @@ unsent draft for the same person and channel (`ase drafts list --account <d>`).
 Per account:
 1. Read `brief.md` (Ways in, Situation & triggers, People map, Risks), the score file, signals, the target person's
    file. Check the recipient isn't on the do-not-contact list (`ase dnc check <linkedin-url>`).
-2. **Freshness:** if the trigger you'll reference is older than ~90 days, run one `search_news` since that date; don't
-   congratulate someone on news that's been overtaken.
-3. **Pick the channel from the top way in:**
-   - Warm path → `intro_request`: a short note to the team member (why this account, why now) plus a 2–3 sentence
-     forwardable blurb. Ask them first how well they know the person.
-   - Trigger / cold → `email` (step 1, ≤ 100 words) and/or `linkedin_connect` (≤ 300 characters, no pitch) +
-     `linkedin_dm` (after acceptance).
-4. **Write** (trigger → insight → ask): one true, specific, dated observation; one insight connecting it to a pain the
-   persona has (from the ICP); a low-friction interest-based ask. One idea per message. Use the voice profile.
-   Every claim about the prospect gets a footnote to its source (brief/signal/raw URL). Never invent familiarity,
-   numbers, or mutual connections.
-5. Save as `accounts/<d>/drafts/<YYYY-MM-DD>-<person-id>-<channel>.md` (template
+2. Write the draft(s) as `methodology/outreach.md` says: re-check a trigger older than ~90 days with one
+   `search_news` since that date, pick the channel from the top way in (for a warm path, ask the team member first how
+   well they know the person), and use the voice profile.
+3. Save as `accounts/<d>/drafts/<YYYY-MM-DD>-<person-id>-<channel>.md` (template
    `${CLAUDE_PLUGIN_ROOT}/templates/draft.md`; `based_on` lists the files you relied on). The hook rejects drafts
    without a cited fact or to DNC recipients. Then freeze the baseline: `ase drafts snapshot <file>`.
-6. Optional follow-ups (step 2–3, different angle each — a proof point, a question) only if the user asks.
+4. Optional follow-ups (step 2–3, different angle each — a proof point, a question) only if the user asks.
 
 Finish with a table: account, person, channel, way in, file. Remind the user: edit freely, then
 `ase drafts mark <file> sent --member <id>` once sent (this starts outcome tracking; silence counts as no response

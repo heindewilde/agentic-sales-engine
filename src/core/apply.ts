@@ -219,7 +219,16 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
   if (u.judgements || u.mode) {
     const mode = u.mode ?? "light";
     const scoring = await loadScoring(ws, icp);
-    const judged = (u.judgements ?? []).map((j) => FactorScore.safeParse(j)).filter((r) => r.success).map((r) => r.data!);
+    const parsed = (u.judgements ?? []).map((j) => ({ j, r: FactorScore.safeParse(j) }));
+    // an invalid judgement is an error to fix, not something to drop: a silently missing factor skews the score
+    const invalid = parsed.filter((p) => !p.r.success).map((p) => `judgement ${(p.j as { id?: string })?.id ?? "?"}: ${p.r.error!.issues.map((i) => i.message).join("; ")}`);
+    if (invalid.length) {
+      res.errors.push(...invalid);
+      res.stage ??= (await readDoc<Company>(cp)).data.icp_status?.[icp]?.stage ?? null;
+      res.ok = false;
+      return res;
+    }
+    const judged = parsed.map((p) => p.r.data!);
     const fresh = (await readDoc<Company>(cp)).data;
     const sdir = join(ws, "accounts", u.domain, "signals");
     const signals = existsSync(sdir) ? await Promise.all(readdirSync(sdir).filter((f) => f.endsWith(".md")).map(async (f) => (await readDoc<Signal>(join(sdir, f))).data)) : [];

@@ -13,20 +13,9 @@ existing `icps/<slug>/scoring.yaml` and `calibration.md` if revising, and the le
 CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (below: `ase`).
 
 ## 1. Draft factors (new model) or diagnose (revision)
-- New: propose 8–12 factors — about 5 **fit**, 3 **intent**, 2 **access** — derived from the ICP's firmographics,
-  technographics, triggers and personas, and above all from the **separating traits** found in the lookalike research.
-- Each factor: `id`, `name`, `group`, `weight` (1–5), `question`, four **concrete, observable** anchors (0–3) that two
-  judges would apply identically, `evidence_hint`, `light: true` only if judgeable from a homepage + basic
-  firmographics, and `knockout: {level_lte: 0}` only for hard exclusions.
-- Numeric factors (headcount, revenue, number of sites…) get an `auto` rule so the engine scores them from the fact
-  itself — cheaper and perfectly consistent: `auto: { fact: employees, levels: { 0: "<50 | >5000", 1: "50-99", 2: "100-149", 3: "150-700" } }`.
-- Time-window intent factors ("a new store/market/investment in the last 12 months") count dated signals instead
-  of being re-judged: `auto: { signals: { types: [expansion, funding, mna], within_days: 365 }, levels: { 0: "0", 2: "1", 3: ">=2" } }`.
-  Signal types: funding, hiring, exec_change, expansion, mna, launch, partnership, tech_change, news, other.
-- Give judged factors one short `examples` line per level where the anchor leaves room for interpretation
-  (`examples: { 2: "one new store announced in March", 3: "two stores plus a new country this year" }`). The judge
-  and the stability eval both see them; sharper examples are the cheapest way to more consistent scores.
-- Present as a table (factor, group, weight, anchors in short, light?, knockout?) and let the user adjust.
+- New: propose factors as `methodology/scoring.md` describes (groups, anchors, evidence hints, light, knockouts, auto
+  rules, examples), derived from the ICP and the separating traits in the lookalike research. Present them as a table
+  (factor, group, weight, anchors in short, light?, knockout?) and let the user adjust.
 - Revision: run `ase score backtest` and `ase score sensitivity` first and start from what they show.
 
 ## 2. Write the model
@@ -35,8 +24,8 @@ Before editing an existing model: `ase scoring archive --icp <slug>`, then bump 
 the hook validates it (group weights sum to 1, every weighted group has factors, unique ids).
 
 ## 3. Calibrate against known customers
-Need ≥ 3 good and ≥ 2 bad in `known-customers.csv`; if fewer, ask the user for more or run with what exists and say
-the result is indicative only.
+Use the known customers in `known-customers.csv` (how many are enough: `methodology/scoring.md`); with fewer, ask for
+more or say the result is indicative only.
 - Make sure each has a research note in `icps/<slug>/calibration/research/<domain>.md` (run `icp-analyst` for missing
   ones; ask it to cover each factor's `evidence_hint`).
 - For each known customer, run the `factor-judge` agent (parallel, ≤ 10 at a time) with today's date, mode `full`, the

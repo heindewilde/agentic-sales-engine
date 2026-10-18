@@ -68,7 +68,9 @@ describe("the brain", () => {
     const ids = research.context.map((c) => c.id);
     expect(ids).toContain("engine:agents/account-researcher.md"); // its own instructions
     expect(ids).toContain("engine:skills/research/SKILL.md"); // the playbook
-    expect(ids).toContain("engine:references/rules.md"); // named in its instructions
+    expect(ids).toContain("digest:rules"); // the rules arrive as the digest in `ase context`, not the whole file
+    expect(ids).not.toContain("engine:references/rules.md");
+    expect(ids).toContain("engine:references/output-format.md"); // the one description of what it writes
     expect(research.tokens.instructions).toBeGreaterThan(0);
     const judge = blocks.get("research-judge")!;
     expect(judge.context.map((c) => c.id)).toContain("engine:references/judging.md");

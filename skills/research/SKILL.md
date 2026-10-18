@@ -18,27 +18,14 @@ CLI: `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts` (`ase` below).
    (2 accounts per session). Otherwise do the fast path below yourself — **no sub-agents** (each one re-reads everything).
 
 ## Fast path (1–2 accounts)
-1. `ase context <domains…> --icp <slug> --mode full` → ICP (personas, triggers), all factors with anchors and
-   evidence hints, auto factors, rules digest, learnings, each account's facts, snapshot, open questions, signals and
-   team warm matches.
-2. Research cheapest-first, batching calls across accounts where possible:
-   - **one** `fetch_pages` for About/Team/Careers/News pages, with `focus` = the open questions + factor evidence hints,
-     `max_chars` 3000 (job ads reveal systems and pains; leadership pages reveal people). Include the pages that settle
-     factors whose level 0 is an absence (e.g. the careers page for hiring factors) and, when a factor needs prices, one
-     product or collection page: then "checked, not there" can be judged as level 0 instead of unknown;
-   - `search_news` for each company since 18 months ago (local language too if not English) → dated trigger events;
-   - `find_people` once per ICP persona (current company must be the account; business data only; never LinkedIn scraping);
-   - `extract` or `research` (effort low) **only** for important questions the above didn't answer.
-3. Write **one** JSON file `.ase/tmp/research-<first-domain>.json` (same shape as `ase apply`; see enrich-light) with,
-   per account: `facts`; `sections` for "Business & offering", "Situation & triggers" (dated), "Technographics",
-   "People map", "Risks & fit concerns" (footnoted, concise); `sources`; `open_questions` (every question either
-   `- [x] … → answer[^id]` or `- [ ] … (unknown after research; owner: <stage>)`); `people`; `signals` (event date,
-   relevance 0–3); `judgements` for **all** factors in `factors` (`"mode": "full"`); `"stage": "researched"`; `changelog`.
-   Quote evidence exactly from the pages/snapshots you read and pass their `raw_ref`. Every web source in `sources` is
-   `{label, url, date, quote, raw_ref}`: the quote holds the exact words its statements rest on, and every detail in a
-   statement (a number, a country, a role, a date) must be in one of its footnotes' quotes. `ase apply` rejects a quote
-   that isn't on the saved page, and a number or date in a statement that none of its quotes contains; then fix the quote, cite the page that does say it, or drop the detail.
-4. `ase apply <file>` → each account ends at `scored` (or lists errors to fix and re-apply).
+1. `ase context <domains…> --icp <slug> --mode full`: ICP, factors with evidence hints, rules, learnings and each
+   account's current files in one JSON.
+2. Research each account as `${CLAUDE_PLUGIN_ROOT}/methodology/research.md` describes, batching calls across accounts
+   where you can (one `fetch_pages` per account, `focus` + `max_chars` 1500).
+3. Write **one** file `.ase/tmp/research-<first-domain>.json` as `${CLAUDE_PLUGIN_ROOT}/references/output-format.md`
+   shows: per account facts, the research sections, sources, open questions, people, signals, judgements for all
+   factors (`"mode": "full"`, per `${CLAUDE_PLUGIN_ROOT}/references/judging.md`), `"stage": "researched"`, changelog.
+4. `ase apply <file>`: each account ends at `scored`, or it lists errors; fix only those and apply again.
 5. Interactive: one line per account (light → full score, tier, top trigger, best way in or "none yet") and spend.
    Unattended: ≤ 3 lines. Then GATE 3: the user reviews the scores; `/agentic-sales-engine:ways-in` follows for the
    tier A/B accounts they confirm.

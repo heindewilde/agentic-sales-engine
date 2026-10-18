@@ -13,8 +13,20 @@ Default group weights 0.5 / 0.3 / 0.2. Fit dominates because timing and access c
 - a **question** a researcher could answer,
 - **anchored levels 0–3** described concretely enough that two judges would agree,
 - a **weight** (relative, within its group),
+- an `evidence_hint`: where a researcher finds the evidence,
 - `light: true` if it can be judged cheaply from a homepage + firmographics (used in the wide funnel),
-- optionally a **knockout**: a *known* level ≤ threshold excludes the account (e.g. company size level 0).
+- optionally a **knockout**: a *known* level ≤ threshold excludes the account (e.g. company size level 0), only for
+  hard exclusions.
+
+Factors come above all from the **separating traits** the lookalike research found between good and bad customers.
+Make the engine, not the judge, decide where it can:
+- **Numeric factors** (headcount, revenue, number of sites) get an `auto` rule on the fact:
+  `auto: { fact: employees, levels: { 0: "<50 | >5000", 1: "50-99", 2: "100-149", 3: "150-700" } }`.
+- **Time-window intent factors** ("a new store, market or investment in the last 12 months") count dated signals:
+  `auto: { signals: { types: [expansion, funding, mna], within_days: 365 }, levels: { 0: "0", 2: "1", 3: ">=2" } }`.
+- **Judged factors** get one short `examples` line per level where the anchor leaves room for interpretation
+  (`examples: { 2: "one new store announced in March", 3: "two stores plus a new country this year" }`); sharper
+  examples are the cheapest way to more consistent scores.
 
 Good factors **discriminate** between known good and bad customers. A factor every account scores 2 on is noise.
 
@@ -43,7 +55,8 @@ Consistency comes in three layers:
 
 ## Designing and calibrating
 1. Draft factors from the ICP (its traits, triggers and personas).
-2. **Back-test** on known good and bad customers: the median good customer should outrank ≥ 75% of all other
+2. **Back-test** on known good and bad customers (at least 3 good and 2 bad; fewer makes the result indicative only):
+   the median good customer should outrank ≥ 75% of all other
    scored accounts (bad + prospects), and AUC (good vs bad) ≥ 0.8. If not, the rubric doesn't capture what makes them good — revise anchors or add a factor.
 3. **Sensitivity**: perturb each weight ±20% and drop each factor; if the ranking barely moves (Kendall τ ≈ 1) the factor
    is dead weight; if one factor alone reorders everything it dominates — reconsider its weight.
