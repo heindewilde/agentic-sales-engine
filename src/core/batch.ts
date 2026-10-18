@@ -18,13 +18,14 @@ import { setAttrs, startSpan, withSpan } from "./tracing.ts";
  */
 
 export const BATCH_SKILLS = {
-  "enrich-light": { fromStage: "discovered", toStage: "light_scored", defaultModel: "light" as const, defaultChunk: 10 },
+  // every: each account in a chunk should move on; one left out gets one more session of its own
+  "enrich-light": { fromStage: "discovered", toStage: "light_scored", defaultModel: "light" as const, defaultChunk: 10, every: true },
   // two accounts per session halves the fixed start-up cost per account
-  research: { fromStage: "shortlisted", toStage: "researched", defaultModel: "research" as const, defaultChunk: 2 },
-  score: { fromStage: "researched", toStage: "scored", defaultModel: "research" as const, defaultChunk: 5 },
-  "ways-in": { fromStage: "scored", toStage: "outreach_ready", defaultModel: "ways_in" as const, defaultChunk: 5 },
+  research: { fromStage: "shortlisted", toStage: "researched", defaultModel: "research" as const, defaultChunk: 2, every: true },
+  score: { fromStage: "researched", toStage: "scored", defaultModel: "research" as const, defaultChunk: 5, every: true },
+  "ways-in": { fromStage: "scored", toStage: "outreach_ready", defaultModel: "ways_in" as const, defaultChunk: 5, every: false },
   // drafts don't move the stage; progress is measured by draft files (see autopilot)
-  "draft-outreach": { fromStage: "outreach_ready", toStage: "outreach_ready", defaultModel: "drafts" as const, defaultChunk: 3 },
+  "draft-outreach": { fromStage: "outreach_ready", toStage: "outreach_ready", defaultModel: "drafts" as const, defaultChunk: 3, every: false },
 } as const;
 export type BatchSkill = keyof typeof BATCH_SKILLS;
 
@@ -184,19 +185,19 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
     }
     const left = chunks.length - i;
     const chunkBudget = Math.max(0.05, Math.min(remaining, (remaining / left) * 1.5));
-    const prompt = `/agentic-sales-engine:${o.skill} --icp ${o.icp} --unattended ${chunk.join(" ")}\n\n${UNATTENDED_NOTE(o.pluginRoot)}`;
+    const promptFor = (ds: string[]) => `/agentic-sales-engine:${o.skill} --icp ${o.icp} --unattended ${ds.join(" ")}\n\n${UNATTENDED_NOTE(o.pluginRoot)}`;
     log(`[${i + 1}/${chunks.length}] ${o.skill} ${chunk.join(", ")} (≤ $${chunkBudget.toFixed(2)})`);
     const chunkSpan = startSpan("batch.chunk", { "ase.skill": o.skill, "ase.icp": o.icp, "ase.chunk": i, "ase.domains": chunk, "ase.budget_usd": chunkBudget, "ase.model": model }, runSpan);
-    const attempt = async (): Promise<ChunkRunResult> => {
+    const attempt = async (ds = chunk, budget = chunkBudget): Promise<ChunkRunResult> => {
       let r: ChunkRunResult;
       try {
-        r = await runner({ ws: o.ws, prompt, model, maxBudgetUsd: chunkBudget, pluginRoot: o.pluginRoot, span: chunkSpan });
+        r = await runner({ ws: o.ws, prompt: promptFor(ds), model, maxBudgetUsd: budget, pluginRoot: o.pluginRoot, span: chunkSpan });
       } catch (e) {
         r = { cost_usd: 0, ok: false, summary: `error: ${(e as Error).message}` };
         chunkSpan.recordException(e as Error);
       }
       // On a subscription the figure is API-equivalent usage, not money: logged, but outside the budget.
-      appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: `batch:${o.skill}`, usd: r.cost_usd, kind: "actual", note: chunk.join(" "), ...(modelSpendIsBilled(billing) ? {} : { billed: false }) });
+      appendLedger(o.ws, { run_id: run!.run_id, provider: "anthropic", op: `batch:${o.skill}`, usd: r.cost_usd, kind: "actual", note: ds.join(" "), ...(modelSpendIsBilled(billing) ? {} : { billed: false }) });
       return r;
     };
     let r = await attempt();
@@ -218,12 +219,25 @@ async function runBatchInner(o: BatchOptions, runSpan: Span) {
       usageLimit = r.limit;
       stopped = "usage limit: the session started using paid extra usage — stopped (set usage_limits.allow_extra_usage: true to allow it)";
     }
-    const advanced: string[] = [];
-    for (const d of chunk) {
-      const p = paths.company(o.ws, d);
-      if (!existsSync(p)) continue;
-      const st = (await readDoc<Company>(p)).data.icp_status?.[o.icp]?.stage;
-      if (st && st !== spec.fromStage) advanced.push(d);
+    const moved = async (): Promise<string[]> => {
+      const out: string[] = [];
+      for (const d of chunk) {
+        const p = paths.company(o.ws, d);
+        if (!existsSync(p)) continue;
+        const st = (await readDoc<Company>(p)).data.icp_status?.[o.icp]?.stage;
+        if (st && st !== spec.fromStage) out.push(d);
+      }
+      return out;
+    };
+    let advanced = await moved();
+    // a session that worked but left accounts out (seen: 2 of 10 in a light chunk) gets one retry for just those
+    const leftOut = chunk.filter((d) => !advanced.includes(d));
+    const retryBudget = Math.min(run!.budget_usd - spentForRun(o.ws, run!.run_id), chunkBudget * Math.max(0.3, leftOut.length / chunk.length));
+    if (spec.every && r.ok && !stopped && leftOut.length && leftOut.length < chunk.length && retryBudget > 0.05) {
+      log(`  left out: ${leftOut.join(", ")} — one more session for those`);
+      const rr = await attempt(leftOut, retryBudget);
+      r = { ...rr, cost_usd: r.cost_usd + rr.cost_usd, summary: `${r.summary}\n\n(retry for ${leftOut.join(", ")})\n${rr.summary}` };
+      advanced = await moved();
     }
     results.push({ chunk: i, domains: chunk, ok: r.ok, cost_usd: r.cost_usd, advanced });
     setAttrs(chunkSpan, { "ase.cost_usd": r.cost_usd, "ase.ok": r.ok, "ase.advanced": advanced.length, "ase.denied": r.denied?.length ?? 0 });

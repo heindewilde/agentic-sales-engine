@@ -210,6 +210,27 @@ describe("batch driver", () => {
     expect(existsSync(join(ws, r.log!))).toBe(true);
   });
 
+  test("accounts a session left out get one more session of their own; a second miss is reported, not retried again", async () => {
+    const ws = fixture();
+    await persistCandidates(ws, ICP, "r", "test", Array.from({ length: 4 }, (_, i) => ({ name: `L${i}`, domain: `l${i}.example`, source_url: `https://l${i}.example` })));
+    const prompts: string[] = [];
+    // Fake session: skips l3 every time, and l2 the first time.
+    const runner = async ({ prompt }: { prompt: string }) => {
+      prompts.push(prompt.split("\n")[0]!);
+      for (const d of prompt.split("\n")[0]!.match(/[a-z0-9-]+\.example/g) ?? []) {
+        if (d === "l3.example" || (d === "l2.example" && prompts.length === 1)) continue;
+        await writeScore({ ws, icp: ICP, domain: d, mode: "light", judgements: [{ id: "industry_fit", level: 2, confidence: 0.8, evidence: [{ quote: "q", source_url: `https://${d}` }] }] });
+      }
+      return { cost_usd: 0.01, ok: true, summary: "done" };
+    };
+    const r = await runBatch({ ws, skill: "enrich-light", icp: ICP, pluginRoot: PLUGIN_ROOT, chunk: 4, concurrency: 1, budgetUsd: 1, runner, log: () => {} });
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("l2.example l3.example");
+    expect(prompts[1]).not.toContain("l0.example");
+    expect(r.advanced).toBe(3);
+    expect(r.not_advanced).toEqual(["l3.example"]);
+  });
+
   test("on a subscription, Claude usage is logged but not budgeted; a near plan limit is waited out, a far one stops the batch", async () => {
     const ws = fixture();
     await persistCandidates(ws, ICP, "r", "test", Array.from({ length: 6 }, (_, i) => ({ name: `S${i}`, domain: `s${i}.example`, source_url: `https://s${i}.example` })));

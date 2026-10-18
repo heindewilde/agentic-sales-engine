@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
 import { persistCandidates } from "../../src/core/accounts.ts";
-import { applyUpdates, rebuildBrief } from "../../src/core/apply.ts";
+import { applyUpdates, footnoteClashes, rebuildBrief } from "../../src/core/apply.ts";
 import { writeRaw } from "../../src/core/providers/gateway.ts";
 import { autoJudge, inRange, parseNumber } from "../../src/core/autojudge.ts";
 import { buildContext } from "../../src/core/context.ts";
@@ -87,6 +87,15 @@ describe("context + apply", () => {
     const r = await applyUpdates(ws, { icp: ICP, accounts: [{ domain: "delta.example", mode: "light", judgements: [{ id: "industry_fit", level: 3, confidence: 0.9, evidence: [] }] }] });
     expect(r.results[0]!.ok).toBe(false);
     expect(r.results[0]!.errors.join()).toContain("judgement industry_fit: a factor with a level must cite evidence");
+  });
+
+  test("a footnote id still cited by a kept section can't be re-pointed at another source", () => {
+    const brief = "## Snapshot\nDelta has 340 staff.[^b1]\n\n## Business & offering\nOld.[^b2]\n\n[^b1]: About, https://delta.example/about (2026-10-01) — “our 340 staff”\n[^b2]: News, https://n.example (2026-10-01) — “old”\n";
+    const other = { b1: "Blog, https://delta.example/blog (2026-10-18) — “Bielen joins Delta”" };
+    expect(footnoteClashes(brief, { "Business & offering": "New.[^b1]" }, other, false).join()).toContain("[^b1] already cites another source in Snapshot");
+    expect(footnoteClashes(brief, { Snapshot: "Rewritten.[^b1]" }, other, false)).toEqual([]); // the section that used it is rewritten
+    expect(footnoteClashes(brief, { "Business & offering": "New.[^c1]" }, { c1: other.b1 }, false)).toEqual([]); // a new id is fine
+    expect(footnoteClashes(brief, {}, { b1: "About, https://delta.example/about (2026-10-01) — “our 340 staff”" }, false)).toEqual([]); // same definition
   });
 
   test("context is compact: auto factors flagged, light factors only", async () => {

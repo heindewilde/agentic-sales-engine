@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /** Cost/quality benchmark — see bench/README.md. */
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -80,7 +80,8 @@ const { light, appr, research, waysIn, drafts, offline, llm, traceId } = await w
 
   log("evals…");
   const offline = await runOffline(ws);
-  const llm = await runLlm(ws, { budgetUsd: 0.6, sample: 2 });
+  // enough budget that draft_quality still runs after claim_support and judge_stability; 3 samples to damp the noise
+  const llm = await runLlm(ws, { budgetUsd: 1.5, sample: 3 });
   return { light, appr, research, waysIn, drafts, offline, llm, traceId: span.spanContext().traceId };
 });
 const finished = spans.getFinishedSpans(); // read before shutdown: shutting down clears the in-memory exporter
@@ -106,7 +107,7 @@ const result = {
     drafts_model: sum((e) => e.op === "batch:draft-outreach"),
   },
   sessions: { light: sess("enrich-light"), research: sess("research"), ways_in: sess("ways-in"), drafts: sess("draft-outreach") },
-  advanced: { light: light.advanced, research: research.advanced, ways_in: waysIn.advanced, drafts: drafts.advanced },
+  advanced: { light: light.advanced, research: research.advanced, ways_in: waysIn.advanced, drafts: draftFiles(ws) }, // drafting moves no stage: count the files
   quality: Object.fromEntries([...Object.entries(offline.summary), ...Object.entries(llm.summary)].map(([k, v]) => [k, v.mean])),
 };
 // --push: send both suites to every connected observability backend as experiment "<label>"
@@ -126,3 +127,8 @@ mkdirSync(join(ROOT, "bench/results"), { recursive: true });
 writeFileSync(join(ROOT, "bench/results", `${label}.json`), `${JSON.stringify(result, null, 2)}\n`);
 console.log(JSON.stringify(result, null, 2));
 log(`workspace kept at ${ws} for inspection`);
+
+function draftFiles(ws: string): number {
+  const acc = join(ws, "accounts");
+  return readdirSync(acc).reduce((n, d) => n + (existsSync(join(acc, d, "drafts")) ? readdirSync(join(acc, d, "drafts")).filter((f) => f.endsWith(".md")).length : 0), 0);
+}
