@@ -299,7 +299,8 @@ export async function schedule(o: Omit<RunOptions, "capUsd"> & { capUsd: number;
     vault_ids: s.vault_id ? [s.vault_id] : [],
     resources: [
       { type: "github_repository" as const, url: `https://github.com/${o.repo}`, authorization_token: secret("ASE_MANAGED_AGENTS_GITHUB_TOKEN"), checkout: { type: "branch" as const, name: o.baseBranch } },
-      { type: "github_repository" as const, url: "https://github.com/heindewilde/agentic-sales-engine", checkout: { type: "commit" as const, sha: engineSha(o.pluginRoot) } },
+      // deployments require a token on every repo; a fine-grained token can always read public repos
+      { type: "github_repository" as const, url: "https://github.com/heindewilde/agentic-sales-engine", authorization_token: secret("ASE_MANAGED_AGENTS_GITHUB_TOKEN"), checkout: { type: "commit" as const, sha: engineSha(o.pluginRoot) } },
     ],
     initial_events: [{ type: "user.message" as const, content: [{ type: "text" as const, text: runMessage({ repo: o.repo, baseBranch: o.baseBranch, skill: o.skill, args: o.args, approvedBy: o.approvedBy }) }] }],
     schedule: { type: "cron" as const, expression: o.cron, timezone: o.timezone ?? "Europe/Amsterdam" },
