@@ -81,9 +81,11 @@ A local, read-only view of how the engine works:
 - **Click a block** to inspect exactly that block: what it does, its context (agent instructions, playbook, rules and
   method, your knowledge, company data, each with its size and readable), the instructions it follows, a real output
   from your workspace, and its runs with the actor's own cost.
-- **The brain:** every file that shapes what the agents do, in layers (your knowledge, rules and method, templates,
-  playbooks, agents), with the steps that read each one. Select a block and its files light up; select a file and the
-  blocks that read it light up. Markdown is rendered, and a scoring model shows as a table of factors and levels.
+- **The brain:** a flow from your knowledge (ICP, scoring model, learnings, profile, voice) through the engine's rules and
+  method, the playbooks and the agents into the process steps. Every line is a real reference in a playbook's or
+  agent's text, or a block where an agent runs a playbook. Hover a node to trace its chain (only through the blocks that
+  actually use it); select a block above and its chain lights up here. Click a node to read the file: markdown is
+  rendered, and a scoring model shows as a table of factors and levels.
 
 Which files a block reads is derived from the skill and agent text (`src/map/brain.ts`); the blocks themselves are
 described in `src/map/process.ts`.

@@ -102,20 +102,80 @@ function drawLinks() {
 }
 
 // ---------- the brain ----------
+const FLOW_COLS = [["Your knowledge", "var(--c4)"], ["Rules & method", "var(--c3)"], ["Playbooks", "var(--c2)"], ["Agents", null], ["Process", "var(--gate)"]];
+
+/** The brain as a flow: your knowledge → rules & method → playbooks → agents → process steps. */
 function renderBrain() {
-  const steps = new Map(P.steps.flatMap((s) => s.blocks.map((b) => [b.id, s.n])));
-  const maxTok = Math.max(...P.files.map((f) => f.tokens));
-  const total = P.files.reduce((a, f) => a + f.tokens, 0);
-  $("#brain-sub").textContent = `${P.files.length} files · ${k(total)} tokens`;
-  $("#brain").innerHTML = LAYERS.map(([layer, name, sub]) => {
-    const fs = P.files.filter((f) => f.layer === layer).sort((a, b) => b.used_by.length - a.used_by.length || b.tokens - a.tokens);
-    const tok = fs.reduce((a, f) => a + f.tokens, 0);
-    return `<div class="layer"><div><h3>${name}</h3><div class="sub">${esc(sub)}<b>${fs.length} files · ${k(tok)} tokens</b></div></div><div class="files">${fs.map((f) => {
-      const used = [...new Set(f.used_by.map((b) => steps.get(b)))];
-      return `<button class="file ${used.length ? "" : "unused"}" data-file="${esc(f.id)}" title="${esc(f.path)}${used.length ? "" : " · not used in the process"}"><span class="t">${esc(cleanTitle(f))}</span><span class="row2"><span class="bar" style="width:${Math.max(4, (60 * f.tokens) / maxTok)}px"></span><span class="n">${k(f.tokens)}</span><span class="steps">${used.slice(0, 4).map((n) => `<b>${esc(String(n))}</b>`).join("")}${used.length > 4 ? `<b>+${used.length - 4}</b>` : ""}</span></span></button>`;
-    }).join("")}</div></div>`;
-  }).join("");
+  const g = P.graph;
+  const host = $("#brain");
+  const W = Math.max(860, host.clientWidth), NW = Math.min(196, (W - 40) / 5 - 34), ROW = 31, TOP = 34, H0 = 22;
+  const out = new Map(), inn = new Map();
+  for (const e of g.edges) { (out.get(e.from) ?? out.set(e.from, []).get(e.from)).push(e.to); (inn.get(e.to) ?? inn.set(e.to, []).get(e.to)).push(e.from); }
+  // order each column by the average position of what it feeds (fewest crossings), starting from the fixed process order
+  const pos = new Map();
+  const col = (c) => g.nodes.filter((n) => n.col === c);
+  col(4).forEach((n, i) => pos.set(n.id, i));
+  for (const c of [3, 2, 1, 0]) {
+    // first by the earliest thing it feeds (so the columns follow the process order), then by the average
+    const ns = col(c).map((n) => { const t = (out.get(n.id) ?? []).map((x) => pos.get(x)).filter((x) => x != null); return { n, lo: t.length ? Math.min(...t) : 999, m: avg(t) }; });
+    ns.sort((x, y) => x.lo - y.lo || x.m - y.m).forEach(({ n }, i) => pos.set(n.id, i));
+  }
+  const counts = [0, 1, 2, 3, 4].map((c) => col(c).length);
+  const tallest = Math.max(...counts);
+  const H = TOP + tallest * ROW + 10;
+  const xOf = (c) => 10 + (c * (W - NW - 20)) / 4;
+  const yOf = (n) => TOP + ((tallest - counts[n.col]) * ROW) / 2 + pos.get(n.id) * ROW;
+  const at = new Map(g.nodes.map((n) => [n.id, { x: xOf(n.col), y: yOf(n) }]));
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="flow">`;
+  FLOW_COLS.forEach(([name], c) => { svg += `<text x="${xOf(c)}" y="14" class="ch">${name} <tspan class="cnt">${counts[c]}</tspan></text>`; });
+  for (const e of g.edges) {
+    const a = at.get(e.from), b = at.get(e.to);
+    if (!a || !b) continue;
+    const x1 = a.x + NW, y1 = a.y + H0 / 2, x2 = b.x, y2 = b.y + H0 / 2, mx = (x1 + x2) / 2;
+    svg += `<path class="e" data-from="${esc(e.from)}" data-to="${esc(e.to)}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+  }
+  for (const n of g.nodes) {
+    const { x, y } = at.get(n.id);
+    const color = n.col === 3 ? COLORS[n.id.slice(2)] ?? "var(--muted)" : FLOW_COLS[n.col][1];
+    const label = n.label.length > 26 ? `${n.label.slice(0, 25)}…` : n.label;
+    svg += `<g class="n" data-node="${esc(n.id)}" transform="translate(${x},${y})"><title>${esc(n.label)}${n.sub ? ` · ${esc(n.sub)}` : ""}</title>
+      <rect width="${NW}" height="${H0}" rx="5" class="box"/><rect width="4" height="${H0}" rx="2" style="fill:${color}"/>
+      <text x="11" y="15" class="nl">${esc(label)}</text>${n.tokens ? `<text x="${NW - 7}" y="15" class="nt">${k(n.tokens)}</text>` : ""}</g>`;
+  }
+  host.innerHTML = svg + "</svg>";
+  $("#brain-sub").textContent = `${g.nodes.filter((n) => n.col < 3).length} files · ${g.edges.length} connections`;
   applySelection();
+}
+const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 999);
+
+/**
+ * Light the chains of some blocks: per block its files, playbooks, agent and step, and only the lines between them.
+ * Following blocks (not the graph) keeps a trace honest: a file reaches a step only through a block that reads it.
+ */
+function lightBlocks(blocks, onlyFile = null) {
+  const host = $("#brain");
+  const sets = blocks.map((b) => new Set(blockNodes(b).filter((n) => !onlyFile || !n.startsWith("f:") || n === onlyFile)));
+  const keep = new Set(sets.flatMap((s) => [...s]));
+  host.classList.toggle("dim", blocks.length > 0);
+  host.querySelectorAll(".n").forEach((n) => n.classList.toggle("hl", keep.has(n.dataset.node)));
+  host.querySelectorAll(".e").forEach((e) => e.classList.toggle("hl", sets.some((s) => s.has(e.dataset.from) && s.has(e.dataset.to))));
+}
+/** Hover or select a node: the blocks it's part of. */
+function lightNode(id) {
+  if (!id) return lightBlocks([]);
+  const blocks = allBlocks().filter((b) => blockNodes(b).includes(id));
+  lightBlocks(blocks, id.startsWith("f:") ? id : null);
+}
+const allBlocks = () => P.steps.flatMap((s) => s.blocks.map((b) => ({ ...b, step: s })));
+const lightFlow = (ids) => lightNode(ids[0]);
+/** The flow nodes a block touches: its agent, its playbooks, the files in its context and its step. */
+function blockNodes(b) {
+  const ids = (b.skills ?? []).map((sk) => `p:${sk}`);
+  if (b.agent) ids.push(`a:${b.agent}`);
+  ids.push(`s:${b.step.id}`);
+  for (const c of b.context) ids.push(`f:${c.id}`);
+  const known = new Set(P.graph.nodes.map((n) => n.id));
+  return ids.filter((i) => known.has(i));
 }
 const cleanTitle = (f) => f.title.replace(/\s*\(.*?\)\s*$/, "").replace(/^skills\//, "") || f.path;
 
@@ -126,28 +186,27 @@ function select(kind, id, tab = "overview") {
   renderInspector();
 }
 function applySelection() {
-  const lanes = $("#lanes"), brain = $("#brain");
-  document.querySelectorAll(".sel, .hl").forEach((n) => n.classList.remove("sel", "hl"));
+  const lanes = $("#lanes");
+  document.querySelectorAll("#lanes .sel, #lanes .hl").forEach((n) => n.classList.remove("sel", "hl"));
   lanes.classList.remove("dim");
-  brain.classList.remove("dim");
-  if (!P || !state.id) return;
+  if (!P) return;
+  if (!state.id) return lightFlow([]);
   if (state.kind === "block") {
     const b = blockById().get(state.id);
     lanes.querySelector(`[data-block="${state.id}"]`)?.classList.add("sel");
-    const ids = new Set(b?.context.map((c) => c.id) ?? []);
-    if (ids.size) {
-      brain.classList.add("dim");
-      brain.querySelectorAll("[data-file]").forEach((n) => ids.has(n.dataset.file) && n.classList.add("hl"));
-    }
-  } else if (state.kind === "file") {
-    const f = P.files.find((x) => x.id === state.id);
-    brain.querySelector(`[data-file="${CSS.escape(state.id)}"]`)?.classList.add("sel");
-    if (f?.used_by.length) {
+    if (b) lightBlocks([b]);
+  } else if (state.kind === "file" || state.kind === "node") {
+    const node = P.graph.nodes.find((n) => n.id === state.id || n.ref === state.id);
+    lightNode(node?.id);
+    const blocks = node ? blocksOfNode(node.id) : [];
+    if (blocks.length) {
       lanes.classList.add("dim");
-      for (const id of f.used_by) lanes.querySelector(`[data-block="${id}"]`)?.classList.add("hl");
+      for (const id of blocks) lanes.querySelector(`[data-block="${id}"]`)?.classList.add("hl");
     }
   }
 }
+/** Blocks that use a flow node directly: its file is in their context, they follow that playbook, are that agent, or sit in that step. */
+const blocksOfNode = (id) => allBlocks().filter((b) => blockNodes(b).includes(id)).map((b) => b.id);
 
 // ---------- inspector ----------
 const md = (text) => {
@@ -185,6 +244,7 @@ function renderInspector() {
   const el = $("#inspector");
   if (!P) return;
   if (state.kind === "block") return inspectBlock(el, blockById().get(state.id));
+  if (state.kind === "node") return inspectStep(el, P.steps.find((x) => `s:${x.id}` === state.id));
   if (state.kind === "file") return inspectFile(el, P.files.find((f) => f.id === state.id) ?? { id: state.id, path: state.id.split(":")[1], title: state.id, layer: "data", tokens: 0, used_by: [] });
   const totals = Object.fromEntries(CATS.map(([c]) => [c, 0]));
   el.innerHTML = `<h3>Select a block</h3><p class="lead">Every block is one actor doing one thing. Click it to see exactly what it does, what it reads, what it follows, what it produces and what it costs.</p>
@@ -267,6 +327,12 @@ function runsTab(b) {
     ${runs.some((r) => r.checks.length) ? `<h4>Flagged to double-check</h4><ol class="check">${runs.flatMap((r) => r.checks.map((c) => `<li>${esc(c)}</li>`)).slice(0, 10).join("")}</ol>` : ""}`;
 }
 
+function inspectStep(el, s) {
+  if (!s) return;
+  el.innerHTML = `<div class="ins-who">Step ${esc(String(s.n))}</div><h3>${esc(s.title)}</h3><p class="lead">${s.blocks.length} block${s.blocks.length === 1 ? "" : "s"}, in hand-off order. Click one to inspect it.</p>
+    <div class="chips" style="flex-direction:column;align-items:flex-start">${s.blocks.map((b) => `<button class="chip" data-goblock="${b.id}"><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[b.by]};margin-right:6px"></i>${esc(actor(b.by).name)} · ${esc(b.label)}</button>`).join("")}</div>`;
+}
+
 async function inspectFile(el, f) {
   const blocks = blockById();
   const back = state.back ? `<button class="back" data-back>← ${esc(blocks.get(state.back.id)?.label ?? "back")}</button>` : "";
@@ -291,12 +357,20 @@ document.addEventListener("click", (e) => {
   if (gb) return select("block", gb.dataset.goblock);
   const f = e.target.closest("[data-file]");
   if (f) return select("file", f.dataset.file);
+  const n = e.target.closest("[data-node]");
+  if (n) {
+    const node = P.graph.nodes.find((x) => x.id === n.dataset.node);
+    return node?.ref ? select("file", node.ref) : select("node", node.id);
+  }
   const c = e.target.closest("[data-ctx]");
   if (c) return select("file", c.dataset.ctx);
   if (e.target.closest("[data-back]")) { state = { ...state.back }; applySelection(); return renderInspector(); }
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") select("intro", null); });
+// hovering a node in the brain previews its chain; leaving restores the selection
+document.addEventListener("mouseover", (e) => { const n = e.target.closest?.("#brain [data-node]"); if (n) lightFlow([n.dataset.node]); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.("#brain [data-node]") && !e.relatedTarget?.closest?.("#brain [data-node]")) applySelection(); });
 $("#refresh").addEventListener("click", () => load(true));
 let rt;
-window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawLinks, 120); });
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { drawLinks(); renderBrain(); }, 120); });
 load();
