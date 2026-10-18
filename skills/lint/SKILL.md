@@ -11,8 +11,9 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/rules.md` first.
 
 1. `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts reindex` then `bun ${CLAUDE_PLUGIN_ROOT}/src/cli/ase.ts lint`.
 2. Group the issues by kind and present counts plus the 10 most important.
-3. Semantic pass (only when there are fewer than ~200 accounts, or for the accounts the user names): use the
-   `wiki-linter` agent to look for **contradictions** (e.g. two different headcounts with similar confidence,
+3. Semantic pass, on the accounts the user names, else only on accounts whose files changed in the last 7 days
+   (`git log --since="7 days ago" --name-only --format= -- accounts/ | cut -d/ -f2 | sort -u`), at most 20 per run
+   (most advanced stage first); say how many were left for next time. Use the `wiki-linter` agent to look for **contradictions** (e.g. two different headcounts with similar confidence,
    a person listed at two companies, a brief claim that disagrees with company.md facts) and **outdated narrative**.
 4. With `--fix` (or the user's go-ahead), fix mechanical issues:
    - `invalid`: repair the frontmatter (never by inventing a source — remove the fact if no source exists).
