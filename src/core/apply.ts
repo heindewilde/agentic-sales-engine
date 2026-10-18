@@ -230,9 +230,13 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
     res.written.push(p.rel);
   }
 
-  if (u.stage) {
-    const a = await advanceStage(ws, u.domain, icp, u.stage);
-    if (!a.advanced) res.errors.push(...a.errors.map((e) => `stage ${u.stage}: ${e}`));
+  // Writing a Ways in section for a scored account is what makes it outreach-ready, unless the update holds it back
+  // with an open question owned by ways_in (seen twice on the bench: the section written, the stage forgotten).
+  const held = (u.open_questions ?? []).some((q) => /^\s*-\s*\[ \]/.test(q) && /owner:\s*ways[_-]?in/i.test(q));
+  const stage = u.stage ?? (u.sections?.["Ways in"] && !held && company.data.icp_status?.[icp]?.stage === "scored" ? "outreach_ready" : undefined);
+  if (stage) {
+    const a = await advanceStage(ws, u.domain, icp, stage);
+    if (!a.advanced) res.errors.push(...a.errors.map((e) => `stage ${stage}: ${e}`));
   }
 
   // score: model judgements + rule-based factors
