@@ -1,170 +1,302 @@
-// Agent map: live data (/api/model) + the process story (/api/story) → dashboard. Read-only.
+// Process map: swimlane of every block, an inspector per block or file, and the brain (every file behind it).
 const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const money = (x) => `$${(x ?? 0).toFixed(2)}`;
+const k = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
-const consoleUrl = (id) => `https://platform.claude.com/sessions/${id}`;
-const CRON_DAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
-const human = (cron) => {
-  if (!cron) return "";
-  const [m, h, dom, , dow] = cron.split(" ");
-  const at = `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
-  if (dow !== "*") return `${CRON_DAYS[Number(dow)]} ${at}`;
-  if (dom !== "*") return `${dom === "1" ? "1st" : dom} of the month ${at}`;
-  return `daily ${at}`;
-};
-const MAINT = { n: "↻", id: "maintenance", short: "Maintenance", title: "Scheduled maintenance", parallel: true };
-const STAGES = [["discovered", "Found"], ["light_scored", "Quick-scanned"], ["shortlisted", "Shortlisted"], ["researched", "Researched"], ["scored", "Scored"], ["outreach_ready", "Outreach ready"]];
+const COLORS = { you: "var(--gate)", operator: "var(--s1)", "account-researcher": "var(--s2)", "factor-judge": "var(--s3)", "wiki-linter": "var(--s4)", "icp-analyst": "var(--s5)" };
+const CATS = [["instructions", "Agent instructions", "var(--c1)"], ["playbook", "Playbook", "var(--c2)"], ["method", "Rules & method", "var(--c3)"], ["knowledge", "Your knowledge", "var(--c4)"], ["data", "Company data", "var(--c5)"]];
+const LAYERS = [["knowledge", "Your knowledge", "From your workspace: who you are, who you sell to, what you've learned"], ["method", "Rules & method", "How the engine thinks"], ["template", "Templates", "The shape of every output"], ["playbook", "Playbooks", "Step-by-step instructions per workflow"], ["agent", "Agents", "Who each specialist is"]];
+const STAGES = ["discovered", "light_scored", "shortlisted", "researched", "scored", "outreach_ready"];
 
-let model, story;
-const modelName = (id) => id.replace(/^claude-/, "").replace(/^(\w)(\w*)-(\d+)-(\d+)$/, (_, a, b, x, y) => `${a.toUpperCase()}${b} ${x}.${y}`);
+let P = null; // { steps, files, actors, workspace }
+let M = null; // live platform data (runs, funnel); arrives later
+let state = { kind: "intro", id: null, tab: "overview", back: null };
+const blockById = () => new Map(P.steps.flatMap((s) => s.blocks.map((b) => [b.id, { ...b, step: s }])));
+const actor = (id) => P.actors.find((a) => a.id === id) ?? { id, name: id, role: "" };
 
 async function load(fresh = false) {
-  const [m, s] = await Promise.all([fetch(fresh ? "/api/refresh" : "/api/model").then((r) => r.json()), story ?? fetch("/api/story").then((r) => r.json())]);
-  model = m;
-  story = s;
-  render();
+  P = await (await fetch("/api/process")).json();
+  renderLegend();
+  renderLanes();
+  renderBrain();
+  renderInspector();
+  fetch(fresh ? "/api/refresh" : "/api/model").then((r) => r.json()).then((m) => { M = m; renderLanes(); renderInspector(); });
 }
 
-/** Accounts that reached at least each stage (excluded ones were light-scored first). */
-function funnelRows() {
-  const f = model.funnel[0];
-  if (!f) return [];
-  const st = f.stages;
-  const idx = (k) => STAGES.findIndex(([s]) => s === k);
-  const rows = STAGES.map(([stage, label], i) => {
-    let n = Object.entries(st).filter(([k]) => idx(k) >= i).reduce((a, [, v]) => a + v, 0);
-    if (i <= 1) n += st.excluded ?? 0;
-    return { stage, label, n };
-  });
-  return rows.map((r, i) => ({ ...r, conv: i ? (rows[i - 1].n ? Math.round((100 * r.n) / rows[i - 1].n) : 0) : null, note: i === 1 && st.excluded ? `${st.excluded} excluded as a clear misfit` : "" }));
+function renderLegend() {
+  $("#actors").innerHTML = P.actors.map((a) => `<span><i class="dot" style="background:${COLORS[a.id]}"></i>${esc(a.name)}</span>`).join("");
+  $("#ctx-legend").innerHTML = `<span class="muted">Context per block:</span>${CATS.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join("")}`;
 }
 
-/** The journey with live numbers, plus a maintenance row from the schedules. */
-function steps() {
-  const reached = funnelRows();
-  const avg = (runs) => (runs.length ? `${money(runs.reduce((a, r) => a + r.cost, 0) / runs.length)} per run` : "");
-  const out = story.journey.map((s) => {
-    const runs = model.runs.filter((r) => s.skills.includes(r.skill));
-    const row = reached.find((r) => r.stage === s.stage);
-    return { ...s, runs, metric: row ? `${row.n} accounts` : runs.length ? `${runs.length} runs` : "", cost: avg(runs) };
-  });
-  const mskills = story.maintenance.jobs.map((j) => j.skill);
-  const acts = story.maintenance.jobs.map((j) => {
-    const sc = model.schedules.find((x) => x.skill === j.skill);
-    return { by: "operator", label: `${j.title} · ${sc ? human(sc.cron) : "manual"}` };
-  });
-  const runs = model.runs.filter((r) => mskills.includes(r.skill));
-  out.push({ ...MAINT, what: story.maintenance.what, skills: mskills, acts: [...acts, { by: "wiki-linter", label: "Deep audit · on demand" }], runs, metric: `${model.schedules.length} scheduled`, cost: avg(runs) });
-  return out;
-}
-
-function render() {
-  const S = steps();
-  const m = model.month;
-  const waiting = (model.funnel[0]?.gates.length ?? 0) + m.questions;
-  $("#tiles").innerHTML = `
-    <div class="tile"><div class="k">API credits this month</div><div class="v">${money(m.credits_usd)}<small>of $100</small></div><div class="meter"><i style="width:${Math.min(100, m.credits_usd)}%"></i></div></div>
-    <div class="tile"><div class="k">Runs this month</div><div class="v">${m.runs}</div><div class="note">${m.failed} failed · ${m.capped} hit a budget cap</div></div>
-    <div class="tile ${waiting ? "alert" : ""}"><div class="k">Waiting on you</div><div class="v">${waiting}</div><div class="note">${waiting ? "approvals and reviews" : "nothing open"}</div></div>
-    <div class="tile"><div class="k">Scheduled</div><div class="v">${model.schedules.length}</div><div class="note">${model.schedules.map((x) => `${escH(x.skill)} · ${human(x.cron)}`).join("<br>") || "none"}</div></div>`;
-
-  $("#lane-legend").innerHTML = `<span><i style="background:var(--gate)"></i>Your decision</span><span class="muted">Click a step or agent for details</span>`;
-  drawSwimlane($("#swimlane"), S, openStep, openAgent);
-
-  const fr = funnelRows();
-  $("#funnel-sub").textContent = model.funnel[0]?.icp ?? "";
-  if (fr.length) drawFunnel($("#funnel"), fr);
-  else $("#funnel").innerHTML = '<p class="muted">Start the map with <code>--workspace &lt;dir&gt;</code> for live numbers.</p>';
-
-  const AG = ["operator", "account-researcher", "factor-judge", "wiki-linter", "icp-analyst"];
-  const costRows = S.map((s) => {
-    const by = Object.fromEntries(AG.map((a) => [a, 0]));
-    for (const r of s.runs) for (const t of r.threads) if (t.agent in by) by[t.agent] += t.cost;
-    for (const a of AG) by[a] /= s.runs.length || 1;
-    return { label: s.short, by, total: AG.reduce((x, a) => x + by[a], 0), runs: s.runs.length };
-  });
-  const used = AG.filter((a) => costRows.some((r) => r.by[a] > 0));
-  $("#cost-legend").innerHTML = used.map((a) => `<span><i style="background:${actor(a).color}"></i>${actor(a).name}</span>`).join("");
-  drawCost($("#cost"), costRows, used);
-
-  drawSequence($("#sequence"));
-
-  $("#agents").innerHTML = `<table><tr><th>Agent</th><th>Model</th><th class="n">Version</th><th class="n">Runs</th><th class="n">Cost</th></tr>${story.roles.map((r) => {
-    const a = model.agents.find((x) => x.name === r.agent);
-    if (!a) return "";
-    return `<tr class="click" data-agent="${r.agent}"><td><span class="sw" style="background:${actor(r.agent).color}"></span><b>${escH(actor(r.agent).name)}</b><div class="muted">${escH(r.oneLiner)}</div></td><td>${escH(modelName(a.current.model))}</td><td class="n">v${a.current.version}</td><td class="n">${a.runs}</td><td class="n">${money(a.cost_total)}</td></tr>`;
-  }).join("")}</table>`;
-
-  $("#status-legend").innerHTML = ["done", "question", "budget_reached", "failed"].map((k) => `<span><i class="round" style="background:${STATUS[k].color}"></i>${STATUS[k].icon} ${STATUS[k].label}</span>`).join("");
-  const tlRows = S.map((s) => ({ label: s.short, skills: s.skills })).concat([{ label: "Other", skills: story.maintenance.other }]);
-  drawTimeline($("#timeline"), tlRows, model.runs, openRun);
-}
-
-// ---------- drawer ----------
-function drawer(html) {
-  $("#drawer-body").innerHTML = html;
-  document.body.classList.add("open");
-  $("#drawer").scrollTop = 0;
-}
-const closeDrawer = () => document.body.classList.remove("open");
-const runTable = (runs) => runs.length
-  ? `<table><tr><th>Date</th><th>Run</th><th>Status</th><th class="n">Cost</th></tr>${runs.map((r) => `<tr><td>${day(r.created_at)}</td><td><a href="${consoleUrl(r.session_id)}" target="_blank">${escH((r.args || r.skill).slice(0, 48))}</a></td><td><span class="st ${r.status}">${statusOf(r.status).label}</span></td><td class="n">${money(r.cost)}</td></tr>`).join("")}</table>`
-  : '<p class="muted">No runs yet.</p>';
-
-function openStep(s) {
-  const checks = s.runs.flatMap((r) => r.checks.map((c) => ({ c, r })));
-  drawer(`<h3>${escH(String(s.n))}. ${escH(s.title)}</h3><p class="muted">${escH(s.what)}</p>
-    ${s.input ? `<dl><dt>In</dt><dd>${escH(s.input)}</dd><dt>Out</dt><dd>${escH(s.output)}</dd><dt>You</dt><dd>${escH(s.you.text)}</dd><dt>When</dt><dd>${escH(s.when)}</dd></dl>` : ""}
-    ${s.how ? `<h4>Hand-offs</h4><ol>${s.how.map((h) => `<li>${escH(h)}</li>`).join("")}</ol>` : ""}
-    <h4>Runs</h4>${runTable(s.runs)}
-    ${checks.length ? `<h4>To double-check</h4><ol>${checks.slice(0, 12).map(({ c, r }) => `<li>${escH(c)} <span class="muted">${day(r.created_at)}</span></li>`).join("")}</ol>` : ""}
-    <h4>Playbooks</h4>${s.skills.map(skillDetails).join("")}`);
-}
-
-function skillDetails(name) {
-  const k = model.skills.find((x) => x.name === name);
-  if (!k) return "";
-  return `<details><summary><span class="pill">${escH(name)}</span><span class="muted">${k.versions.length} version${k.versions.length === 1 ? "" : "s"}</span></summary><pre>${escH(k.text)}</pre></details>`;
-}
-
-function openAgent(id) {
-  const r = story.roles.find((x) => x.agent === id);
-  const a = model.agents.find((x) => x.name === id);
-  if (!a) return;
-  const runs = model.runs.filter((x) => x.threads.some((t) => t.agent === id));
-  const v = a.current;
-  drawer(`<h3><span class="sw" style="background:${actor(id).color}"></span>${escH(actor(id).name)}</h3><p class="muted">${escH(r?.oneLiner ?? a.description)}</p>
-    ${r ? `<h4>Does</h4><ol>${r.does.map((d) => `<li>${escH(d)}</li>`).join("")}</ol><p class="muted">${escH(r.never)}</p>` : ""}
-    <dl><dt>Model</dt><dd>${escH(v.model)}</dd><dt>Tools</dt><dd>${v.tools.map((t) => `<span class="pill">${escH(t)}</span>`).join("")}</dd>${v.subagents.filter((x) => x !== id).length ? `<dt>Hands work to</dt><dd>${v.subagents.filter((x) => x !== id).map((x) => `<span class="pill">${escH(actor(x).name)}</span>`).join("")}</dd>` : ""}${r ? `<dt>Reads</dt><dd>${escH(r.reads)}</dd>` : ""}</dl>
-    <h4>Versions</h4><table><tr><th>Version</th><th>Created</th><th class="n">Runs</th><th class="n">Cost</th><th></th></tr>${a.versions.map((x, i) => `<tr><td>v${x.version}</td><td>${day(x.created_at)}</td><td class="n">${x.runs}</td><td class="n">${money(x.cost)}</td><td>${a.versions[i + 1] ? `<button class="btn" data-diff="${escH(a.key)}|${a.versions[i + 1].version}|${x.version}">changes</button>` : ""}</td></tr>`).join("")}</table>
-    <div id="diff"></div>
-    <h4>Runs</h4>${runTable(runs.slice(0, 15))}
-    <details><summary class="muted">Instructions (v${v.version})</summary><pre>${escH(v.system)}</pre></details>`);
-}
-
-function openRun(r) {
-  const per = {};
-  for (const t of r.threads) per[t.agent] = (per[t.agent] ?? 0) + t.cost;
-  drawer(`<h3>${escH(r.skill)}</h3><p class="muted">${escH(r.args)}</p>
-    <dl><dt>Started</dt><dd>${new Date(r.created_at).toLocaleString()}</dd><dt>Status</dt><dd><span class="st ${r.status}">${statusOf(r.status).label}</span></dd><dt>Cost</dt><dd>${money(r.cost)} · ${r.active_minutes} min</dd>
-    <dt>By agent</dt><dd>${Object.entries(per).map(([a, c]) => `<span class="pill">${escH(actor(a).name)} ${money(c)}</span>`).join("")}</dd><dt>Session</dt><dd><a href="${consoleUrl(r.session_id)}" target="_blank">Open in Console</a></dd></dl>
-    ${r.checks.length ? `<h4>To double-check</h4><ol>${r.checks.map((c) => `<li>${escH(c)}</li>`).join("")}</ol>` : ""}`);
-}
-
-document.addEventListener("click", async (e) => {
-  const row = e.target.closest("[data-agent]");
-  if (row) return openAgent(row.dataset.agent);
-  const d = e.target.closest("[data-diff]");
-  if (d) {
-    const [id, from, to] = d.dataset.diff.split("|");
-    const j = await (await fetch(`/api/diff?kind=agent&id=${encodeURIComponent(id)}&from=${from}&to=${to}`)).json();
-    const changed = (j.lines ?? []).some((l) => l.op === "+" || l.op === "-");
-    $("#diff").innerHTML = `<h4>v${from} → v${to}</h4>${(j.config ?? []).map((c) => `<span class="pill">${escH(c)}</span>`).join("")}${changed ? `<div class="diff">${j.lines.map((l) => `<div class="${l.op === "+" ? "p" : l.op === "-" ? "m" : l.op === "…" ? "e" : ""}">${escH(l.op === "…" ? `… ${l.text}` : `${l.op} ${l.text}`)}</div>`).join("")}</div>` : ""}`;
+// ---------- swimlane ----------
+function stepLive(s) {
+  if (!M) return "";
+  const runs = M.runs.filter((r) => s.blocks.some((b) => (b.skills ?? []).includes(r.skill)));
+  const f = M.funnel?.[0];
+  let reach = "";
+  if (f && s.stage) {
+    const i = STAGES.indexOf(s.stage);
+    let n = Object.entries(f.stages).filter(([st]) => STAGES.indexOf(st) >= i).reduce((a, [, v]) => a + v, 0);
+    if (i <= 1) n += f.stages.excluded ?? 0;
+    reach = `${n} accounts`;
   }
+  const cost = runs.length ? `${money(runs.reduce((a, r) => a + r.cost, 0) / runs.length)} / run` : "";
+  return [reach, cost, runs.length ? `${runs.length} runs` : ""].filter(Boolean).join("<br>");
+}
+
+function renderLanes() {
+  const lanes = P.actors;
+  const maxTok = Math.max(...P.steps.flatMap((s) => s.blocks.map((b) => Object.values(b.tokens).reduce((x, y) => x + y, 0))));
+  let html = `<div class="lane-head"><div></div>${lanes.map((a) => `<div title="${esc(a.role)}"><i class="dot" style="width:9px;height:9px;border-radius:50%;background:${COLORS[a.id]}"></i>${esc(a.name)}</div>`).join("")}</div>`;
+  for (const s of P.steps) {
+    const gated = s.blocks.some((b) => b.gate);
+    // one grid row per block in hand-off order (parallel steps: blocks of a lane stack in one row each)
+    const place = s.parallel
+      ? s.blocks.map((b) => ({ b, row: s.blocks.filter((x) => x.by === b.by).indexOf(b) + 1 }))
+      : s.blocks.map((b, i) => ({ b, row: i + 1 }));
+    const rows = Math.max(...place.map((p) => p.row));
+    html += `<div class="row ${gated ? "gated" : ""}" data-step="${s.id}" style="grid-template-rows:repeat(${rows}, auto)">
+      <div class="gut" style="grid-row:1 / -1"><span class="num">${esc(String(s.n))}</span><b>${esc(s.short)}</b><span class="muted">${stepLive(s)}</span></div>
+      ${lanes.map((a, c) => `<div class="cell" style="grid-column:${c + 2};grid-row:1 / -1"></div>`).join("")}
+      ${place.map(({ b, row }) => `<div class="place" style="grid-column:${lanes.findIndex((a) => a.id === b.by) + 2};grid-row:${row}">${blockHtml(b, maxTok)}</div>`).join("")}
+    </div>`;
+  }
+  $("#lanes").innerHTML = html;
+  applySelection();
+  requestAnimationFrame(drawLinks);
+}
+
+function blockHtml(b, maxTok) {
+  const total = Object.values(b.tokens).reduce((x, y) => x + y, 0);
+  const files = b.context.length;
+  const bar = total ? `<span class="ctxbar" style="width:${Math.max(12, (100 * total) / maxTok)}%">${CATS.map(([c, , col]) => (b.tokens[c] ? `<i style="flex:${b.tokens[c]};background:${col}"></i>` : "")).join("")}</span>` : "";
+  const meta = b.gate ? "your decision" : `${files} sources · ${k(total)} tokens`;
+  return `<div class="blk ${b.gate ? "gate" : ""}" data-block="${b.id}" style="--a:${COLORS[b.by]}"><div class="l">${esc(b.label)}</div>${bar ? `<div class="bw">${bar}</div>` : ""}<div class="m">${meta}</div></div>`;
+}
+
+/** Arrows between consecutive blocks (hand-offs), within a step and on to the next. */
+function drawLinks() {
+  const host = $("#lanes");
+  host.style.position = "relative";
+  host.querySelector("svg.links")?.remove();
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "links");
+  svg.setAttribute("width", host.scrollWidth);
+  svg.setAttribute("height", host.scrollHeight);
+  svg.innerHTML = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--axis)"/></marker></defs>`;
+  const base = host.getBoundingClientRect();
+  const box = (id) => {
+    const r = host.querySelector(`[data-block="${id}"]`).getBoundingClientRect();
+    return { cx: r.left - base.left + host.scrollLeft + r.width / 2, top: r.top - base.top + host.scrollTop, bottom: r.bottom - base.top + host.scrollTop };
+  };
+  const seq = P.steps.filter((s) => !s.parallel).flatMap((s) => s.blocks.map((b) => ({ b, s })));
+  for (let i = 1; i < seq.length; i++) {
+    const p = box(seq[i - 1].b.id), q = box(seq[i].b.id);
+    const mid = p.bottom + (q.top - p.bottom) / 2;
+    const d = Math.abs(p.cx - q.cx) < 2 ? `M${p.cx},${p.bottom} V${q.top - 2}` : `M${p.cx},${p.bottom} V${mid} H${q.cx} V${q.top - 2}`;
+    const between = seq[i - 1].s !== seq[i].s;
+    svg.insertAdjacentHTML("beforeend", `<path d="${d}" fill="none" stroke="var(--axis)" stroke-width="1.3" ${between ? 'stroke-dasharray="3 4"' : ""} marker-end="url(#ah)"/>`);
+  }
+  host.prepend(svg);
+}
+
+// ---------- the brain ----------
+function renderBrain() {
+  const steps = new Map(P.steps.flatMap((s) => s.blocks.map((b) => [b.id, s.n])));
+  const maxTok = Math.max(...P.files.map((f) => f.tokens));
+  const total = P.files.reduce((a, f) => a + f.tokens, 0);
+  $("#brain-sub").textContent = `${P.files.length} files · ${k(total)} tokens`;
+  $("#brain").innerHTML = LAYERS.map(([layer, name, sub]) => {
+    const fs = P.files.filter((f) => f.layer === layer).sort((a, b) => b.used_by.length - a.used_by.length || b.tokens - a.tokens);
+    const tok = fs.reduce((a, f) => a + f.tokens, 0);
+    return `<div class="layer"><div><h3>${name}</h3><div class="sub">${esc(sub)}<b>${fs.length} files · ${k(tok)} tokens</b></div></div><div class="files">${fs.map((f) => {
+      const used = [...new Set(f.used_by.map((b) => steps.get(b)))];
+      return `<button class="file ${used.length ? "" : "unused"}" data-file="${esc(f.id)}" title="${esc(f.path)}${used.length ? "" : " · not used in the process"}"><span class="t">${esc(cleanTitle(f))}</span><span class="row2"><span class="bar" style="width:${Math.max(4, (60 * f.tokens) / maxTok)}px"></span><span class="n">${k(f.tokens)}</span><span class="steps">${used.slice(0, 4).map((n) => `<b>${esc(String(n))}</b>`).join("")}${used.length > 4 ? `<b>+${used.length - 4}</b>` : ""}</span></span></button>`;
+    }).join("")}</div></div>`;
+  }).join("");
+  applySelection();
+}
+const cleanTitle = (f) => f.title.replace(/\s*\(.*?\)\s*$/, "").replace(/^skills\//, "") || f.path;
+
+// ---------- selection ----------
+function select(kind, id, tab = "overview") {
+  state = { kind, id, tab, back: kind === "file" && state.kind === "block" ? { ...state } : null };
+  applySelection();
+  renderInspector();
+}
+function applySelection() {
+  const lanes = $("#lanes"), brain = $("#brain");
+  document.querySelectorAll(".sel, .hl").forEach((n) => n.classList.remove("sel", "hl"));
+  lanes.classList.remove("dim");
+  brain.classList.remove("dim");
+  if (!P || !state.id) return;
+  if (state.kind === "block") {
+    const b = blockById().get(state.id);
+    lanes.querySelector(`[data-block="${state.id}"]`)?.classList.add("sel");
+    const ids = new Set(b?.context.map((c) => c.id) ?? []);
+    if (ids.size) {
+      brain.classList.add("dim");
+      brain.querySelectorAll("[data-file]").forEach((n) => ids.has(n.dataset.file) && n.classList.add("hl"));
+    }
+  } else if (state.kind === "file") {
+    const f = P.files.find((x) => x.id === state.id);
+    brain.querySelector(`[data-file="${CSS.escape(state.id)}"]`)?.classList.add("sel");
+    if (f?.used_by.length) {
+      lanes.classList.add("dim");
+      for (const id of f.used_by) lanes.querySelector(`[data-block="${id}"]`)?.classList.add("hl");
+    }
+  }
+}
+
+// ---------- inspector ----------
+const md = (text) => {
+  const m = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  const body = m ? text.slice(m[0].length) : text;
+  return `${m ? `<details class="fm"><summary>frontmatter</summary><pre class="raw">${esc(m[1])}</pre></details>` : ""}<div class="md">${clean(marked.parse(body))}</div>`;
+};
+/** Workspace files quote web pages: keep the markdown's formatting, drop anything active. */
+function clean(html) {
+  const t = document.createElement("template");
+  t.innerHTML = html;
+  t.content.querySelectorAll("script, style, iframe, object, embed, link, meta, form").forEach((n) => n.remove());
+  t.content.querySelectorAll("*").forEach((n) => {
+    for (const a of [...n.attributes]) if (a.name.startsWith("on") || /^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
+  });
+  return t.innerHTML;
+}
+const render = (path, text, parsed) => {
+  if (/\.(md)$/.test(path) || path === "operator") return md(text);
+  if (parsed?.factors) return scoringTable(parsed) + `<details><summary class="muted">raw YAML</summary><pre class="raw">${esc(text)}</pre></details>`;
+  return `<pre class="raw">${esc(text)}</pre>`;
+};
+/** A scoring model as people read it: groups and weights, then every factor with what each level means. */
+function scoringTable(m) {
+  const groups = Object.entries(m.groups ?? {}).map(([g, w]) => `<span class="chip">${esc(g)} ${Math.round(w * 100)}%</span>`).join("");
+  const tiers = m.tiers ? `<span class="chip">tier A ≥ ${m.tiers.A}</span><span class="chip">tier B ≥ ${m.tiers.B}</span>` : "";
+  const tf = m.tier_from ? `<span class="chip">tier from ${esc(m.tier_from.join(" + "))}</span>` : "";
+  return `<div class="chips" style="margin-bottom:10px">${groups}${tiers}${tf}<span class="chip">version ${esc(String(m.version ?? "?"))}</span></div>` +
+    m.factors.map((f) => `<div class="factor"><div class="fh"><b>${esc(f.name ?? f.id)}</b><span class="muted">${esc(f.group)} · weight ${esc(String(f.weight))}${f.light ? " · light" : ""}${f.knockout ? " · knockout" : ""}</span></div>
+      ${f.question ? `<div class="muted" style="margin:2px 0 4px">${esc(f.question)}</div>` : ""}
+      <ol class="lv" start="0">${[0, 1, 2, 3].map((l) => `<li><span>${l}</span>${esc(f.levels?.[l] ?? "")}</li>`).join("")}</ol></div>`).join("");
+}
+
+function renderInspector() {
+  const el = $("#inspector");
+  if (!P) return;
+  if (state.kind === "block") return inspectBlock(el, blockById().get(state.id));
+  if (state.kind === "file") return inspectFile(el, P.files.find((f) => f.id === state.id) ?? { id: state.id, path: state.id.split(":")[1], title: state.id, layer: "data", tokens: 0, used_by: [] });
+  const totals = Object.fromEntries(CATS.map(([c]) => [c, 0]));
+  el.innerHTML = `<h3>Select a block</h3><p class="lead">Every block is one actor doing one thing. Click it to see exactly what it does, what it reads, what it follows, what it produces and what it costs.</p>
+    <h4>Reading the map</h4><ul class="check"><li>Rows are steps, top to bottom; columns are who does the work.</li><li>Black blocks are decisions only you make.</li><li>The small bar in each block is its context: what goes into that agent's head.</li><li>Below, the brain: every file behind it. Click one to read it.</li></ul>
+    <h4>Context, by source</h4>${CATS.map(([, l, c]) => `<div class="legend" style="margin:4px 0"><span><i style="background:${c}"></i>${l}</span></div>`).join("")}`;
+  void totals;
+}
+
+function inspectBlock(el, b) {
+  if (!b) return;
+  const a = actor(b.by);
+  const tabs = b.gate ? [["overview", "Overview"]] : [["overview", "Overview"], ["context", "Context"], ["instructions", "Instructions"], ...(b.example ? [["output", "Output"]] : []), ["runs", "Runs"]];
+  const head = `<div class="ins-who"><i style="background:${COLORS[b.by]}"></i>${esc(a.name)} · step ${esc(String(b.step.n))} ${esc(b.step.title)}</div><h3>${esc(b.label)}</h3><p class="lead">${esc(b.detail)}</p>
+    <div class="tabs">${tabs.map(([t, l]) => `<button data-tab="${t}" class="${state.tab === t ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  const body = {
+    overview: () => overview(b),
+    context: () => contextTab(b),
+    instructions: () => "<p class='muted'>Loading…</p>",
+    output: () => "<p class='muted'>Loading…</p>",
+    runs: () => runsTab(b),
+  }[state.tab]?.() ?? "";
+  el.innerHTML = head + `<div id="tab">${body}</div>`;
+  if (state.tab === "instructions") instructionsTab(b);
+  if (state.tab === "output") outputTab(b);
+}
+
+function overview(b) {
+  if (b.gate) return `<h4>What you check</h4><ol class="check">${(b.check ?? []).map((c) => `<li>${esc(c)}</li>`).join("")}</ol>`;
+  const total = Object.values(b.tokens).reduce((x, y) => x + y, 0);
+  const runs = blockRuns(b);
+  const cost = runs.length ? runs.reduce((a, r) => a + actorCost(r, b.by), 0) / runs.length : null;
+  return `<div class="stats"><div class="stat"><b>${b.context.length}</b><span>context sources</span></div><div class="stat"><b>${k(total)}</b><span>tokens of fixed context</span></div><div class="stat"><b>${cost == null ? "–" : money(cost)}</b><span>${esc(actor(b.by).name)} cost / run</span></div></div>
+    <h4>Context mix</h4>${compo(b)}
+    ${(b.skills ?? []).length ? `<h4>Follows</h4><div class="chips">${b.skills.map((s) => `<button class="chip" data-file="engine:skills/${s}/SKILL.md">${esc(s)} playbook</button>`).join("")}${b.agent && b.agent !== "operator" ? `<button class="chip" data-file="engine:agents/${b.agent}.md">${esc(actor(b.agent).name)} instructions</button>` : b.agent === "operator" ? `<button class="chip" data-file="virtual:operator">Coordinator instructions</button>` : ""}</div>` : ""}
+    ${b.tools?.length ? `<h4>Tools</h4><div class="chips">${b.tools.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : ""}
+    ${b.writes?.length ? `<h4>Produces</h4><div class="chips">${b.writes.map((w) => `<span class="chip">${esc(w)}</span>`).join("")}</div>` : ""}`;
+}
+
+const compo = (b) => {
+  const total = Object.values(b.tokens).reduce((x, y) => x + y, 0) || 1;
+  return `<div class="compo">${CATS.map(([c, , col]) => (b.tokens[c] ? `<i style="flex:${b.tokens[c]};background:${col}" title="${c}"></i>` : "")).join("")}</div>
+    <div class="legend">${CATS.filter(([c]) => b.tokens[c]).map(([c, l, col]) => `<span><i style="background:${col}"></i>${l} ${Math.round((100 * b.tokens[c]) / total)}%</span>`).join("")}</div>`;
+};
+
+function contextTab(b) {
+  const max = Math.max(1, ...b.context.map((c) => c.tokens));
+  return `<p class="muted">What goes into ${esc(actor(b.by).name)}'s context for this block, before any web pages it fetches. Click a source to read it.</p>${compo(b)}` +
+    CATS.map(([c, l, col]) => {
+      const items = b.context.filter((x) => x.category === c).sort((x, y) => y.tokens - x.tokens);
+      if (!items.length) return "";
+      return `<h4>${l}</h4>${items.map((x) => {
+        const link = x.id.startsWith("engine:") || x.id.startsWith("workspace:") || x.id === "virtual:operator" || x.id.startsWith("data:");
+        return `<div class="ctxrow ${link ? "" : "nolink"}" ${link ? `data-ctx="${esc(x.id)}"` : ""}><span>${esc(x.label)}</span><span class="n">${x.tokens ? k(x.tokens) : "–"}</span><span class="b" style="background:${col};width:${(100 * x.tokens) / max}%"></span>${x.note ? `<span class="note">${esc(x.note)}</span>` : ""}</div>`;
+      }).join("")}`;
+    }).join("");
+}
+
+async function instructionsTab(b) {
+  const ids = [b.agent === "operator" ? "virtual:operator" : b.agent ? `engine:agents/${b.agent}.md` : null, ...(b.skills ?? []).map((s) => `engine:skills/${s}/SKILL.md`)].filter(Boolean);
+  const parts = await Promise.all(ids.map((id) => fetch(`/api/file?id=${encodeURIComponent(id)}`).then((r) => r.json())));
+  if (state.kind !== "block" || state.id !== b.id) return;
+  $("#tab").innerHTML = parts.map((f, i) => `<details ${i === 0 || (b.agent === "operator" && i === 1) ? "open" : ""}><summary><b>${esc(i === 0 && b.agent ? `${actor(b.agent).name} instructions` : `${f.path.split("/")[1]} playbook`)}</b> <span class="muted">${esc(f.path)}</span></summary>${render(f.path, f.text)}</details>`).join("<hr style='border:0;border-top:1px solid var(--grid)'>");
+}
+
+async function outputTab(b) {
+  const r = await fetch(`/api/example?pattern=${encodeURIComponent(b.example)}`);
+  const f = await r.json();
+  if (state.kind !== "block" || state.id !== b.id) return;
+  $("#tab").innerHTML = f.error ? `<p class="muted">${esc(f.error)}</p>` : `<p class="muted">The newest real output in your workspace: <b>${esc(f.path)}</b></p>${render(f.path, f.text)}`;
+}
+
+// runs this block took part in: those of its skills where its actor actually ran (the Judge only when it was called)
+const blockRuns = (b) => (M ? M.runs.filter((r) => (b.runIn ?? b.skills ?? []).includes(r.skill) && (b.by === "operator" || r.threads.some((t) => t.agent === b.by))) : []);
+const actorCost = (r, by) => r.threads.filter((t) => t.agent === by).reduce((a, t) => a + t.cost, 0);
+function runsTab(b) {
+  if (!M) return "<p class='muted'>Loading live data from the platform…</p>";
+  const runs = blockRuns(b);
+  if (!runs.length) return "<p class='muted'>No runs yet.</p>";
+  return `<table class="runs"><tr><th>Date</th><th>Run</th><th>Status</th><th class="r">${esc(actor(b.by).name)}</th><th class="r">Run</th></tr>${runs.map((r) => `<tr><td>${day(r.created_at)}</td><td><a href="https://platform.claude.com/sessions/${r.session_id}" target="_blank">${esc((r.args || r.skill).slice(0, 40))}</a></td><td><span class="st ${r.status}">${esc(r.status.replace("_", " "))}</span></td><td class="r">${money(actorCost(r, b.by))}</td><td class="r">${money(r.cost)}</td></tr>`).join("")}</table>
+    ${runs.some((r) => r.checks.length) ? `<h4>Flagged to double-check</h4><ol class="check">${runs.flatMap((r) => r.checks.map((c) => `<li>${esc(c)}</li>`)).slice(0, 10).join("")}</ol>` : ""}`;
+}
+
+async function inspectFile(el, f) {
+  const blocks = blockById();
+  const back = state.back ? `<button class="back" data-back>← ${esc(blocks.get(state.back.id)?.label ?? "back")}</button>` : "";
+  const used = f.used_by.map((id) => blocks.get(id)).filter(Boolean);
+  el.innerHTML = `${back}<div class="ins-who">${esc(LAYERS.find(([l]) => l === f.layer)?.[1] ?? "Company data")}${f.modified ? ` · changed ${esc(f.modified)}` : ""} · ${k(f.tokens)} tokens</div><h3>${esc(cleanTitle(f))}</h3><p class="muted" style="margin:0 0 10px">${esc(f.path)}</p>
+    ${used.length ? `<h4>Read by</h4><div class="chips">${used.map((b) => `<button class="chip" data-goblock="${b.id}">${esc(String(b.step.n))} · ${esc(b.label)}</button>`).join("")}</div>` : ""}
+    <h4>Content</h4><div id="filebody"><p class="muted">Loading…</p></div>`;
+  const id = f.id.startsWith("data:") ? null : f.id;
+  const res = id ? await fetch(`/api/file?id=${encodeURIComponent(id)}`) : await fetch(`/api/example?pattern=${encodeURIComponent(f.id.slice(5))}`);
+  const j = await res.json();
+  if (state.id !== f.id) return;
+  $("#filebody").innerHTML = j.error ? `<p class="muted">${esc(j.error)}</p>` : `${f.id.startsWith("data:") ? `<p class="muted">One company's version, as an example: ${esc(j.path)}</p>` : ""}${render(j.path, j.text, j.parsed)}`;
+}
+
+// ---------- events ----------
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-tab]");
+  if (t) { state.tab = t.dataset.tab; return renderInspector(); }
+  const b = e.target.closest("[data-block]");
+  if (b) return select("block", b.dataset.block);
+  const gb = e.target.closest("[data-goblock]");
+  if (gb) return select("block", gb.dataset.goblock);
+  const f = e.target.closest("[data-file]");
+  if (f) return select("file", f.dataset.file);
+  const c = e.target.closest("[data-ctx]");
+  if (c) return select("file", c.dataset.ctx);
+  if (e.target.closest("[data-back]")) { state = { ...state.back }; applySelection(); return renderInspector(); }
 });
-$("#close").addEventListener("click", closeDrawer);
-$("#scrim").addEventListener("click", closeDrawer);
-document.addEventListener("keydown", (e) => e.key === "Escape" && closeDrawer());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") select("intro", null); });
 $("#refresh").addEventListener("click", () => load(true));
 let rt;
-window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawLinks, 120); });
 load();

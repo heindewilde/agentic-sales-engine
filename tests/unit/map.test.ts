@@ -56,3 +56,24 @@ describe("agent map", () => {
     expect(extractChecks("All three are tier A, but please check the totals in the summary.\n*Please double-check:*\n- Headcount of 14 is unverified for deblonsports.com\n- Two new signals")).toEqual(["Headcount of 14 is unverified for deblonsports.com"]);
   });
 });
+
+describe("the brain", () => {
+  test("every engine file in a layer; each block's context derived from its playbooks and agent", async () => {
+    const { buildBrain } = await import("../../src/map/brain.ts");
+    const b = buildBrain(null);
+    const layers = new Set(b.files.map((f) => f.layer));
+    expect([...layers].sort()).toEqual(["agent", "method", "playbook", "template"]);
+    const blocks = new Map(b.steps.flatMap((s) => s.blocks.map((x) => [x.id, x])));
+    const research = blocks.get("research-do")!;
+    const ids = research.context.map((c) => c.id);
+    expect(ids).toContain("engine:agents/account-researcher.md"); // its own instructions
+    expect(ids).toContain("engine:skills/research/SKILL.md"); // the playbook
+    expect(ids).toContain("engine:references/rules.md"); // named in its instructions
+    expect(research.tokens.instructions).toBeGreaterThan(0);
+    const judge = blocks.get("research-judge")!;
+    expect(judge.context.map((c) => c.id)).toContain("engine:references/judging.md");
+    expect(blocks.get("shortlist-approve")!.context).toEqual([]); // your decisions read nothing
+    // every block's file is marked as used by it
+    expect(b.files.find((f) => f.id === "engine:references/judging.md")!.used_by).toContain("research-judge");
+  });
+});

@@ -75,13 +75,15 @@ Research per account: $1.08 (first run) → $0.67 → $0.51 (one researcher per 
 bun src/managed/cli.ts map --workspace ~/Projects/shotlift-sales   # http://127.0.0.1:4317; the workspace is remembered
 ```
 
-A local, read-only dashboard of how the engine works and how it's doing:
-- **Process:** a swimlane of the whole journey (steps as rows; You, Coordinator, Researcher, Judge, Auditor, ICP analyst
-  as lanes), with your decisions in black and live accounts and cost per step.
-- **Pipeline:** accounts that reached each stage, from the workspace, with conversion.
-- **Cost per run, by step:** stacked by agent.
-- **Research hand-off:** the sequence of messages between you, the Coordinator, the Researchers, the Judges and the PR.
-- **Agents** and **Activity** (every run over time, coloured by outcome).
-- Click a step, agent or run for the details: in/out, hand-offs, runs, things to double-check, versions and changes.
+A local, read-only view of how the engine works:
+- **The process:** a swimlane of every block (steps are rows, the actors are columns, your decisions in black, arrows
+  for the hand-offs). Each block shows its context: how many sources go into that agent's head, and the mix.
+- **Click a block** to inspect exactly that block: what it does, its context (agent instructions, playbook, rules and
+  method, your knowledge, company data, each with its size and readable), the instructions it follows, a real output
+  from your workspace, and its runs with the actor's own cost.
+- **The brain:** every file that shapes what the agents do, in layers (your knowledge, rules and method, templates,
+  playbooks, agents), with the steps that read each one. Select a block and its files light up; select a file and the
+  blocks that read it light up. Markdown is rendered, and a scoring model shows as a table of factors and levels.
 
-The process text lives in `src/map/process.ts`; keep it in step with the skills.
+Which files a block reads is derived from the skill and agent text (`src/map/brain.ts`); the blocks themselves are
+described in `src/map/process.ts`.
