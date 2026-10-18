@@ -2,7 +2,7 @@
 
 How to turn evidence into factor levels, for every judge (enrich-light, research, score, the factor-judge agent).
 The maths is done by code; your job is only to pick levels honestly and cite them. Where your judgements go is up to
-the step that asked for them; their shape is in `output-format.md` (`judgements`).
+the step that asked for them; their shape is at the end of this file.
 
 ## Digest (always loaded with `ase context`)
 - Judge each factor in scope against its four anchored levels; cite the exact words (≤ 40) and the source that carries them.
@@ -28,4 +28,5 @@ For each factor in scope (`light` mode: only factors with `light: true`; `full`:
 6. Re-read every judgement: the level must be the one the rationale argues for. The same evidence must always produce
    the same level; consistency matters more than cleverness.
 
+## Shape
 `{"id","level": 0|1|2|3|null,"confidence","evidence":[{"quote","source_url","raw_ref"?,"checked"?}],"rationale"}`, one per factor.

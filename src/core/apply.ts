@@ -85,6 +85,22 @@ export type ApplyInput = z.infer<typeof ApplyInput>;
 
 interface AccountResult { domain: string; ok: boolean; errors: string[]; written: string[]; stage?: string | null; score?: { total: number; tier: string; coverage: number } }
 
+/** Footnote ids in `sources` that the brief already defines differently and still cites in a section that stays. */
+export function footnoteClashes(brief: string, sections: Record<string, string>, sources: Record<string, string>, replacesOpenQuestions: boolean): string[] {
+  const defs = new Map([...brief.matchAll(/^\[\^([^\]]+)\]:\s*(.*)$/gm)].map((m) => [m[1]!, m[2]!.trim()] as const));
+  const kept = [...brief.replace(/^\[\^[^\]]+\]:.*$/gm, "").matchAll(/^##\s+(.+?)\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/gm)]
+    .filter((m) => !(m[1]!.trim() in sections) && !(replacesOpenQuestions && m[1]!.trim() === "Open questions"))
+    .map((m) => [m[1]!.trim(), m[2]!] as const);
+  const out: string[] = [];
+  for (const [id, def] of Object.entries(sources)) {
+    const old = defs.get(id);
+    if (old === undefined || old === def.trim()) continue;
+    const users = kept.filter(([, body]) => body.includes(`[^${id}]`)).map(([h]) => h);
+    if (users.length) out.push(`sources.${id}: [^${id}] already cites another source in ${users.join(", ")}. Use a new footnote id`);
+  }
+  return out;
+}
+
 /** Rebuild a brief body with replaced sections, merged footnote definitions and a changelog line. */
 export function rebuildBrief(body: string, sections: Record<string, string>, sources: Record<string, string>, openQuestions: string[] | undefined, changelog: string | undefined): string {
   const lines = body.split("\n");
@@ -161,6 +177,10 @@ async function applyAccount(ws: string, icp: string, u: z.infer<typeof AccountUp
       if (missing.length) res.errors.push(`${section}: "${stmt.slice(0, 90)}" has ${missing.join(", ")} but no quote of ${ids.map((i) => `[^${i}]`).join(" ")} contains it. Quote the words with that number, or leave it out`);
     }
   }
+  // a footnote id the brief already uses for another source, in a section this update keeps, would silently re-point
+  // that section's statements at the wrong source
+  const bp0 = paths.brief(ws, u.domain);
+  if (existsSync(bp0)) res.errors.push(...footnoteClashes(readFileSync(bp0, "utf8"), u.sections ?? {}, renderedSources, Boolean(u.open_questions)));
   if (res.errors.length) return res;
 
   // brief
