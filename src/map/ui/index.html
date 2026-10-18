@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent map</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Agent map <span class="muted">· Claude Managed Agents</span></div>
+  <div id="stats" class="stats"></div>
+  <button id="refresh" title="Rebuild from the platform">Refresh</button>
+</header>
+<nav>
+  <button data-tab="map" class="active">Map</button>
+  <button data-tab="flags">Flags</button>
+  <button data-tab="runs">Runs</button>
+  <span class="filters" id="filters">
+    <label><input type="checkbox" data-kind="skill" checked> Skills</label>
+    <label><input type="checkbox" data-kind="agent" checked> Agents</label>
+    <label><input type="checkbox" data-kind="engine" checked> Engine docs</label>
+    <label><input type="checkbox" data-kind="workspace"> Workspace files</label>
+  </span>
+</nav>
+<main>
+  <section id="map" class="tab active"><div id="cy"></div><div id="loading">Loading from the platform…</div></section>
+  <section id="flags" class="tab"></section>
+  <section id="runs" class="tab"></section>
+  <aside id="detail"><p class="muted">Click a node to see its configuration, versions, runs and cost.</p></aside>
+</main>
+<script src="vendor/cytoscape.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

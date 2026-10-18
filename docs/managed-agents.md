@@ -68,3 +68,20 @@ Research per account: $1.08 (first run) → $0.67 → $0.51 (one researcher per 
 | refresh `--icp <icp>` | 1st of the month, 07:00 | $3 |
 
 `inbox` turns finished scheduled runs into pull requests. Pause one in the Console (Deployments) or archive it.
+
+## Agent map
+
+```bash
+bun src/managed/cli.ts map    # http://127.0.0.1:4317, opens the browser; read-only
+```
+
+A local, read-only view of what runs on the platform:
+- **Map:** the operator, the four agents, the schedules, the 25 skills and the documents their text points to. Red ring
+  means recent failures or budget caps.
+- **Click a node:** an agent's model, tools, subagents and prompt, with a version timeline (runs, cost and flags per
+  version, plus a diff that includes skill-version and tool changes). A skill's text, outcomes, runs (with Console links),
+  version diffs and the items its runs flagged. A document's text and what refers to it.
+- **Flags:** every item runs asked a reviewer to double-check (`CHECK:` lines in the operator's final message).
+- **Runs:** every run with its cost split per agent.
+
+Finished runs are cached in `~/.config/agentic-sales-engine/map-cache/`, so Refresh only fetches what's new.

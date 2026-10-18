@@ -22,6 +22,7 @@
     "@opentelemetry/resources": "^2.12.0",
     "@opentelemetry/sdk-trace-base": "^2.12.0",
     "csv-parse": "^7.0.3",
+    "cytoscape": "3.34.3",
     "exa-js": "^2.25.0",
     "tldts": "^7.4.18",
     "yaml": "^2.9.1",
