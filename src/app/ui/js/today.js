@@ -1,7 +1,7 @@
 // Today: what's waiting for you, each with the screen that resolves it; then the pipeline and spend.
 import { STAGES, STAGE_NAME, empty, esc, get, money } from "./ui.js";
 
-const ICON = { gate: "◆", drafts: "✎", outcomes: "↺", stale: "◷" };
+const ICON = { gate: "◆", drafts: "✎", outcomes: "↺", stale: "◷", run: "▶" };
 
 export async function today(view, { state }) {
   view.innerHTML = `<p class="muted">Loading…</p>`;
@@ -19,7 +19,7 @@ export async function today(view, { state }) {
         <span class="ic">${ICON[i.kind] ?? "•"}</span>
         <span class="t"><b>${esc(i.title)}</b><small>${esc(i.detail)}</small></span>
         ${i.icp && state.icps.length > 1 ? `<span class="tag">${esc(i.icp)}</span>` : ""}
-        <span class="go">${i.kind === "gate" ? "review" : "open"} →</span></a>`).join("")}</section>` : empty("All clear", "New gates, drafts and outcome questions show up here as the engine works.")}
+        <span class="go">${i.kind === "gate" ? "review" : i.kind === "run" ? "start" : "open"} →</span></a>`).join("")}</section>` : empty("All clear", "New gates, drafts and outcome questions show up here as the engine works.")}
     ${t.problems?.length ? `<section class="note warn"><b>Needs attention</b><ul>${t.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></section>` : ""}
     <h3 class="section">Pipeline</h3>
     ${Object.entries(t.funnel).map(([icp, stages]) => funnel(icp, stages)).join("") || empty("No accounts yet", "Find companies for an approved ICP to start the pipeline.")}
