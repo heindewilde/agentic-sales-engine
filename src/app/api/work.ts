@@ -48,6 +48,8 @@ export async function today(ws: string) {
   for (const i of h.icps) {
     if (i.status !== "approved") items.push({ kind: "gate", icp: i.slug, title: `Approve the ICP "${i.slug}"`, detail: "Nothing runs for this ICP until you approve who you sell to.", href: `/today/icp/${i.slug}`, urgency: 5 });
     const sl = pendingShortlist(ws, i.slug);
+    const scanned = h.stages[i.slug]?.light_scored ?? 0;
+    if (!sl && scanned > 0) items.push({ kind: "run", icp: i.slug, title: `${scanned} quick-scanned accounts wait for a shortlist`, detail: "Let the engine propose which ones deserve deep research, with a cost estimate; you approve it here.", href: `/runs?skill=shortlist&icp=${i.slug}`, urgency: 3 });
     if (sl) {
       const cost = sl.cost?.total_p50 != null ? ` · about $${sl.cost.total_p50}${sl.cost.total_p90 ? `–${sl.cost.total_p90}` : ""}` : "";
       items.push({ kind: "gate", icp: i.slug, title: `Approve the shortlist: ${sl.accounts} accounts for deep research`, detail: `Proposed from ${sl.rows} light-scored accounts${cost}.`, href: `/today/shortlist/${i.slug}`, urgency: 4 });
