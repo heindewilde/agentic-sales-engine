@@ -1,8 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { credentialsPath, parseEnv } from "../core/credentials.ts";
-import { ENGINE_DIR, managedDefinition, readAgentFile, researchTask } from "./agents.ts";
+import { toFile } from "@anthropic-ai/sdk";
+import { managedDefinition, operatorDefinition, readAgentFile, runMessage } from "./agents.ts";
+import { convertSkill, listSkills } from "./skills.ts";
 
 /**
  * Claude Managed Agents for the owner's own runs (the plugin itself is unchanged). Billed to the Claude Console
@@ -10,14 +13,18 @@ import { ENGINE_DIR, managedDefinition, readAgentFile, researchTask } from "./ag
  * ANTHROPIC_API_KEY, which would switch the plugin and `claude -p` from the subscription to API billing.
  */
 
-const AGENTS = ["factor-judge", "account-researcher"] as const; // judge first: the researcher references it
-type AgentName = (typeof AGENTS)[number];
+// the plugin's agents; the judge first, because the researcher references it as a subagent
+const AGENTS = ["factor-judge", "account-researcher", "icp-analyst", "wiki-linter"] as const;
+type AgentName = (typeof AGENTS)[number] | "operator";
+type Ref = { id: string; version: number; hash: string };
 
 interface State {
   environment_id?: string;
   vault_id?: string;
   vault_credentials?: string[];
-  agents: Partial<Record<AgentName, { id: string; version: number; hash: string }>>;
+  agents: Partial<Record<AgentName, Ref>>;
+  skills?: Record<string, { id: string; version: string; hash: string }>;
+  runs?: Record<string, { repo: string; base: string; branch: string; skill: string; args: string }>;
   telemetry_destination_id?: string;
 }
 
@@ -72,24 +79,48 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
     log(`vault ${v.id} created with ${s.vault_credentials.length} provider key(s)`);
   }
 
+  const upsert = async (key: AgentName, body: Record<string, unknown> & { name: string }, hash: string) => {
+    const prev = s.agents[key];
+    if (prev?.hash === hash) return log(`${body.name}: v${prev.version}, unchanged`);
+    const a = prev ? await c.beta.agents.update(prev.id, body as never) : await c.beta.agents.create(body as never);
+    s.agents[key] = { id: a.id, version: a.version, hash };
+    log(`${body.name}: ${prev ? "new version" : "created"} v${a.version} (${a.id})`);
+  };
+  const pin = (r: Ref) => ({ type: "agent" as const, id: r.id, version: r.version });
+  const sub = (agents: ({ type: "agent"; id: string; version: number } | { type: "self" })[]) => ({ type: "multiagent_20261001" as const, subagents: { type: "enabled" as const, inline_agents: { type: "disabled" as const }, predefined_agents: agents } });
+
   for (const name of AGENTS) {
     const { def, hash } = managedDefinition(readAgentFile(pluginRoot, name), sha);
     const judge = s.agents["factor-judge"];
-    const multiagent = name === "account-researcher" && judge
-      ? { type: "multiagent_20261001" as const, subagents: { type: "enabled" as const, inline_agents: { type: "disabled" as const }, predefined_agents: [{ type: "agent" as const, id: judge.id, version: judge.version }, { type: "self" as const }] } }
-      : undefined;
-    const prev = s.agents[name];
-    // the researcher also needs a new version when it should point at a new judge version
-    const fullHash = `${hash}${multiagent ? `:${judge!.id}@${judge!.version}` : ""}`;
-    if (prev?.hash === fullHash) {
-      log(`${def.name}: v${prev.version}, unchanged`);
-      continue;
-    }
-    const body = { ...def, ...(multiagent ? { multiagent } : {}) };
-    const a = prev ? await c.beta.agents.update(prev.id, body) : await c.beta.agents.create(body);
-    s.agents[name] = { id: a.id, version: a.version, hash: fullHash };
-    log(`${def.name}: ${prev ? "new version" : "created"} v${a.version} (${a.id})`);
+    const multiagent = name === "account-researcher" && judge ? sub([pin(judge), { type: "self" }]) : undefined;
+    // a new judge version also needs a new researcher version that points at it
+    await upsert(name, { ...def, ...(multiagent ? { multiagent } : {}) }, `${hash}${judge && multiagent ? `:${judge.id}@${judge.version}` : ""}`);
   }
+
+  // skills: each plugin skill uploaded once, a new version when its text changes
+  s.skills ??= {};
+  for (const name of listSkills(pluginRoot)) {
+    const sk = convertSkill(pluginRoot, name);
+    const prev = s.skills[name];
+    if (prev?.hash === sk.hash) continue;
+    const files = [await toFile(Buffer.from(sk.content), `${name}/SKILL.md`)];
+    if (prev) {
+      const v = await c.beta.skills.versions.create(prev.id, { files });
+      s.skills[name] = { id: prev.id, version: v.id, hash: sk.hash };
+      log(`skill ${name}: new version`);
+    } else {
+      const created = await c.beta.skills.create({ display_name: `ase ${name}`, files });
+      s.skills[name] = { id: created.id, version: created.latest_version_id, hash: sk.hash };
+      log(`skill ${name}: created`);
+    }
+  }
+
+  // the operator: every skill, the plugin's agents as subagents, and itself (for parallel chunks)
+  const op = operatorDefinition();
+  const skills = Object.values(s.skills).map((k) => ({ type: "custom" as const, skill_id: k.id, version: k.version }));
+  const subs = AGENTS.map((n) => s.agents[n]).filter((r): r is Ref => Boolean(r)).map(pin);
+  const opHash = createHash("sha256").update(JSON.stringify({ op, skills, subs })).digest("hex").slice(0, 16);
+  await upsert("operator", { ...op, metadata: { ...op.metadata, engine_sha: sha }, skills, multiagent: sub([...subs, { type: "self" }]) }, opHash);
   saveState(s);
   return s;
 }
@@ -98,97 +129,124 @@ export interface RunOptions {
   pluginRoot: string;
   repo: string; // owner/name of the workspace repo
   baseBranch: string;
-  icp: string;
-  domains: string[];
-  budgetUsd: number; // provider (Exa/Firecrawl) budget for the ledger run
+  skill: string;
+  args: string;
   capUsd: number; // hard cap on the session's Claude cost
   approvedBy: string;
 }
 
-/** One research session: workspace repo mounted, results pushed to a new branch. Streams progress; returns the branch. */
-export async function run(o: RunOptions, log: (l: string) => void = console.error): Promise<{ session_id: string; branch: string; status: string; cost_usd: number | null; pr: string | null }> {
+export interface RunResult {
+  session_id: string;
+  branch: string;
+  status: "done" | "question" | "failed" | string;
+  message: string; // the agent's last message (the question, or the summary)
+  cost_usd: number | null;
+  pr: string | null;
+}
+
+/** Start a skill on the platform: workspace repo + engine mounted, results on a new branch, a pull request when done. */
+export async function run(o: RunOptions, log: (l: string) => void = console.error): Promise<RunResult> {
   const s = await sync(o.pluginRoot, log);
   const c = client();
-  const researcher = s.agents["account-researcher"]!;
+  const operator = s.agents.operator!;
   const today = new Date().toISOString().slice(0, 10);
-  const branch = `managed/${today}-${o.domains[0]!.replace(/\..*$/, "")}${o.domains.length > 1 ? `-and-${o.domains.length - 1}` : ""}-${Date.now().toString(36).slice(-4)}`;
+  const branch = `managed/${today}-${o.skill}-${Date.now().toString(36).slice(-4)}`;
   const session = await c.beta.sessions.create({
-    agent: { type: "agent", id: researcher.id, version: researcher.version },
+    agent: { type: "agent", id: operator.id, version: operator.version },
     environment_id: s.environment_id!,
-    title: `research ${o.domains.join(", ")}`,
+    title: `${o.skill} ${o.args}`.trim().slice(0, 200),
     vault_ids: s.vault_id ? [s.vault_id] : [],
     resources: [
       { type: "github_repository", url: `https://github.com/${o.repo}`, authorization_token: secret("ASE_MANAGED_AGENTS_GITHUB_TOKEN"), checkout: { type: "branch", name: o.baseBranch } },
-      // the engine at the exact local commit; mounted repos are cached across sessions, so no clone per run
-      { type: "github_repository", url: "https://github.com/heindewilde/agentic-sales-engine", checkout: { type: "commit", sha: engineSha(o.pluginRoot) } }, // → ENGINE_DIR
+      // the engine at the exact local commit, at /workspace/agentic-sales-engine; mounted repos are cached across sessions
+      { type: "github_repository", url: "https://github.com/heindewilde/agentic-sales-engine", checkout: { type: "commit", sha: engineSha(o.pluginRoot) } },
     ],
     budget: { type: "limit", max_list_cost: { amount: String(Math.round(o.capUsd * 100)), currency: "USD" } },
-    metadata: { icp: o.icp, branch },
+    metadata: { skill: o.skill, branch },
   });
+  s.runs = { ...(s.runs ?? {}), [session.id]: { repo: o.repo, base: o.baseBranch, branch, skill: o.skill, args: o.args } };
+  saveState(s);
   log(`session ${session.id} → https://platform.claude.com/sessions/${session.id}`);
+  return converse(session.id, runMessage({ repo: o.repo, branch, baseBranch: o.baseBranch, skill: o.skill, args: o.args, approvedBy: o.approvedBy, today }), log);
+}
 
-  const stream = await c.beta.sessions.events.stream(session.id); // open before sending: it only delivers later events
-  const task = researchTask({ repo: o.repo, branch, baseBranch: o.baseBranch, icp: o.icp, domains: o.domains, budgetUsd: o.budgetUsd, approvedBy: o.approvedBy, judgeName: "ase-factor-judge", researcherName: "ase-account-researcher", today });
-  await c.beta.sessions.events.send(session.id, { events: [{ type: "user.message", content: [{ type: "text", text: task }] }] });
+/** Answer the question a run is waiting on, and continue it. */
+export async function reply(sessionId: string, answer: string, log: (l: string) => void = console.error): Promise<RunResult> {
+  return converse(sessionId, answer, log);
+}
 
-  let status = "running";
-  let cost: number | null = null;
+/** Send one message, stream until the agent stops, and finish the run (pull request) when it says it's done. */
+async function converse(sessionId: string, text: string, log: (l: string) => void): Promise<RunResult> {
+  const c = client();
+  const meta = loadState().runs?.[sessionId];
+  if (!meta) throw new Error(`unknown run ${sessionId}`);
+  const stream = await c.beta.sessions.events.stream(sessionId); // open before sending: it only delivers later events
+  await c.beta.sessions.events.send(sessionId, { events: [{ type: "user.message", content: [{ type: "text", text }] }] });
+  let stop = "running";
+  let last = "";
   for await (const raw of stream as AsyncIterable<Record<string, unknown>>) {
     const e = raw as { type: string; [k: string]: unknown };
     if (e.type === "agent.message") {
-      const text = ((e.content as { type: string; text?: string }[]) ?? []).map((b) => b.text ?? "").join(" ").trim();
-      if (text) log(`  agent: ${text.replace(/\s+/g, " ").slice(0, 240)}`);
-    } else if (e.type === "agent.tool_use" || e.type === "agent.mcp_tool_use") {
-      const input = JSON.stringify(e.input ?? {});
-      log(`  ${e.name}: ${input.slice(0, 160)}`);
+      last = ((e.content as { type: string; text?: string }[]) ?? []).map((b) => b.text ?? "").join("").trim();
+      if (last) log(`  agent: ${last.replace(/\s+/g, " ").slice(0, 240)}`);
+    } else if (e.type === "agent.tool_use") {
+      log(`  ${e.name}: ${JSON.stringify(e.input ?? {}).slice(0, 160)}`);
     } else if (e.type === "session.error") {
       log(`  error: ${JSON.stringify(e.error ?? e).slice(0, 300)}`);
-    } else if (e.type === "session.usage") {
-      const lc = (e as { list_cost?: { amount?: string } }).list_cost?.amount;
-      if (lc !== undefined) cost = Number(lc) / 100;
     } else if (e.type === "session.status_idle") {
-      status = ((e.stop_reason as { type?: string }) ?? {}).type ?? "idle";
-      if (status === "requires_action") log("  waiting for an approval: open the session in the Console");
+      stop = ((e.stop_reason as { type?: string }) ?? {}).type ?? "idle";
       break;
     } else if (e.type === "session.status_terminated") {
-      status = "terminated";
+      stop = "terminated";
       break;
     }
   }
-  const final = await c.beta.sessions.retrieve(session.id);
-  cost = Number((final.usage as { list_cost?: { amount?: string } } | undefined)?.list_cost?.amount ?? NaN) / 100;
-  const pr = status === "end_turn" ? openPullRequest(o, branch, session.id, cost, log) : null;
-  return { session_id: session.id, branch, status, cost_usd: Number.isFinite(cost) ? cost : null, pr };
+  const final = await c.beta.sessions.retrieve(sessionId);
+  const amount = Number((final.usage as { list_cost?: { amount?: string } } | undefined)?.list_cost?.amount ?? NaN) / 100;
+  const cost = Number.isFinite(amount) ? amount : null;
+  const marker = last.match(/STATUS:\s*(done|question|failed)(?::\s*(.*))?\s*$/i);
+  const status = stop !== "end_turn" ? stop : (marker?.[1]?.toLowerCase() ?? "question"); // no marker: treat as a question to you
+  const message = last.replace(/\n?STATUS:.*$/i, "").trim();
+  const pr = status === "done" ? openPullRequest(meta, sessionId, message, cost, log) : null;
+  return { session_id: sessionId, branch: meta.branch, status, message, cost_usd: cost, pr };
 }
 
-/** One pull request per run: scores before → after per account, with the session link and cost, for review on GitHub. */
-function openPullRequest(o: RunOptions, branch: string, sessionId: string, cost: number | null, log: (l: string) => void): string | null {
+/** One pull request per finished run: the agent's summary, scores before → after for any rescored account, cost and session link. */
+function openPullRequest(m: { repo: string; base: string; branch: string; skill: string; args: string }, sessionId: string, summary: string, cost: number | null, log: (l: string) => void): string | null {
   const gh = (args: string[]) => Bun.spawnSync(["gh", ...args]);
+  const cmp = gh(["api", `repos/${m.repo}/compare/${m.base}...${encodeURIComponent(m.branch)}`, "--jq", "[.ahead_by, ([.files[].filename] | join(\"\\n\"))] | @tsv"]);
+  if (cmp.exitCode !== 0) {
+    log(`no pull request: branch ${m.branch} not found (${cmp.stderr.toString().trim().slice(0, 200)})`);
+    return null;
+  }
+  const [ahead, files = ""] = cmp.stdout.toString().trim().split("\t");
+  if (ahead === "0") {
+    log("no pull request: the run changed nothing");
+    return null;
+  }
   const file = (ref: string, path: string) => {
-    const r = gh(["api", `repos/${o.repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, "-H", "Accept: application/vnd.github.raw"]);
+    const r = gh(["api", `repos/${m.repo}/contents/${path}?ref=${encodeURIComponent(ref)}`, "-H", "Accept: application/vnd.github.raw"]);
     return r.exitCode === 0 ? r.stdout.toString() : "";
   };
   const field = (text: string, k: string) => text.match(new RegExp(`^${k}: (.+)$`, "m"))?.[1]?.trim() ?? "–";
-  const rows = o.domains.map((d) => {
-    const path = `accounts/${d}/scores/${o.icp}.md`;
-    const [before, after] = [file(o.baseBranch, path), file(branch, path)];
-    return `| ${d} | ${field(before, "mode")} ${field(before, "total")} · ${field(before, "tier")} | ${field(after, "mode")} ${field(after, "total")} · **${field(after, "tier")}** · timing ${field(after, "timing")} |`;
+  const scored = files.split("\\n").filter((f) => /^accounts\/[^/]+\/scores\/[^/]+\.md$/.test(f));
+  const rows = scored.map((path) => {
+    const [before, after] = [file(m.base, path), file(m.branch, path)];
+    const sc = (t: string) => (t ? `${field(t, "mode")} ${field(t, "total")} · ${field(t, "tier")}` : "–");
+    return `| ${path.split("/")[1]} | ${sc(before)} | ${sc(after)}${field(after, "timing") !== "–" ? ` · timing ${field(after, "timing")}` : ""} |`;
   });
   const body = [
-    `Research and full score by Claude Managed Agents (session [${sessionId}](https://platform.claude.com/sessions/${sessionId})).`,
-    "",
-    "| Account | Before | After |", "|---|---|---|", ...rows,
-    "",
-    `Claude cost: ${cost === null || !Number.isFinite(cost) ? "unknown" : `$${cost.toFixed(2)}`} (API credits). Provider spend: see \`ledger/costs.jsonl\` in the diff.`,
-    "",
-    "Review the briefs, signals and people, then merge to accept or close to discard.",
+    `\`${m.skill}${m.args ? ` ${m.args}` : ""}\` on Claude Managed Agents (session [${sessionId}](https://platform.claude.com/sessions/${sessionId})).`,
+    "", summary,
+    ...(rows.length ? ["", "| Account | Before | After |", "|---|---|---|", ...rows] : []),
+    "", `Claude cost: ${cost === null ? "unknown" : `$${cost.toFixed(2)}`} (API credits). Merge to accept, close to discard.`,
   ].join("\n");
-  const r = gh(["pr", "create", "--repo", o.repo, "--base", o.baseBranch, "--head", branch, "--title", `Managed research: ${o.domains.join(", ")}`, "--body", body]);
-  const url = r.stdout.toString().trim();
+  const r = gh(["pr", "create", "--repo", m.repo, "--base", m.base, "--head", m.branch, "--title", `Managed: ${m.skill}${m.args ? ` ${m.args}` : ""}`.slice(0, 120), "--body", body]);
   if (r.exitCode !== 0) {
     log(`pull request not created: ${r.stderr.toString().slice(0, 300)}`);
     return null;
   }
+  const url = r.stdout.toString().trim();
   log(`pull request: ${url}`);
   return url;
 }

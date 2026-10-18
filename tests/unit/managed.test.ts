@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { ENGINE_DIR, managedDefinition, readAgentFile, researchTask } from "../../src/managed/agents.ts";
+import { ENGINE_DIR, managedDefinition, operatorDefinition, readAgentFile, runMessage } from "../../src/managed/agents.ts";
+import { convertSkill, listSkills } from "../../src/managed/skills.ts";
 import { PLUGIN_ROOT } from "../helpers.ts";
 
 test("agent files become managed definitions: tools mapped, MCP tools via the CLI, plugin root resolved, stable hash", () => {
@@ -17,16 +18,27 @@ test("agent files become managed definitions: tools mapped, MCP tools via the CL
   expect(judge.system).toContain(".ase/tmp/evidence-<domain>.json");
 });
 
-test("research task: pinned engine, own branch, two applies, never pushes the base branch", () => {
-  const t = researchTask({ repo: "o/shotlift-sales", branch: "managed/x", baseBranch: "master", icp: "i", domains: ["a.com", "b.nl"], budgetUsd: 1.2, approvedBy: "hein", judgeName: "ase-factor-judge", researcherName: "ase-account-researcher", today: "2026-10-17" });
-  expect(t).toContain("cd /workspace/shotlift-sales && git checkout -q -b managed/x");
-  expect(t).toContain("one `ase-account-researcher` subagent per account"); // each account in its own small context
-  expect(t).toContain("context <domain> --icp i --mode full > .ase/tmp/evidence-<domain>.json");
-  expect(t).toContain("git push -q -u origin managed/x");
-  expect(t).toContain('"mode":"full","judgements"');
-  const researcher = managedDefinition(readAgentFile(PLUGIN_ROOT, "account-researcher"), "sha1").def;
-  expect(researcher.system).toContain('"stage":"researched"'); // the apply format lives in the cached system prompt
-  expect(researcher.system).toContain("context <domain> --icp <icp> --mode full");
-  expect(t).toContain("Never push to `master`");
-  expect(t).not.toContain("${CLAUDE_PLUGIN_ROOT}");
+test("operator: every provider op via the CLI, research and enrich-light recipes, questions and finish markers", () => {
+  const op = operatorDefinition();
+  for (const o of ["discover_companies", "find_people", "search_news", "fetch_pages", "extract", "research"]) expect(op.system).toContain(`provider ${o} --input`);
+  expect(op.system).toContain("one `ase-account-researcher`\n    subagent per account");
+  expect(op.system).toContain("chunks of 10");
+  expect(op.system).toContain("STATUS: question");
+  expect(op.system).toContain("STATUS: done");
+  const m = runMessage({ repo: "o/shotlift-sales", branch: "managed/x", baseBranch: "master", skill: "ways-in", args: "acme.com --icp i", approvedBy: "hein", today: "2026-10-18" });
+  expect(m).toContain("git checkout -q -b managed/x");
+  expect(m).toContain("/agentic-sales-engine:ways-in acme.com --icp i");
+  expect(m).toContain("Approver for gates: `hein`");
+});
+
+test("skills convert to platform skills: same body with the engine path, plugin-only frontmatter dropped", () => {
+  const names = listSkills(PLUGIN_ROOT);
+  expect(names).toContain("research");
+  expect(names.length).toBeGreaterThan(20);
+  for (const n of names) {
+    const s = convertSkill(PLUGIN_ROOT, n);
+    expect(s.content).not.toContain("${CLAUDE_PLUGIN_ROOT}");
+    expect(s.content).not.toContain("allowed-tools");
+    expect(s.content).toMatch(new RegExp(`^---\\nname: ${n}\\n`));
+  }
 });

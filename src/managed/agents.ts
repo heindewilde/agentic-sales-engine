@@ -118,36 +118,62 @@ export function managedDefinition(file: AgentFile, engineSha: string): { def: Ma
 }
 
 
+const ALL_OPS = ["discover_companies", "find_people", "search_news", "fetch_pages", "extract", "research", "estimate", "status"];
+
 /**
- * The coordinator's task for a run: one researcher subagent per account in parallel (each in its own small context),
- * then one judge per account, then push to a branch. The engine is mounted at its commit.
+ * The operator: on the platform it plays the part of the Claude Code session that runs the plugin. It has every
+ * skill, can call the four agents, and knows what differs in the sandbox.
  */
-export function researchTask(o: { repo: string; branch: string; baseBranch: string; icp: string; domains: string[]; budgetUsd: number; approvedBy: string; judgeName: string; researcherName: string; today: string }): string {
-  const ws = workspaceDir(o.repo);
+export function operatorDefinition(): ManagedAgentDef {
   const ase = `bun ${ENGINE_DIR}/src/cli/ase.ts`;
-  return `Today is ${o.today}. You coordinate research and full scoring for ICP \`${o.icp}\` of: ${o.domains.join(", ")}.
-You don't research yourself: you delegate, apply scores and push. Keep your own context small.
+  const system = `You run the agentic sales engine for a B2B team, unattended, in a cloud sandbox. The user's request names a skill
+(\`/agentic-sales-engine:<name>\` or just \`<name>\`) with arguments; follow that skill's instructions exactly. A skill that
+points to another skill (\`/agentic-sales-engine:<other>\`) means that skill.
 
-## 1. Setup (one Bash call)
-\`\`\`
-(cd ${ENGINE_DIR} && bun install --frozen-lockfile --silent) && cd ${ws} && git checkout -q -b ${o.branch} && ${ase} reindex >/dev/null && ${ase} ledger run start --stage research --icp ${o.icp} --budget ${o.budgetUsd} --approved-by ${o.approvedBy} >/dev/null && mkdir -p .ase/tmp && echo ok
-\`\`\`
-The workspace is \`${ws}\` (git, branch \`${o.baseBranch}\`). Run every \`ase\` command from there.
+## Environment
+- Workspace: the git repo under \`/workspace/\` named in the request. Run every \`ase\` command from there.
+- Engine: \`${ENGINE_DIR}\` (its references/, methodology/, templates/ are what the skills call \`\${CLAUDE_PLUGIN_ROOT}\`).
+- CLI: \`${ase}\` ("\`ase\`" in the skills).
 
-## 2. Research: one \`${o.researcherName}\` subagent per account, all at once
-Message for each: "Research <domain> for ICP ${o.icp}. Today is ${o.today}. Write and apply .ase/tmp/research-<domain>.json as your instructions describe, then reply with one line."
-Wait for all of them.
+${toolPreamble(ALL_OPS)}- \`sync_watchlist\` → \`${ase} sync\` (with \`--icp\` / \`--account\` as given)
 
-## 3. Score: one \`${o.judgeName}\` per account, all at once
-For each account first run \`${ase} context <domain> --icp ${o.icp} --mode full > .ase/tmp/evidence-<domain>.json\`, then ask \`${o.judgeName}\`:
-"Today is ${o.today}. Judge all factors, mode full, ICP ${o.icp} (icps/${o.icp}/scoring.yaml) for <domain>. Evidence:
-.ase/tmp/evidence-<domain>.json and accounts/<domain>/brief.md. Write the JSON array to .ase/tmp/judgements-<domain>.json."
-When they're done, per account (one Bash call each):
-\`python3 -c 'import json,sys;d=sys.argv[1];json.dump({"icp":"${o.icp}","accounts":[{"domain":d,"mode":"full","judgements":json.load(open(f".ase/tmp/judgements-{d}.json"))}]},open(f".ase/tmp/score-{d}.json","w"))' <domain> && ${ase} apply .ase/tmp/score-<domain>.json\`
+## What differs from the plugin
+- **No \`batch.ts\`, no \`claude -p\`, no \`AskUserQuestion\`.** Instead:
+  - **Research** (any number of accounts): you coordinate and keep your own context small. Start one \`ase-account-researcher\`
+    subagent per account, all at once ("Research <domain> for ICP <icp>. Today is <date>. Write and apply
+    .ase/tmp/research-<domain>.json as your instructions describe, then reply with one line."). Then per account run
+    \`${ase} context <domain> --icp <icp> --mode full > .ase/tmp/evidence-<domain>.json\` and ask \`ase-factor-judge\`, all at once:
+    "Today is <date>. Judge all factors, mode full, ICP <icp> (icps/<icp>/scoring.yaml) for <domain>. Evidence:
+    .ase/tmp/evidence-<domain>.json and accounts/<domain>/brief.md. Write the JSON array to .ase/tmp/judgements-<domain>.json."
+    Then per account: \`python3 -c 'import json,sys;i,d=sys.argv[1:];json.dump({"icp":i,"accounts":[{"domain":d,"mode":"full","judgements":json.load(open(f".ase/tmp/judgements-{d}.json"))}]},open(f".ase/tmp/score-{d}.json","w"))' <icp> <domain> && ${ase} apply .ase/tmp/score-<domain>.json\`.
+  - **Light enrichment** of more than 10 accounts: split them into chunks of 10 and give each chunk to an \`ase-operator\`
+    subagent, all at once ("Run the enrich-light fast path for ICP <icp> on: <domains>. Today is <date>. Apply, then reply with one line.").
+  - **Questions and gates** (approvals, choices, anything the skill would ask): ask in plain text, with numbered options when
+    there are choices, then stop and end your message with the line \`STATUS: question\`. The answer arrives as the next message.
+- Approvals you record (\`--approved-by\`) use the member the request names as approver.
 
-## 4. Finish
-\`\`\`
-${ase} ledger run end && git add -A && git commit -q -m "Managed research: ${o.domains.join(", ")}" && git push -q -u origin ${o.branch}
-\`\`\`
-Never push to \`${o.baseBranch}\`. End with one line per account (full score, tier, timing, top trigger, what to double-check) and the provider spend.`;
+## Finishing
+When the work is done, commit everything on the current branch and push it:
+\`git add -A && git commit -q -m "<skill>: <one line>" && git push -q -u origin HEAD\` (nothing to commit is fine). Never push to
+the base branch. End with a short summary for the reviewer (what changed, what to double-check, spend), then the line
+\`STATUS: done\`, or \`STATUS: failed: <reason>\` if you could not finish.`;
+  return {
+    name: "ase-operator",
+    description: "Runs the agentic sales engine's skills unattended: the platform counterpart of the Claude Code session that runs the plugin.",
+    model: MODELS.sonnet!,
+    system,
+    tools: [{ type: "agent_toolset_20260401", default_config: { enabled: true, permission_policy: { type: "always_allow" } }, configs: [] }],
+    metadata: { source: "src/managed/agents.ts (operator)" },
+  };
+}
+
+/** The first message of a run: set up the sandbox, then the skill with its arguments. */
+export function runMessage(o: { repo: string; branch: string; baseBranch: string; skill: string; args: string; approvedBy: string; today: string }): string {
+  const ws = workspaceDir(o.repo);
+  return `Today is ${o.today}. Workspace: \`${ws}\` (branch \`${o.baseBranch}\`). Approver for gates: \`${o.approvedBy}\`.
+
+Setup first, in one Bash call:
+\`(cd ${ENGINE_DIR} && bun install --frozen-lockfile --silent) && cd ${ws} && git checkout -q -b ${o.branch} && bun ${ENGINE_DIR}/src/cli/ase.ts reindex >/dev/null && mkdir -p .ase/tmp && echo ok\`
+
+Then: \`/agentic-sales-engine:${o.skill}${o.args ? ` ${o.args}` : ""}\``;
 }
