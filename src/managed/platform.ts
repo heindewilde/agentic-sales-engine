@@ -176,14 +176,14 @@ export async function run(o: RunOptions, log: (l: string) => void = console.erro
 }
 
 /** Answer the question a run is waiting on, and continue it. */
-export async function reply(sessionId: string, answer: string, log: (l: string) => void = console.error): Promise<RunResult> {
-  return converse(sessionId, answer, log);
+export async function reply(sessionId: string, answer: string, log: (l: string) => void = console.error, fallbackRepo?: string): Promise<RunResult> {
+  return converse(sessionId, answer, log, fallbackRepo);
 }
 
 /** Send one message, stream until the agent stops, and finish the run (pull request) when it says it's done. */
-async function converse(sessionId: string, text: string, log: (l: string) => void): Promise<RunResult> {
+async function converse(sessionId: string, text: string, log: (l: string) => void, fallbackRepo?: string): Promise<RunResult> {
   const c = client();
-  const meta = runMeta(await c.beta.sessions.retrieve(sessionId));
+  runMeta(await c.beta.sessions.retrieve(sessionId), fallbackRepo); // fail before sending if this isn't one of our runs
   const stream = await c.beta.sessions.events.stream(sessionId); // open before sending: it only delivers later events
   await c.beta.sessions.events.send(sessionId, { events: [{ type: "user.message", content: [{ type: "text", text }] }] });
   let stop = "running";
@@ -205,7 +205,7 @@ async function converse(sessionId: string, text: string, log: (l: string) => voi
       break;
     }
   }
-  return settle(sessionId, stop, last, log);
+  return settle(sessionId, stop, last, log, fallbackRepo);
 }
 
 type RunMeta = { repo: string; base: string; branch: string; skill: string; args: string };
@@ -326,7 +326,9 @@ function openPullRequest(m: RunMeta, sessionId: string, summary: string, cost: n
   }
   const [ahead, files = ""] = cmp.stdout.toString().trim().split("\t");
   if (ahead === "0") {
-    log("no pull request: the run changed nothing");
+    // the agent pushed a branch without commits: remove it, so only reviewable branches remain
+    gh(["api", "-X", "DELETE", `repos/${m.repo}/git/refs/heads/${m.branch}`]);
+    log("no pull request: the run changed nothing (empty branch removed)");
     return null;
   }
   const file = (ref: string, path: string) => {

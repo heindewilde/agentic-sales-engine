@@ -47,7 +47,7 @@ try {
   } else if (cmd === "reply") {
     const [session, ...answer] = params;
     if (!session || !answer.length) throw new Error('usage: reply <session-id> "<answer>"');
-    const r = await reply(session, answer.join(" "));
+    const r = await reply(session, answer.join(" "), console.error, f.repo);
     out(r);
     if (r.status !== "done") process.exitCode = r.status === "question" ? 10 : 2;
   } else throw new Error("usage: sync | run <skill> ... | schedule <skill> ... | reply <session> <answer> | inbox [days] | telemetry | status");
