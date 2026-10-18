@@ -24,7 +24,6 @@ interface State {
   vault_credentials?: string[];
   agents: Partial<Record<AgentName, Ref>>;
   skills?: Record<string, { id: string; version: string; hash: string }>;
-  runs?: Record<string, { repo: string; base: string; branch: string; skill: string; args: string }>;
   telemetry_destination_id?: string;
 }
 
@@ -168,10 +167,9 @@ export async function run(o: RunOptions, log: (l: string) => void = console.erro
       { type: "github_repository", url: "https://github.com/heindewilde/agentic-sales-engine", checkout: { type: "commit", sha: engineSha(o.pluginRoot) } },
     ],
     budget: { type: "limit", max_list_cost: { amount: String(Math.round(o.capUsd * 100)), currency: "USD" } },
-    metadata: { skill: o.skill, branch },
+    // everything needed to finish the run later lives on the session itself (inbox, replies, scheduled runs)
+    metadata: { ase_run: "1", skill: o.skill, args: o.args.slice(0, 500), branch, repo: o.repo, base: o.baseBranch },
   });
-  s.runs = { ...(s.runs ?? {}), [session.id]: { repo: o.repo, base: o.baseBranch, branch, skill: o.skill, args: o.args } };
-  saveState(s);
   log(`session ${session.id} → https://platform.claude.com/sessions/${session.id}`);
   return converse(session.id, runMessage({ repo: o.repo, branch, baseBranch: o.baseBranch, skill: o.skill, args: o.args, approvedBy: o.approvedBy, today }), log);
 }
@@ -184,8 +182,7 @@ export async function reply(sessionId: string, answer: string, log: (l: string) 
 /** Send one message, stream until the agent stops, and finish the run (pull request) when it says it's done. */
 async function converse(sessionId: string, text: string, log: (l: string) => void): Promise<RunResult> {
   const c = client();
-  const meta = loadState().runs?.[sessionId];
-  if (!meta) throw new Error(`unknown run ${sessionId}`);
+  const meta = runMeta(await c.beta.sessions.retrieve(sessionId));
   const stream = await c.beta.sessions.events.stream(sessionId); // open before sending: it only delivers later events
   await c.beta.sessions.events.send(sessionId, { events: [{ type: "user.message", content: [{ type: "text", text }] }] });
   let stop = "running";
@@ -207,9 +204,27 @@ async function converse(sessionId: string, text: string, log: (l: string) => voi
       break;
     }
   }
-  const final = await c.beta.sessions.retrieve(sessionId);
-  const amount = Number((final.usage as { list_cost?: { amount?: string } } | undefined)?.list_cost?.amount ?? NaN) / 100;
-  const cost = Number.isFinite(amount) ? amount : null;
+  return settle(sessionId, stop, last, log);
+}
+
+type RunMeta = { repo: string; base: string; branch: string; skill: string; args: string };
+function runMeta(session: { id: string; metadata?: Record<string, string> | null; title?: string | null }, fallbackRepo?: string): RunMeta {
+  const m = session.metadata ?? {};
+  const repo = m.repo ?? fallbackRepo; // runs started before the metadata carried the repo
+  if (!repo || !m.branch) throw new Error(`session ${session.id} is not an ase run`);
+  return { repo, base: m.base ?? "master", branch: m.branch, skill: m.skill ?? "?", args: m.args ?? session.title?.split(" ").slice(1).join(" ") ?? "" };
+}
+
+const costOf = (session: { usage?: unknown }) => {
+  const amount = Number((session.usage as { list_cost?: { amount?: string } } | undefined)?.list_cost?.amount ?? NaN) / 100;
+  return Number.isFinite(amount) ? amount : null;
+};
+
+/** Turn the agent's last message into a result; a finished run gets its pull request (once). */
+async function settle(sessionId: string, stop: string, last: string, log: (l: string) => void, fallbackRepo?: string): Promise<RunResult> {
+  const session = await client().beta.sessions.retrieve(sessionId);
+  const meta = runMeta(session, fallbackRepo);
+  const cost = costOf(session);
   const marker = last.match(/STATUS:\s*(done|question|failed)(?::\s*(.*))?\s*$/i);
   const status = stop !== "end_turn" ? stop : (marker?.[1]?.toLowerCase() ?? "question"); // no marker: treat as a question to you
   const message = last.replace(/\n?STATUS:.*$/i, "").trim();
@@ -217,9 +232,38 @@ async function converse(sessionId: string, text: string, log: (l: string) => voi
   return { session_id: sessionId, branch: meta.branch, status, message, cost_usd: cost, pr };
 }
 
+/**
+ * Runs nobody was listening to (scheduled runs, interrupted commands): open the pull request of every finished one
+ * and list the ones waiting on a question. Safe to repeat: a run that already has a pull request keeps it.
+ */
+export async function inbox(days = 7, log: (l: string) => void = console.error, fallbackRepo?: string): Promise<RunResult[]> {
+  const c = client();
+  const since = Date.now() - days * 86_400_000;
+  const out: RunResult[] = [];
+  for await (const s of c.beta.sessions.list({ limit: 100 })) {
+    if (Date.parse(s.created_at) < since) break;
+    const md = (s.metadata as Record<string, string> | null) ?? {};
+    if (!(md.ase_run || (fallbackRepo && md.branch)) || s.archived_at) continue;
+    if (s.status !== "idle") {
+      out.push({ session_id: s.id, branch: (s.metadata as Record<string, string>).branch ?? "", status: s.status, message: "", cost_usd: costOf(s), pr: null });
+      continue;
+    }
+    let last = "";
+    let stop = "end_turn";
+    for await (const e of c.beta.sessions.events.list(s.id)) {
+      if (e.type === "agent.message") last = ((e as { content?: { text?: string }[] }).content ?? []).map((b) => b.text ?? "").join("").trim();
+      if (e.type === "session.status_idle") stop = ((e as { stop_reason?: { type?: string } }).stop_reason?.type) ?? "end_turn";
+    }
+    out.push(await settle(s.id, stop, last, log, fallbackRepo));
+  }
+  return out;
+}
+
 /** One pull request per finished run: the agent's summary, scores before → after for any rescored account, cost and session link. */
-function openPullRequest(m: { repo: string; base: string; branch: string; skill: string; args: string }, sessionId: string, summary: string, cost: number | null, log: (l: string) => void): string | null {
+function openPullRequest(m: RunMeta, sessionId: string, summary: string, cost: number | null, log: (l: string) => void): string | null {
   const gh = (args: string[]) => Bun.spawnSync(["gh", ...args]);
+  const existing = gh(["pr", "list", "--repo", m.repo, "--head", m.branch, "--state", "all", "--json", "url", "--jq", ".[0].url // empty"]).stdout.toString().trim();
+  if (existing) return existing;
   const cmp = gh(["api", `repos/${m.repo}/compare/${m.base}...${encodeURIComponent(m.branch)}`, "--jq", "[.ahead_by, ([.files[].filename] | join(\"\\n\"))] | @tsv"]);
   if (cmp.exitCode !== 0) {
     log(/Not Found|404/.test(cmp.stderr.toString()) ? "no pull request: nothing changed (the run pushed no branch)" : `no pull request: ${cmp.stderr.toString().trim().slice(0, 200)}`);

@@ -4,13 +4,14 @@
  *   bun src/managed/cli.ts sync                         agents/*.md + skills/* → versioned agents and skills, the operator
  *   bun src/managed/cli.ts run <skill> [args...] --repo owner/name [--base master] [--cap 5] [--approved-by hein]
  *   bun src/managed/cli.ts reply <session-id> "<answer>"   answer the question a run is waiting on
+ *   bun src/managed/cli.ts inbox [days]                  finished runs nobody listened to → pull requests; runs waiting on a question
  *   bun src/managed/cli.ts telemetry                     platform traces → Braintrust (needs an Admin key once)
  *   bun src/managed/cli.ts status                        what exists on the platform
  * A run ends as `done` (with a pull request), `question` (answer it with reply) or `failed`.
  */
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { connectTelemetry, managedState, reply, run, sync } from "./platform.ts";
+import { connectTelemetry, inbox, managedState, reply, run, sync } from "./platform.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 // everything after the skill name that isn't one of our own flags is passed to the skill as its arguments
@@ -31,6 +32,7 @@ try {
   if (cmd === "sync") out(await sync(ROOT));
   else if (cmd === "status") out(managedState());
   else if (cmd === "telemetry") out(await connectTelemetry());
+  else if (cmd === "inbox") out((await inbox(Number(params[0] ?? 7), console.error, f.repo)).map((r) => ({ ...r, message: r.message.slice(0, 300) })));
   else if (cmd === "run") {
     const [skill, ...args] = params;
     if (!skill || !f.repo) throw new Error("usage: run <skill> [args...] --repo owner/name");
@@ -43,7 +45,7 @@ try {
     const r = await reply(session, answer.join(" "));
     out(r);
     if (r.status !== "done") process.exitCode = r.status === "question" ? 10 : 2;
-  } else throw new Error("usage: sync | run <skill> ... | reply <session> <answer> | telemetry | status");
+  } else throw new Error("usage: sync | run <skill> ... | reply <session> <answer> | inbox [days] | telemetry | status");
 } catch (e) {
   console.error(`managed: ${(e as Error).message}`);
   process.exit(1);
