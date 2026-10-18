@@ -92,10 +92,8 @@ export async function sync(pluginRoot: string, log: (l: string) => void = consol
 
   for (const name of AGENTS) {
     const { def, hash } = managedDefinition(readAgentFile(pluginRoot, name), sha);
-    const judge = s.agents["factor-judge"];
-    const multiagent = name === "account-researcher" && judge ? sub([pin(judge), { type: "self" }]) : undefined;
-    // a new judge version also needs a new researcher version that points at it
-    await upsert(name, { ...def, ...(multiagent ? { multiagent } : {}) }, `${hash}${judge && multiagent ? `:${judge.id}@${judge.version}` : ""}`);
+    // the plugin's agents are subagents of the operator, and subagents can't have their own (max depth 1)
+    await upsert(name, { ...def, multiagent: null }, hash);
   }
 
   // skills: each plugin skill uploaded once, a new version when its text changes
