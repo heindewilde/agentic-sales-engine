@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, normalize } from "node:path";
 import { buildModel, type AgentVersion, type MapModel } from "./data.ts";
 import { compactDiff, lineDiff } from "./diff.ts";
-import { JOURNEY, MAINTENANCE, ROLES } from "./process.ts";
+import { buildBrain, newestMatch, readBrainFile, type Brain } from "./brain.ts";
+import { ACTORS } from "./process.ts";
+import YAML from "yaml";
 
 /**
  * The agent map as a local web app: read-only, bound to localhost. The model is built once and rebuilt on
@@ -35,6 +37,7 @@ export function configChanges(a: AgentVersion, b: AgentVersion): string[] {
 
 export async function serve(port = 4317, log: (l: string) => void = console.error, workspace?: string): Promise<string> {
   let model: MapModel | null = null;
+  let brain: Brain | null = null;
   let building: Promise<MapModel> | null = null;
   const load = (fresh = false) => {
     if (fresh || (!model && !building)) {
@@ -57,7 +60,24 @@ export async function serve(port = 4317, log: (l: string) => void = console.erro
       try {
         if (url.pathname === "/api/model") return json(await load());
         if (url.pathname === "/api/refresh") return json(await load(true));
-        if (url.pathname === "/api/story") return json({ roles: ROLES, journey: JOURNEY, maintenance: MAINTENANCE });
+        if (url.pathname === "/api/process") {
+          brain = buildBrain(workspace); // cheap: local files only, so always fresh
+          return json({ steps: brain.steps, files: brain.files, actors: ACTORS, workspace: brain.workspace });
+        }
+        if (url.pathname === "/api/file") {
+          const f = readBrainFile(brain ?? (brain = buildBrain(workspace)), url.searchParams.get("id") ?? "");
+          if (!f) return json({ error: "not a file the map can show" }, 404);
+          // YAML is easier to show as structure (e.g. a scoring model as a table)
+          let parsed: unknown = null;
+          if (/\.ya?ml$/.test(f.path)) try { parsed = YAML.parse(f.text); } catch { /* show raw */ }
+          return json({ ...f, parsed });
+        }
+        if (url.pathname === "/api/example") {
+          const rel = workspace ? newestMatch(workspace, url.searchParams.get("pattern") ?? "") : null;
+          const f = rel ? readBrainFile(brain ?? (brain = buildBrain(workspace)), `workspace:${rel}`) : null;
+          return f ? json(f) : json({ error: "no example in the workspace yet" }, 404);
+        }
+        if (url.pathname === "/vendor/marked.js") return new Response(Bun.file(join(ROOT, "node_modules/marked/lib/marked.umd.js")));
         if (url.pathname === "/api/doc") {
           const p = normalize(url.searchParams.get("path") ?? "");
           if (!READABLE.some((r) => p.startsWith(r)) || p.includes("..")) return json({ error: "not an engine document" }, 400);
@@ -86,7 +106,7 @@ export async function serve(port = 4317, log: (l: string) => void = console.erro
           return json({ lines: compactDiff(lineDiff(a, b)) });
         }
         const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-        if (["index.html", "app.js", "style.css", "viz.js"].includes(file)) return new Response(Bun.file(join(UI, file)));
+        if (["index.html", "app.js", "style.css"].includes(file)) return new Response(Bun.file(join(UI, file)));
         return new Response("not found", { status: 404 });
       } catch (e) {
         return json({ error: (e as Error).message }, 500);

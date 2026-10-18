@@ -3,54 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sales engine</title>
+<title>Sales engine · Process</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="viz-root">
 <header class="top">
-  <div class="title">Sales engine <span>Claude Managed Agents</span></div>
+  <div class="title">Sales engine <span>Process</span></div>
+  <div id="actors" class="legend"></div>
   <button id="refresh" class="btn">Refresh</button>
 </header>
-<main>
-  <section id="tiles" class="tiles"></section>
-
-  <section class="card">
-    <div class="card-head"><h2>Process</h2><div id="lane-legend" class="legend"></div></div>
-    <div id="swimlane" class="scroll-x"></div>
-  </section>
-
-  <div class="grid-2">
+<div class="layout">
+  <main>
     <section class="card">
-      <div class="card-head"><h2>Pipeline</h2><span id="funnel-sub" class="muted"></span></div>
-      <div id="funnel"></div>
+      <div class="card-head">
+        <h2>How a company moves through the engine</h2>
+        <div class="legend" id="ctx-legend"></div>
+      </div>
+      <div id="lanes" class="lanes"></div>
     </section>
     <section class="card">
-      <div class="card-head"><h2>Cost per run, by step</h2><div id="cost-legend" class="legend"></div></div>
-      <div id="cost"></div>
+      <div class="card-head">
+        <h2>The brain <span id="brain-sub" class="muted"></span></h2>
+        <span class="muted">Every file that shapes what the agents do. Select a block above to see what it reads.</span>
+      </div>
+      <div id="brain" class="brain"></div>
     </section>
-  </div>
-
-  <div class="grid-2">
-    <section class="card">
-      <div class="card-head"><h2>Research hand-off</h2></div>
-      <div id="sequence" class="scroll-x"></div>
-    </section>
-    <section class="card">
-      <div class="card-head"><h2>Agents</h2></div>
-      <div id="agents"></div>
-    </section>
-  </div>
-
-  <section class="card">
-    <div class="card-head"><h2>Activity</h2><div id="status-legend" class="legend"></div></div>
-    <div id="timeline" class="scroll-x"></div>
-  </section>
-</main>
-
-<aside id="drawer" aria-hidden="true"><button class="btn close" id="close">Close</button><div id="drawer-body"></div></aside>
-<div id="scrim"></div>
+  </main>
+  <aside id="inspector" class="inspector"></aside>
+</div>
 <div id="tip" role="tooltip"></div>
-<script src="viz.js"></script>
+<script src="vendor/marked.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

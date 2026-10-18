@@ -1,155 +1,110 @@
 /**
- * The engine explained in plain language: the journey from "who do we sell to" to "what did we learn", and who does
- * what. This is the story the agent map tells; live numbers (cost, runs, status) are attached per skill and agent.
- * Keep it in sync with the skills (skills/*) and the autopilot flow when either changes.
+ * The process the agent map draws: every step, every block in it (who does what), and per block what it uses and
+ * produces. Which files a block reads is NOT listed here: it's derived from the skill and agent text (src/map/brain.ts),
+ * so it can't drift. Keep the blocks in step with the skills when a workflow changes.
  */
 
-export interface Role {
-  agent: string; // agent name on the platform, without "ase-"
-  title: string;
-  oneLiner: string;
-  does: string[];
-  never: string;
-  reads: string;
+export interface Block {
+  id: string;
+  by: string; // "you", "operator" or a plugin agent name
+  label: string;
+  detail: string;
+  skills?: string[]; // the playbooks this block follows
+  runIn?: string[]; // runs of these skills show this block at work (default: skills)
+  agent?: string; // the agent whose instructions apply (operator blocks: the operator)
+  gate?: boolean; // a decision only you make
+  uses?: string[]; // context beyond what the text names: "ase-context" (the digest), "evidence-pack", "web"
+  tools?: string[];
+  writes?: string[]; // workspace patterns
+  example?: string; // a workspace pattern whose newest file shows a real output
+  check?: string[]; // gates: what you look at
 }
-
-export const ROLES: Role[] = [
-  {
-    agent: "operator", title: "The Coordinator",
-    oneLiner: "Runs every workflow from start to finish and hands work to the specialists.",
-    does: ["Picks up a request (or a scheduled job) and follows the matching playbook", "Splits big jobs: one researcher per company, in parallel", "Checks the results, records them, and puts everything up for your review as a pull request"],
-    never: "Never approves anything on your behalf, and never sends a message.",
-    reads: "The playbooks (skills), the rules, and your workspace",
-  },
-  {
-    agent: "account-researcher", title: "The Researcher",
-    oneLiner: "Digs into one company: what they do, what's changing, and who to talk to.",
-    does: ["Reads the company's own site: about, team, careers, news", "Searches the news for dated events (launches, new stores, hires)", "Finds the people that match your buyer personas", "Writes a brief where every statement quotes its source"],
-    never: "Never scores the company: that's the Judge's job, so research and judgement stay separate.",
-    reads: "Your ICP, the research playbook, and the company's pages and news",
-  },
-  {
-    agent: "factor-judge", title: "The Judge",
-    oneLiner: "Scores a company factor by factor, strictly on the evidence the Researcher found.",
-    does: ["Goes through your scoring model one factor at a time", "Gives each factor a level (0–3) with the exact quote that supports it", "Says 'unknown' when there's no evidence, instead of guessing"],
-    never: "Never browses the web: it only judges what's already gathered.",
-    reads: "Your scoring model, the company's brief, and the evidence pack",
-  },
-  {
-    agent: "icp-analyst", title: "The ICP Analyst",
-    oneLiner: "Studies your own company and your best customers to define who you should sell to.",
-    does: ["Analyses your website and sales material", "Researches your best (and worst) customers for common traits", "Turns that into an ideal customer profile and scoring factors"],
-    never: "Never decides the ICP: it proposes, you approve.",
-    reads: "Your website, your customers' public information",
-  },
-  {
-    agent: "wiki-linter", title: "The Auditor",
-    oneLiner: "Checks the knowledge base for contradictions and outdated information.",
-    does: ["Spots two different headcounts for the same company", "Flags briefs that say something their sources don't", "Finds narrative that has gone stale"],
-    never: "Never changes anything itself: it reports, the Coordinator fixes what's mechanical.",
-    reads: "Briefs, company files and their sources",
-  },
-];
 
 export interface Step {
-  n: number;
+  n: number | string;
   id: string;
+  short: string;
   title: string;
-  what: string; // one sentence
-  input: string;
-  output: string;
-  who: string[]; // agents
-  skills: string[]; // the playbooks behind this step
-  you: { kind: "auto" | "approve" | "review" | "you"; text: string };
-  how: string[]; // the hand-offs, in order
-  when: string;
-  short: string; // column title in the diagram
-  stage?: string; // the account stage this step brings companies to (for the funnel)
-  acts: { by: string; label: string; gate?: boolean }[]; // the swimlane boxes, in hand-off order ("you" = the user)
+  stage?: string; // the account stage this step brings companies to
+  parallel?: boolean; // blocks run side by side, not one after another
+  blocks: Block[];
 }
 
-export const JOURNEY: Step[] = [
+export const PROCESS: Step[] = [
   {
-    n: 0, short: "ICP", acts: [{ by: "icp-analyst", label: "Studies your site and best customers" }, { by: "operator", label: "Drafts ICP and scoring model" }, { by: "you", label: "Approve ICP", gate: true }],
-    id: "icp", title: "Decide who you sell to", what: "Define your ideal customer and how to score a company against it.",
-    input: "Your website, your best customers, your own judgement", output: "An approved ICP and a scoring model (what makes a company a good fit, a good moment, reachable)",
-    who: ["operator", "icp-analyst"], skills: ["icp-build", "scoring-design"],
-    you: { kind: "you", text: "You answer a few questions and approve the ICP and the scoring model." },
-    how: ["The ICP Analyst studies your site and your best customers", "The Coordinator turns the common traits into a profile and asks you only about the gaps", "You approve; the scoring model is built from the profile and tested against your known customers"],
-    when: "Once, and again when your market changes",
+    n: 0, id: "icp", short: "ICP", title: "Decide who you sell to",
+    blocks: [
+      { id: "icp-research", by: "icp-analyst", agent: "icp-analyst", skills: ["icp-build"], label: "Studies your site and best customers", detail: "Researches your own company and each customer you name, and returns cited traits: industry, size, model, ownership, triggers.", tools: ["web search", "fetch pages", "extract"], uses: ["web"], writes: ["icps/*/calibration/research/*.md"], example: "icps/*/calibration/research/*.md" },
+      { id: "icp-draft", by: "operator", agent: "operator", skills: ["icp-build", "scoring-design"], label: "Drafts ICP and scoring model", detail: "Turns the common traits into a profile, asks only about the gaps, and builds a scoring model tested against your known customers.", writes: ["icps/*/icp.md", "icps/*/scoring.yaml"], example: "icps/*/scoring.yaml" },
+      { id: "icp-approve", by: "you", gate: true, label: "Approve ICP", detail: "Nothing is searched before you approve who to look for and how to score them.", check: ["Do the segments, sizes and countries match who you want?", "Are the scoring factors the things that make a good client for you?", "Do your best customers score high?"] },
+    ],
   },
   {
-    n: 1, short: "Find", stage: "discovered", acts: [{ by: "operator", label: "Searches the company index" }],
-    id: "discover", title: "Find companies", what: "Search for companies that match your ICP.",
-    input: "Your ICP's search queries per segment and country", output: "A list of candidate companies (typically a few hundred)",
-    who: ["operator"], skills: ["discover", "import"],
-    you: { kind: "auto", text: "Nothing: it runs on its own. You can also import your own list." },
-    how: ["The Coordinator runs your ICP's searches through the company index", "Known companies, customers and do-not-contact entries are filtered out", "New candidates are saved to your workspace"],
-    when: "When you want new prospects",
+    n: 1, id: "discover", short: "Find", title: "Find companies", stage: "discovered",
+    blocks: [
+      { id: "discover", by: "operator", agent: "operator", skills: ["discover", "import"], label: "Searches the company index", detail: "Runs the ICP's search queries per segment and country, removes known companies, customers and do-not-contact entries, and saves new candidates.", tools: ["discover companies (Exa)"], writes: ["accounts/*/company.md"], example: "accounts/*/company.md" },
+    ],
   },
   {
-    n: 2, short: "Quick scan", stage: "light_scored", acts: [{ by: "operator", label: "Reads homepages, light score" }],
-    id: "light", title: "Quick scan", what: "A cheap first look at every candidate: what do they do, and do they roughly fit?",
-    input: "The candidate list", output: "A short snapshot and a first (light) score per company",
-    who: ["operator"], skills: ["enrich-light"],
-    you: { kind: "auto", text: "Nothing: it runs on its own." },
-    how: ["The Coordinator splits the list into batches of 10 and works on them in parallel", "Each company's homepage is read and summarised in two or three sourced sentences", "Only the factors you can judge from a homepage are scored; obvious misfits are excluded"],
-    when: "Right after finding companies",
+    n: 2, id: "light", short: "Quick scan", title: "Quick scan", stage: "light_scored",
+    blocks: [
+      { id: "light", by: "operator", agent: "operator", skills: ["enrich-light"], label: "Reads homepages, light score", detail: "In batches of 10: reads each homepage, writes a two-sentence cited snapshot, and scores only what a homepage can tell. Clear misfits are excluded.", uses: ["ase-context", "web"], tools: ["fetch pages"], writes: ["accounts/*/company.md", "accounts/*/scores/*.md"], example: "accounts/*/scores/*.md" },
+    ],
   },
   {
-    n: 3, short: "Shortlist", stage: "shortlisted", acts: [{ by: "operator", label: "Proposes shortlist + cost" }, { by: "you", label: "Approve shortlist", gate: true }],
-    id: "shortlist", title: "Pick the best ones", what: "Choose which companies deserve deep research.",
-    input: "All light-scored companies", output: "A shortlist with a cost estimate",
-    who: ["operator"], skills: ["shortlist"],
-    you: { kind: "approve", text: "You approve the shortlist (or remove companies). Nothing expensive happens before you say yes." },
-    how: ["The Coordinator ranks companies by fit and by what research could still reveal", "It proposes a shortlist with the expected cost", "You review it as a pull request and approve"],
-    when: "After the quick scan",
+    n: 3, id: "shortlist", short: "Shortlist", title: "Pick the best ones", stage: "shortlisted",
+    blocks: [
+      { id: "shortlist", by: "operator", agent: "operator", skills: ["shortlist"], label: "Proposes shortlist + cost", detail: "Ranks companies by fit and by what research could still reveal, and proposes the best ones with a cost estimate.", writes: ["lists/*/*/shortlist.md"], example: "lists/*/*/shortlist.md" },
+      { id: "shortlist-approve", by: "you", gate: true, label: "Approve shortlist", detail: "Nothing expensive happens before you say yes.", check: ["Are these companies you'd actually want as clients?", "Remove anything you know is a no-go", "Is the cost estimate acceptable?"] },
+    ],
   },
   {
-    n: 4, short: "Research", stage: "scored", acts: [{ by: "operator", label: "One researcher per company" }, { by: "account-researcher", label: "Site, news, people → brief" }, { by: "factor-judge", label: "Scores each factor on evidence" }, { by: "operator", label: "Records scores, opens review" }, { by: "you", label: "Review scores", gate: true }],
-    id: "research", title: "Research and score", what: "Deep research on each shortlisted company, then a careful score.",
-    input: "The approved shortlist", output: "Per company: a sourced brief, dated triggers, the right people, and a full score (fit, timing, access)",
-    who: ["operator", "account-researcher", "factor-judge"], skills: ["research", "score"],
-    you: { kind: "review", text: "You review the scores and the briefs, correct what's off, and decide who to approach." },
-    how: ["The Coordinator gives every company its own Researcher, all working at the same time", "Each Researcher reads the company's site, news and people, and writes a brief with quotes", "For every company a Judge scores each factor strictly on that evidence", "The Coordinator records the scores and puts everything up for your review, with a list of things to double-check"],
-    when: "After you approve the shortlist",
+    n: 4, id: "research", short: "Research", title: "Research and score", stage: "scored",
+    blocks: [
+      { id: "research-split", by: "operator", agent: "operator", skills: ["research"], label: "One researcher per company", detail: "Gives every shortlisted company its own Researcher, all working at the same time, so no context is shared or wasted between companies." },
+      { id: "research-do", by: "account-researcher", agent: "account-researcher", skills: ["research"], label: "Site, news, people → brief", detail: "Reads the company's own pages, searches the news for dated events, finds people per buyer persona, and writes a brief where every statement quotes its source.", uses: ["ase-context", "web"], tools: ["fetch pages", "search news", "find people", "extract", "research agent", "web search"], writes: ["accounts/*/brief.md", "accounts/*/signals/*.md", "people/*.md"], example: "accounts/*/brief.md" },
+      { id: "research-judge", by: "factor-judge", agent: "factor-judge", skills: ["score"], runIn: ["research", "score", "sync"], label: "Scores each factor on evidence", detail: "Goes through the scoring model one factor at a time, gives each a level 0–3 with the exact quote behind it, and says 'unknown' instead of guessing. Never browses.", uses: ["evidence-pack"], writes: ["accounts/*/scores/*.md"], example: "accounts/*/scores/*.md" },
+      { id: "research-record", by: "operator", agent: "operator", skills: ["score"], runIn: ["research", "score"], label: "Records scores, opens review", detail: "Applies the scores (the engine checks every quote against the saved page), commits the work on a branch and opens a pull request with what to double-check." },
+      { id: "research-review", by: "you", gate: true, label: "Review scores", detail: "You decide which companies to approach.", check: ["Read the briefs of the top accounts", "Check the items flagged to double-check", "Merge the pull request to accept the work"] },
+    ],
   },
   {
-    n: 5, short: "Ways in", acts: [{ by: "operator", label: "Warm paths and triggers" }],
-    id: "ways-in", title: "Find a way in", what: "For the companies you want, find the best route to the right person.",
-    input: "Researched, approved companies", output: "Ranked ways in: warm introductions, recent events to mention, shared context",
-    who: ["operator"], skills: ["ways-in"],
-    you: { kind: "auto", text: "Nothing: it runs on its own for the companies you picked." },
-    how: ["The Coordinator matches the company's people against your team's LinkedIn connections", "It picks the freshest, most relevant events as conversation openers", "It ranks the routes, warmest first"],
-    when: "After you pick companies to approach",
+    n: 5, id: "ways-in", short: "Ways in", title: "Find a way in",
+    blocks: [
+      { id: "ways-in", by: "operator", agent: "operator", skills: ["ways-in"], label: "Warm paths and triggers", detail: "Matches the company's people against your team's LinkedIn connections, picks the freshest relevant events, and ranks the routes in, warmest first.", writes: ["accounts/*/brief.md"], example: "accounts/*/brief.md" },
+    ],
   },
   {
-    n: 6, short: "Drafts", stage: "outreach_ready", acts: [{ by: "operator", label: "Drafts in your voice" }, { by: "you", label: "Edit and send yourself", gate: true }],
-    id: "drafts", title: "Draft the first message", what: "A personal first message per company, in your team's voice.",
-    input: "The way in and the brief", output: "Draft emails, LinkedIn notes or intro requests",
-    who: ["operator"], skills: ["draft-outreach", "voice-profile"],
-    you: { kind: "review", text: "You read, edit and send the drafts yourself. Nothing is ever sent automatically." },
-    how: ["The Coordinator writes each draft around one dated event, one insight and one clear ask", "It follows your team's writing voice (learned from emails you liked and from your edits)", "Drafts wait in your workspace for you"],
-    when: "After the ways in",
+    n: 6, id: "drafts", short: "Drafts", title: "Draft the first message", stage: "outreach_ready",
+    blocks: [
+      { id: "drafts", by: "operator", agent: "operator", skills: ["draft-outreach", "voice-profile"], label: "Drafts in your voice", detail: "Writes each first message around one dated event, one insight and one clear ask, in your team's writing voice.", writes: ["accounts/*/drafts/*.md"], example: "accounts/*/drafts/*.md" },
+      { id: "drafts-send", by: "you", gate: true, label: "Edit and send yourself", detail: "Nothing is ever sent automatically.", check: ["Is the trigger still fresh and correct?", "Would you send this to this person?", "Edit, then send from your own inbox"] },
+    ],
   },
   {
-    n: 7, short: "Outcomes", stage: "engaged", acts: [{ by: "you", label: "Log replies, meetings, wins" }, { by: "operator", label: "Call prep, win/loss review" }, { by: "you", label: "Approve improvements", gate: true }],
-    id: "outcomes", title: "Meetings and learning", what: "Prepare calls, log what happened, and let the engine learn from it.",
-    input: "Replies, meetings, wins and losses", output: "Call briefs, an outcome history, and proposed improvements to the ICP and scoring",
-    who: ["operator"], skills: ["call-prep", "log-outcome", "review-outcomes", "win-loss", "learn"],
-    you: { kind: "you", text: "You log outcomes (a reply, a meeting, a win or a loss) and approve proposed changes." },
-    how: ["Before a meeting the Coordinator writes a one-page call brief", "You log what happened; a weekly review asks about anything still open", "Win/loss compares outcomes with the scores and proposes better weights, which you approve"],
-    when: "Ongoing, once outreach is out",
+    n: 7, id: "outcomes", short: "Outcomes", title: "Meetings and learning",
+    blocks: [
+      { id: "outcomes-log", by: "you", label: "Log replies, meetings, wins", detail: "You tell the engine what happened: a reply, a meeting, a win or a loss (with the reason).", skills: ["log-outcome", "review-outcomes"], writes: ["outcomes/events.jsonl"] },
+      { id: "outcomes-learn", by: "operator", agent: "operator", skills: ["call-prep", "win-loss", "learn"], label: "Call prep, win/loss review", detail: "Writes a one-page brief before each call, and compares outcomes with the scores to propose better weights and lessons.", writes: ["accounts/*/callprep/*.md", "icps/*/win-loss/*.md", "learnings/*.md"], example: "learnings/*.md" },
+      { id: "outcomes-approve", by: "you", gate: true, label: "Approve improvements", detail: "Changes to the ICP and the scoring model only happen with your approval.", check: ["Do the proposed weight changes make sense?", "Are the lessons right?"] },
+    ],
+  },
+  {
+    n: "↻", id: "maintenance", short: "Maintenance", title: "Keeping it fresh", parallel: true,
+    blocks: [
+      { id: "sync", by: "operator", agent: "operator", skills: ["sync"], label: "News check", detail: "Looks for new events at the companies you follow and re-scores them when something relevant happened.", tools: ["search news", "fetch pages"], uses: ["web"], writes: ["accounts/*/signals/*.md", "sync/*.md"], example: "sync/*.md" },
+      { id: "refresh", by: "operator", agent: "operator", skills: ["refresh"], label: "Fact refresh", detail: "Re-checks facts that have expired, like headcounts, job titles and where people work.", tools: ["fetch pages", "find people"], uses: ["web"] },
+      { id: "lint", by: "operator", agent: "operator", skills: ["lint"], label: "Health check", detail: "A mechanical check of the knowledge base: invalid or unsourced files, broken stage rules, stale facts, duplicates." },
+      { id: "audit", by: "wiki-linter", agent: "wiki-linter", skills: ["lint"], runIn: ["lint"], label: "Deep audit", detail: "Reads briefs and their sources looking for contradictions and outdated narrative. On demand: it's the expensive part of a lint." },
+    ],
   },
 ];
 
-export const MAINTENANCE = {
-  title: "Keeping it fresh",
-  what: "Small jobs that run on a schedule, so the knowledge doesn't go stale.",
-  jobs: [
-    { skill: "sync", title: "News check", text: "Looks for new events at the companies you follow and updates their scores." },
-    { skill: "refresh", title: "Fact refresh", text: "Re-checks facts that have expired, like headcounts and job titles." },
-    { skill: "lint", title: "Health check", text: "Checks the knowledge base for broken or unsourced files (a cheap, mechanical check)." },
-  ],
-  other: ["status", "evals", "dnc", "setup", "forget-person", "autopilot"],
-};
+export const ACTORS = [
+  { id: "you", name: "You", role: "Decide at the moments that matter" },
+  { id: "operator", name: "Coordinator", role: "Runs every playbook and hands work to the specialists" },
+  { id: "account-researcher", name: "Researcher", role: "Digs into one company: what they do, what's changing, who to talk to" },
+  { id: "factor-judge", name: "Judge", role: "Scores factor by factor, strictly on the evidence" },
+  { id: "wiki-linter", name: "Auditor", role: "Finds contradictions and stale information" },
+  { id: "icp-analyst", name: "ICP analyst", role: "Studies your company and best customers" },
+];
