@@ -212,8 +212,9 @@ type RunMeta = { repo: string; base: string; branch: string; skill: string; args
 function runMeta(session: { id: string; metadata?: Record<string, string> | null; title?: string | null }, fallbackRepo?: string): RunMeta {
   const m = session.metadata ?? {};
   const repo = m.repo ?? fallbackRepo; // runs started before the metadata carried the repo
-  if (!repo || !m.branch) throw new Error(`session ${session.id} is not an ase run`);
-  return { repo, base: m.base ?? "master", branch: m.branch, skill: m.skill ?? "?", args: m.args ?? session.title?.split(" ").slice(1).join(" ") ?? "" };
+  if (!repo) throw new Error(`session ${session.id} is not an ase run`);
+  // scheduled runs have no branch yet: the sandbox names it and the agent reports it (BRANCH: line)
+  return { repo, base: m.base ?? "master", branch: m.branch ?? "", skill: m.skill ?? "?", args: m.args ?? session.title?.split(" ").slice(1).join(" ") ?? "" };
 }
 
 const costOf = (session: { usage?: unknown }) => {
@@ -230,8 +231,9 @@ async function settle(sessionId: string, stop: string, last: string, log: (l: st
   const status = stop !== "end_turn" ? stop : (marker?.[1]?.toLowerCase() ?? "question"); // no marker: treat as a question to you
   const named = last.match(/^BRANCH:\s*(\S+)\s*$/m)?.[1]; // scheduled runs name their own branch
   if (named) meta.branch = named;
+  if (status === "done" && !meta.branch) log(`no pull request: run ${sessionId} didn't report its branch`);
   const message = last.replace(/\n?BRANCH:.*$/im, "").replace(/\n?STATUS:.*$/i, "").trim();
-  const pr = status === "done" ? openPullRequest(meta, sessionId, message, cost, log) : null;
+  const pr = status === "done" && meta.branch ? openPullRequest(meta, sessionId, message, cost, log) : null;
   return { session_id: sessionId, branch: meta.branch, status, message, cost_usd: cost, pr };
 }
 
