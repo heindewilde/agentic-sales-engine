@@ -40,7 +40,7 @@ bun src/managed/cli.ts status
 Platform IDs are kept in `~/.config/agentic-sales-engine/managed.json`. Networking is open (research reads any company
 site), so a malicious page could try to steer the agent; it can only push to its own branch.
 
-## Tested (2026-10-18, a real workspace)
+## Tested (2026-10-18, on a real workspace)
 
 Every skill ran once on the platform (with the 0.10 skill names; 0.11 merged them, see the README) (`forget-person` excluded: it erases real personal data). All finished `done`;
 skills without the input they need (call-prep without a meeting, log-outcome without an event, import without a file)

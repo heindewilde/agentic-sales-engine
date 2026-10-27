@@ -13,6 +13,9 @@
   <img alt="Data in your git repo" src="https://img.shields.io/badge/data-your%20git%20repo-2ea44f">
 </p>
 
+> **Frozen.** This is the last open-source version of the engine (0.11). Active development continues privately, so
+> this repo gets no further updates; it still works as described, and you're welcome to fork it.
+
 <p align="center">
   <b>Tell it who you sell to. It finds the companies, researches them like a good SDR would,<br>
   scores them with cited evidence, finds a way in, drafts the first message and preps the call.</b>
